@@ -28,7 +28,7 @@ body {
 }
 
 main, footer {
-  max-width: 960px;
+  max-width: 1680px;
   margin: 0 auto;
   padding: 1.5rem;
 }
@@ -213,10 +213,15 @@ footer {
 
 /* Data table */
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  margin: 1rem 0 2rem;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1rem 0 2rem;
 }
 
 .data-table th,

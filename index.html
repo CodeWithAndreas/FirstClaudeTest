@@ -106,8 +106,136 @@
       <main>
         <section id="page-teilnehmende" class="page">
           <h2>Teilnehmende</h2>
-          <p>Übersicht der Teilnehmenden.</p>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Vorname</th>
+                  <th>Nachname</th>
+                  <th>Geburtsdatum</th>
+                  <th>Maßnahme</th>
+                  <th>Startdatum</th>
+                  <th>Endedatum</th>
+                  <th>Email</th>
+                  <th>Telefon</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="teilnehmerTableBody">
+                <tr>
+                  <td colspan="9">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <details class="collapsible-form">
+            <summary>Neue/r Teilnehmende/r</summary>
+
+            <form id="teilnehmerForm" class="data-form">
+              <div class="form-row">
+                <label for="tnVorname">Vorname</label>
+                <input type="text" id="tnVorname" name="Vorname" maxlength="100" required>
+              </div>
+
+              <div class="form-row">
+                <label for="tnNachname">Nachname</label>
+                <input type="text" id="tnNachname" name="Nachname" maxlength="100" required>
+              </div>
+
+              <div class="form-row">
+                <label for="tnGeburtsdatum">Geburtsdatum</label>
+                <input type="date" id="tnGeburtsdatum" name="Geburtsdatum" required>
+              </div>
+
+              <div class="form-row">
+                <label for="tnMassnahmeID">Maßnahme</label>
+                <select id="tnMassnahmeID" name="MassnahmeID" required>
+                  <option value="">– bitte wählen –</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="tnStartdatum">Startdatum</label>
+                <input type="date" id="tnStartdatum" name="Startdatum" required>
+              </div>
+
+              <div class="form-row">
+                <label for="tnEndedatum">Endedatum</label>
+                <input type="date" id="tnEndedatum" name="Endedatum" required>
+              </div>
+
+              <div class="form-row">
+                <label for="tnEmail">Email</label>
+                <input type="email" id="tnEmail" name="Email" maxlength="100">
+              </div>
+
+              <div class="form-row">
+                <label for="tnTelefon">Telefon</label>
+                <input type="text" id="tnTelefon" name="Telefon" maxlength="45">
+              </div>
+
+              <button type="submit">Speichern</button>
+              <p class="form-message" id="teilnehmerFormMessage" role="status"></p>
+            </form>
+          </details>
         </section>
+
+        <dialog id="editTeilnehmerDialog" class="confirm-dialog edit-dialog">
+          <form id="editTeilnehmerForm">
+            <h3>Teilnehmer/in bearbeiten</h3>
+
+            <div class="form-row">
+              <label for="editTnVorname">Vorname</label>
+              <input type="text" id="editTnVorname" name="Vorname" maxlength="100" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editTnNachname">Nachname</label>
+              <input type="text" id="editTnNachname" name="Nachname" maxlength="100" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editTnGeburtsdatum">Geburtsdatum</label>
+              <input type="date" id="editTnGeburtsdatum" name="Geburtsdatum" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editTnMassnahmeID">Maßnahme</label>
+              <select id="editTnMassnahmeID" name="MassnahmeID" required>
+                <option value="">– bitte wählen –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="editTnStartdatum">Startdatum</label>
+              <input type="date" id="editTnStartdatum" name="Startdatum" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editTnEndedatum">Endedatum</label>
+              <input type="date" id="editTnEndedatum" name="Endedatum" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editTnEmail">Email</label>
+              <input type="email" id="editTnEmail" name="Email" maxlength="100">
+            </div>
+
+            <div class="form-row">
+              <label for="editTnTelefon">Telefon</label>
+              <input type="text" id="editTnTelefon" name="Telefon" maxlength="45">
+            </div>
+
+            <p class="form-message" id="editTeilnehmerFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="editTeilnehmerCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
 
         <section id="page-anwesenheiten" class="page">
           <h2>Anwesenheiten</h2>
@@ -117,24 +245,26 @@
         <section id="page-massnahmen" class="page">
           <h2>Maßnahmen</h2>
 
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Bezeichnung</th>
-                <th>VT</th>
-                <th>Gruppe</th>
-                <th>Zert.-Datum</th>
-                <th>Plan-Start</th>
-                <th>Plan-Ende</th>
-                <th class="col-actions"></th>
-              </tr>
-            </thead>
-            <tbody id="massnahmenTableBody">
-              <tr>
-                <td colspan="7">Lädt…</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Bezeichnung</th>
+                  <th>VT</th>
+                  <th>Gruppe</th>
+                  <th>Zert.-Datum</th>
+                  <th>Plan-Start</th>
+                  <th>Plan-Ende</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="massnahmenTableBody">
+                <tr>
+                  <td colspan="7">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <details class="collapsible-form">
             <summary>Neue Maßnahme</summary>
@@ -226,21 +356,23 @@
         <section id="page-gruppen" class="page">
           <h2>Gruppen</h2>
 
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Bezeichnung</th>
-                <th>Kennung</th>
-                <th>Fachbereich</th>
-                <th class="col-actions"></th>
-              </tr>
-            </thead>
-            <tbody id="gruppenTableBody">
-              <tr>
-                <td colspan="4">Lädt…</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Bezeichnung</th>
+                  <th>Kennung</th>
+                  <th>Fachbereich</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="gruppenTableBody">
+                <tr>
+                  <td colspan="4">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <details class="collapsible-form">
             <summary>Neue Gruppe</summary>
@@ -269,24 +401,56 @@
           </details>
         </section>
 
+        <dialog id="editGruppeDialog" class="confirm-dialog edit-dialog">
+          <form id="editGruppeForm">
+            <h3>Gruppe bearbeiten</h3>
+
+            <div class="form-row">
+              <label for="editGrpBezeichnung">Bezeichnung</label>
+              <input type="text" id="editGrpBezeichnung" name="Bezeichnung" maxlength="45" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editGrpKennung">Kennung</label>
+              <input type="text" id="editGrpKennung" name="Kennung" maxlength="45">
+            </div>
+
+            <div class="form-row">
+              <label for="editGrpFachbereichID">Fachbereich</label>
+              <select id="editGrpFachbereichID" name="FachbereichID">
+                <option value="">– kein Fachbereich –</option>
+              </select>
+            </div>
+
+            <p class="form-message" id="editGruppeFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="editGruppeCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
         <section id="page-fachbereiche" class="page">
           <h2>Fachbereiche</h2>
 
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Bezeichnung</th>
-                <th>Kürzel</th>
-                <th>Kennung</th>
-                <th class="col-actions"></th>
-              </tr>
-            </thead>
-            <tbody id="fachbereicheTableBody">
-              <tr>
-                <td colspan="4">Lädt…</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Bezeichnung</th>
+                  <th>Kürzel</th>
+                  <th>Kennung</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="fachbereicheTableBody">
+                <tr>
+                  <td colspan="4">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <details class="collapsible-form">
             <summary>Neuer Fachbereich</summary>
@@ -312,6 +476,34 @@
             </form>
           </details>
         </section>
+
+        <dialog id="editFachbereichDialog" class="confirm-dialog edit-dialog">
+          <form id="editFachbereichForm">
+            <h3>Fachbereich bearbeiten</h3>
+
+            <div class="form-row">
+              <label for="editFbBezeichnungLang">Bezeichnung</label>
+              <input type="text" id="editFbBezeichnungLang" name="BezeichnungLang" maxlength="255" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editFbBezeichnungKurz">Kürzel</label>
+              <input type="text" id="editFbBezeichnungKurz" name="BezeichnungKurz" maxlength="15" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editFbKennung">Kennung</label>
+              <input type="text" id="editFbKennung" name="Kennung" maxlength="45">
+            </div>
+
+            <p class="form-message" id="editFachbereichFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="editFachbereichCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
 
         <dialog id="deleteDialog" class="confirm-dialog">
           <form id="deleteForm">

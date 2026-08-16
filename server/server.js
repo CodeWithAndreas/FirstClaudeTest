@@ -55,6 +55,36 @@ app.post("/api/fachbereiche", async (req, res) => {
   }
 });
 
+app.put("/api/fachbereiche/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const { BezeichnungLang, BezeichnungKurz, Kennung } = req.body;
+
+  if (!BezeichnungLang || !BezeichnungKurz) {
+    return res.status(400).json({ error: "Bezeichnung und Kürzel sind erforderlich." });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE fachbereich SET BezeichnungLang = ?, BezeichnungKurz = ?, Kennung = ? WHERE ID = ?",
+      [BezeichnungLang, BezeichnungKurz, Kennung || null, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Fachbereich wurde nicht gefunden." });
+    }
+
+    res.json({ ID: id, BezeichnungLang, BezeichnungKurz, Kennung: Kennung || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Fachbereich konnte nicht aktualisiert werden." });
+  }
+});
+
 app.delete("/api/fachbereiche/:id", async (req, res) => {
   const id = Number(req.params.id);
 
@@ -114,6 +144,38 @@ app.post("/api/gruppen", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Gruppe konnte nicht gespeichert werden." });
+  }
+});
+
+app.put("/api/gruppen/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const { Bezeichnung, Kennung, FachbereichID } = req.body;
+
+  if (!Bezeichnung) {
+    return res.status(400).json({ error: "Bezeichnung ist erforderlich." });
+  }
+
+  const fachbereichId = FachbereichID ? Number(FachbereichID) : null;
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE gruppe SET Bezeichnung = ?, Kennung = ?, FachbereichID = ? WHERE ID = ?",
+      [Bezeichnung, Kennung || null, fachbereichId, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Gruppe wurde nicht gefunden." });
+    }
+
+    res.json({ ID: id, Bezeichnung, Kennung: Kennung || null, FachbereichID: fachbereichId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gruppe konnte nicht aktualisiert werden." });
   }
 });
 
@@ -240,6 +302,113 @@ app.delete("/api/massnahmen/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Maßnahme konnte nicht gelöscht werden." });
+  }
+});
+
+app.get("/api/teilnehmer", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT t.ID, t.Vorname, t.Nachname, t.Geburtsdatum, t.MassnahmeID, m.Bezeichnung AS MassnahmeBezeichnung,
+              t.Startdatum, t.Endedatum, t.Email, t.Telefon
+       FROM teilnehmer t
+       LEFT JOIN massnahme m ON m.ID = t.MassnahmeID
+       ORDER BY t.Nachname, t.Vorname`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Teilnehmende konnten nicht geladen werden." });
+  }
+});
+
+function readTeilnehmerBody(body) {
+  const { Vorname, Nachname, Geburtsdatum, MassnahmeID, Startdatum, Endedatum, Email, Telefon } = body;
+
+  if (!Vorname || !Nachname || !Geburtsdatum || !MassnahmeID || !Startdatum || !Endedatum) {
+    return { error: "Vorname, Nachname, Geburtsdatum, Maßnahme, Startdatum und Endedatum sind erforderlich." };
+  }
+
+  return {
+    values: {
+      Vorname,
+      Nachname,
+      Geburtsdatum,
+      MassnahmeID: Number(MassnahmeID),
+      Startdatum,
+      Endedatum,
+      Email: Email || null,
+      Telefon: Telefon || null,
+    },
+  };
+}
+
+app.post("/api/teilnehmer", async (req, res) => {
+  const { error, values } = readTeilnehmerBody(req.body);
+
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "INSERT INTO teilnehmer (Vorname, Nachname, Geburtsdatum, MassnahmeID, Startdatum, Endedatum, Email, Telefon) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [values.Vorname, values.Nachname, values.Geburtsdatum, values.MassnahmeID, values.Startdatum, values.Endedatum, values.Email, values.Telefon]
+    );
+    res.status(201).json({ ID: result.insertId, ...values });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Teilnehmer konnte nicht gespeichert werden." });
+  }
+});
+
+app.put("/api/teilnehmer/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const { error, values } = readTeilnehmerBody(req.body);
+
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE teilnehmer SET Vorname = ?, Nachname = ?, Geburtsdatum = ?, MassnahmeID = ?, Startdatum = ?, Endedatum = ?, Email = ?, Telefon = ? WHERE ID = ?",
+      [values.Vorname, values.Nachname, values.Geburtsdatum, values.MassnahmeID, values.Startdatum, values.Endedatum, values.Email, values.Telefon, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+
+    res.json({ ID: id, ...values });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Teilnehmer konnte nicht aktualisiert werden." });
+  }
+});
+
+app.delete("/api/teilnehmer/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  try {
+    const [result] = await pool.query("DELETE FROM teilnehmer WHERE ID = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Teilnehmer konnte nicht gelöscht werden." });
   }
 });
 

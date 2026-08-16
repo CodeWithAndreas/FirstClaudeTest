@@ -90,6 +90,21 @@ async function loadFachbereiche() {
       kennungCell.textContent = fachbereich.Kennung || "";
 
       const actionsCell = document.createElement("td");
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-edit-btn";
+      editBtn.setAttribute("aria-label", `${fachbereich.BezeichnungLang} bearbeiten`);
+      editBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      editBtn.addEventListener("click", () => openEditFachbereichDialog(fachbereich));
+
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "row-delete-btn";
@@ -110,7 +125,9 @@ async function loadFachbereiche() {
           reload: loadFachbereiche,
         })
       );
-      actionsCell.appendChild(deleteBtn);
+
+      actionsWrap.append(editBtn, deleteBtn);
+      actionsCell.appendChild(actionsWrap);
 
       row.append(langCell, kurzCell, kennungCell, actionsCell);
       fachbereicheTableBody.appendChild(row);
@@ -163,6 +180,63 @@ fachbereichForm.addEventListener("submit", async (event) => {
 });
 
 loadFachbereiche();
+
+// Fachbereich bearbeiten
+
+const editFachbereichDialog = document.getElementById("editFachbereichDialog");
+const editFachbereichForm = document.getElementById("editFachbereichForm");
+const editFachbereichFormMessage = document.getElementById("editFachbereichFormMessage");
+const editFachbereichCancelBtn = document.getElementById("editFachbereichCancelBtn");
+
+let editingFachbereichId = null;
+
+function openEditFachbereichDialog(fachbereich) {
+  editingFachbereichId = fachbereich.ID;
+  editFachbereichForm.elements.BezeichnungLang.value = fachbereich.BezeichnungLang;
+  editFachbereichForm.elements.BezeichnungKurz.value = fachbereich.BezeichnungKurz;
+  editFachbereichForm.elements.Kennung.value = fachbereich.Kennung || "";
+  editFachbereichFormMessage.textContent = "";
+  editFachbereichFormMessage.className = "form-message";
+  editFachbereichDialog.showModal();
+}
+
+editFachbereichCancelBtn.addEventListener("click", () => {
+  editFachbereichDialog.close();
+});
+
+editFachbereichForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(editFachbereichForm);
+  const payload = {
+    BezeichnungLang: formData.get("BezeichnungLang").trim(),
+    BezeichnungKurz: formData.get("BezeichnungKurz").trim(),
+    Kennung: formData.get("Kennung").trim(),
+  };
+
+  editFachbereichFormMessage.textContent = "";
+  editFachbereichFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/fachbereiche/${editingFachbereichId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Fachbereich konnte nicht aktualisiert werden.");
+    }
+
+    editFachbereichDialog.close();
+    editingFachbereichId = null;
+    await loadFachbereiche();
+  } catch (err) {
+    editFachbereichFormMessage.textContent = err.message;
+    editFachbereichFormMessage.className = "form-message error";
+  }
+});
 
 // Löschen mit Bestätigung
 
@@ -229,7 +303,7 @@ const gruppeForm = document.getElementById("gruppeForm");
 const gruppeFormMessage = document.getElementById("gruppeFormMessage");
 const grpFachbereichSelect = document.getElementById("grpFachbereichID");
 
-async function loadFachbereichOptions() {
+async function loadFachbereichOptionsInto(selectElement) {
   try {
     const response = await fetch("/api/fachbereiche");
     if (!response.ok) {
@@ -237,14 +311,14 @@ async function loadFachbereichOptions() {
     }
     const fachbereiche = await response.json();
 
-    grpFachbereichSelect.querySelectorAll("option[data-fachbereich]").forEach((option) => option.remove());
+    selectElement.querySelectorAll("option[data-fachbereich]").forEach((option) => option.remove());
 
     fachbereiche.forEach((fachbereich) => {
       const option = document.createElement("option");
       option.value = fachbereich.ID;
       option.textContent = fachbereich.BezeichnungLang;
       option.dataset.fachbereich = "true";
-      grpFachbereichSelect.appendChild(option);
+      selectElement.appendChild(option);
     });
   } catch (err) {
     console.error(err);
@@ -292,6 +366,21 @@ async function loadGruppen() {
       fachbereichCell.textContent = gruppe.FachbereichBezeichnung || "";
 
       const actionsCell = document.createElement("td");
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-edit-btn";
+      editBtn.setAttribute("aria-label", `${gruppe.Bezeichnung} bearbeiten`);
+      editBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      editBtn.addEventListener("click", () => openEditGruppeDialog(gruppe));
+
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "row-delete-btn";
@@ -312,7 +401,9 @@ async function loadGruppen() {
           reload: loadGruppen,
         })
       );
-      actionsCell.appendChild(deleteBtn);
+
+      actionsWrap.append(editBtn, deleteBtn);
+      actionsCell.appendChild(actionsWrap);
 
       row.append(bezeichnungCell, kennungCell, fachbereichCell, actionsCell);
       gruppenTableBody.appendChild(row);
@@ -364,8 +455,68 @@ gruppeForm.addEventListener("submit", async (event) => {
   }
 });
 
-loadFachbereichOptions();
+loadFachbereichOptionsInto(grpFachbereichSelect);
 loadGruppen();
+
+// Gruppe bearbeiten
+
+const editGruppeDialog = document.getElementById("editGruppeDialog");
+const editGruppeForm = document.getElementById("editGruppeForm");
+const editGruppeFormMessage = document.getElementById("editGruppeFormMessage");
+const editGruppeCancelBtn = document.getElementById("editGruppeCancelBtn");
+const editGrpFachbereichSelect = document.getElementById("editGrpFachbereichID");
+
+let editingGruppeId = null;
+
+function openEditGruppeDialog(gruppe) {
+  editingGruppeId = gruppe.ID;
+  editGruppeForm.elements.Bezeichnung.value = gruppe.Bezeichnung;
+  editGruppeForm.elements.Kennung.value = gruppe.Kennung || "";
+  editGrpFachbereichSelect.value = gruppe.FachbereichID || "";
+  editGruppeFormMessage.textContent = "";
+  editGruppeFormMessage.className = "form-message";
+  editGruppeDialog.showModal();
+}
+
+editGruppeCancelBtn.addEventListener("click", () => {
+  editGruppeDialog.close();
+});
+
+editGruppeForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(editGruppeForm);
+  const payload = {
+    Bezeichnung: formData.get("Bezeichnung").trim(),
+    Kennung: formData.get("Kennung").trim(),
+    FachbereichID: formData.get("FachbereichID"),
+  };
+
+  editGruppeFormMessage.textContent = "";
+  editGruppeFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/gruppen/${editingGruppeId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Gruppe konnte nicht aktualisiert werden.");
+    }
+
+    editGruppeDialog.close();
+    editingGruppeId = null;
+    await loadGruppen();
+  } catch (err) {
+    editGruppeFormMessage.textContent = err.message;
+    editGruppeFormMessage.className = "form-message error";
+  }
+});
+
+loadFachbereichOptionsInto(editGrpFachbereichSelect);
 
 // Maßnahmen
 
@@ -603,3 +754,253 @@ editMassnahmeForm.addEventListener("submit", async (event) => {
 loadGruppeOptionsInto(mnGruppeSelect);
 loadGruppeOptionsInto(editMnGruppeSelect);
 loadMassnahmen();
+
+// Teilnehmende
+
+const teilnehmerTableBody = document.getElementById("teilnehmerTableBody");
+const teilnehmerForm = document.getElementById("teilnehmerForm");
+const teilnehmerFormMessage = document.getElementById("teilnehmerFormMessage");
+const tnMassnahmeSelect = document.getElementById("tnMassnahmeID");
+
+const editTeilnehmerDialog = document.getElementById("editTeilnehmerDialog");
+const editTeilnehmerForm = document.getElementById("editTeilnehmerForm");
+const editTeilnehmerFormMessage = document.getElementById("editTeilnehmerFormMessage");
+const editTeilnehmerCancelBtn = document.getElementById("editTeilnehmerCancelBtn");
+const editTnMassnahmeSelect = document.getElementById("editTnMassnahmeID");
+
+async function loadMassnahmeOptionsInto(selectElement) {
+  try {
+    const response = await fetch("/api/massnahmen");
+    if (!response.ok) {
+      throw new Error("Maßnahmen konnten nicht geladen werden.");
+    }
+    const massnahmen = await response.json();
+
+    selectElement.querySelectorAll("option[data-massnahme]").forEach((option) => option.remove());
+
+    massnahmen.forEach((massnahme) => {
+      const option = document.createElement("option");
+      option.value = massnahme.ID;
+      option.textContent = massnahme.Bezeichnung;
+      option.dataset.massnahme = "true";
+      selectElement.appendChild(option);
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadTeilnehmer() {
+  teilnehmerTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 9;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  teilnehmerTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch("/api/teilnehmer");
+    if (!response.ok) {
+      throw new Error("Teilnehmende konnten nicht geladen werden.");
+    }
+    const teilnehmer = await response.json();
+
+    teilnehmerTableBody.innerHTML = "";
+
+    if (teilnehmer.length === 0) {
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 9;
+      emptyCell.textContent = "Noch keine Teilnehmenden vorhanden.";
+      emptyRow.appendChild(emptyCell);
+      teilnehmerTableBody.appendChild(emptyRow);
+      return;
+    }
+
+    teilnehmer.forEach((person) => {
+      const row = document.createElement("tr");
+      const fullName = `${person.Vorname} ${person.Nachname}`;
+
+      const vornameCell = document.createElement("td");
+      vornameCell.textContent = person.Vorname;
+
+      const nachnameCell = document.createElement("td");
+      nachnameCell.textContent = person.Nachname;
+
+      const geburtsdatumCell = document.createElement("td");
+      geburtsdatumCell.textContent = person.Geburtsdatum;
+
+      const massnahmeCell = document.createElement("td");
+      massnahmeCell.textContent = person.MassnahmeBezeichnung || "";
+
+      const startCell = document.createElement("td");
+      startCell.textContent = person.Startdatum;
+
+      const endeCell = document.createElement("td");
+      endeCell.textContent = person.Endedatum;
+
+      const emailCell = document.createElement("td");
+      emailCell.textContent = person.Email || "";
+
+      const telefonCell = document.createElement("td");
+      telefonCell.textContent = person.Telefon || "";
+
+      const actionsCell = document.createElement("td");
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-edit-btn";
+      editBtn.setAttribute("aria-label", `${fullName} bearbeiten`);
+      editBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      editBtn.addEventListener("click", () => openEditTeilnehmerDialog(person));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "row-delete-btn";
+      deleteBtn.setAttribute("aria-label", `${fullName} löschen`);
+      deleteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+          <path d="M10 11v6"></path>
+          <path d="M14 11v6"></path>
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      deleteBtn.addEventListener("click", () =>
+        openDeleteDialog({
+          name: fullName,
+          endpoint: `/api/teilnehmer/${person.ID}`,
+          reload: loadTeilnehmer,
+        })
+      );
+
+      actionsWrap.append(editBtn, deleteBtn);
+      actionsCell.appendChild(actionsWrap);
+
+      row.append(vornameCell, nachnameCell, geburtsdatumCell, massnahmeCell, startCell, endeCell, emailCell, telefonCell, actionsCell);
+      teilnehmerTableBody.appendChild(row);
+    });
+  } catch (err) {
+    console.error(err);
+    teilnehmerTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 9;
+    errorCell.textContent = "Fehler beim Laden der Teilnehmenden.";
+    errorRow.appendChild(errorCell);
+    teilnehmerTableBody.appendChild(errorRow);
+  }
+}
+
+teilnehmerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(teilnehmerForm);
+  const payload = {
+    Vorname: formData.get("Vorname").trim(),
+    Nachname: formData.get("Nachname").trim(),
+    Geburtsdatum: formData.get("Geburtsdatum"),
+    MassnahmeID: formData.get("MassnahmeID"),
+    Startdatum: formData.get("Startdatum"),
+    Endedatum: formData.get("Endedatum"),
+    Email: formData.get("Email").trim(),
+    Telefon: formData.get("Telefon").trim(),
+  };
+
+  teilnehmerFormMessage.textContent = "";
+  teilnehmerFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/teilnehmer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Teilnehmer konnte nicht gespeichert werden.");
+    }
+
+    teilnehmerForm.reset();
+    teilnehmerFormMessage.textContent = "Teilnehmer/in gespeichert.";
+    teilnehmerFormMessage.classList.add("success");
+    await loadTeilnehmer();
+  } catch (err) {
+    teilnehmerFormMessage.textContent = err.message;
+    teilnehmerFormMessage.classList.add("error");
+  }
+});
+
+let editingTeilnehmerId = null;
+
+function openEditTeilnehmerDialog(person) {
+  editingTeilnehmerId = person.ID;
+  editTeilnehmerForm.elements.Vorname.value = person.Vorname;
+  editTeilnehmerForm.elements.Nachname.value = person.Nachname;
+  editTeilnehmerForm.elements.Geburtsdatum.value = person.Geburtsdatum;
+  editTnMassnahmeSelect.value = person.MassnahmeID || "";
+  editTeilnehmerForm.elements.Startdatum.value = person.Startdatum;
+  editTeilnehmerForm.elements.Endedatum.value = person.Endedatum;
+  editTeilnehmerForm.elements.Email.value = person.Email || "";
+  editTeilnehmerForm.elements.Telefon.value = person.Telefon || "";
+  editTeilnehmerFormMessage.textContent = "";
+  editTeilnehmerFormMessage.className = "form-message";
+  editTeilnehmerDialog.showModal();
+}
+
+editTeilnehmerCancelBtn.addEventListener("click", () => {
+  editTeilnehmerDialog.close();
+});
+
+editTeilnehmerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(editTeilnehmerForm);
+  const payload = {
+    Vorname: formData.get("Vorname").trim(),
+    Nachname: formData.get("Nachname").trim(),
+    Geburtsdatum: formData.get("Geburtsdatum"),
+    MassnahmeID: formData.get("MassnahmeID"),
+    Startdatum: formData.get("Startdatum"),
+    Endedatum: formData.get("Endedatum"),
+    Email: formData.get("Email").trim(),
+    Telefon: formData.get("Telefon").trim(),
+  };
+
+  editTeilnehmerFormMessage.textContent = "";
+  editTeilnehmerFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/teilnehmer/${editingTeilnehmerId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Teilnehmer konnte nicht aktualisiert werden.");
+    }
+
+    editTeilnehmerDialog.close();
+    editingTeilnehmerId = null;
+    await loadTeilnehmer();
+  } catch (err) {
+    editTeilnehmerFormMessage.textContent = err.message;
+    editTeilnehmerFormMessage.className = "form-message error";
+  }
+});
+
+loadMassnahmeOptionsInto(tnMassnahmeSelect);
+loadMassnahmeOptionsInto(editTnMassnahmeSelect);
+loadTeilnehmer();

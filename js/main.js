@@ -9,7 +9,7 @@ const defaultPage = "teilnehmende";
 
 const pageLabels = {
   teilnehmende: "Teilnehmende",
-  kurse: "Kurse",
+  massnahmen: "Maßnahmen",
   anwesenheiten: "Anwesenheiten",
 };
 

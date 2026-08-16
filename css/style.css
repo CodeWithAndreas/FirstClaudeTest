@@ -210,3 +210,228 @@ footer {
 .page p {
   color: var(--color-text-muted);
 }
+
+/* Data table */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 2rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table th {
+  color: var(--color-primary-dark);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.data-table tbody tr:hover {
+  background: var(--color-bg-light);
+}
+
+.data-table .col-actions {
+  width: 1%;
+}
+
+.row-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.row-delete-btn:hover {
+  background: var(--color-bg-light);
+  color: var(--color-accent);
+}
+
+.row-delete-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Collapsible form */
+
+.collapsible-form {
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+
+.collapsible-form summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-light);
+  color: var(--color-primary-dark);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible-form summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-form summary::before {
+  content: "+";
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.collapsible-form[open] summary::before {
+  content: "–";
+}
+
+.collapsible-form summary:hover {
+  background: #e9eff3;
+}
+
+/* Data form */
+
+.data-form {
+  max-width: 420px;
+  padding-top: 1rem;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-row label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.form-row input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.form-row input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.data-form button {
+  padding: 0.6rem 1.5rem;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  color: #ffffff;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.data-form button:hover {
+  background: var(--color-primary-mid);
+}
+
+.form-message {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.form-message.success {
+  color: #256927;
+}
+
+.form-message.error {
+  color: var(--color-accent);
+}
+
+/* Confirm dialog */
+
+.confirm-dialog {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 5px 15px -5px rgba(0, 0, 0, 0.5);
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(0, 58, 77, 0.5);
+}
+
+.confirm-dialog h3 {
+  color: var(--color-primary-dark);
+  margin-bottom: 0.5rem;
+}
+
+.confirm-dialog p {
+  color: var(--color-text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.confirm-dialog input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.confirm-dialog input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.dialog-actions button {
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  background: var(--color-bg-light);
+  color: var(--color-text);
+}
+
+.btn-secondary:hover {
+  background: var(--color-border);
+}
+
+.btn-danger {
+  background: var(--color-accent);
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  background: #d96600;
+}

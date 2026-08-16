@@ -126,8 +126,65 @@
 
         <section id="page-fachbereiche" class="page">
           <h2>Fachbereiche</h2>
-          <p>Übersicht der Fachbereiche.</p>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Bezeichnung</th>
+                <th>Kürzel</th>
+                <th>Kennung</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="fachbereicheTableBody">
+              <tr>
+                <td colspan="4">Lädt…</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <details class="collapsible-form">
+            <summary>Neuer Fachbereich</summary>
+
+            <form id="fachbereichForm" class="data-form">
+              <div class="form-row">
+                <label for="fbBezeichnungLang">Bezeichnung</label>
+                <input type="text" id="fbBezeichnungLang" name="BezeichnungLang" maxlength="255" required>
+              </div>
+
+              <div class="form-row">
+                <label for="fbBezeichnungKurz">Kürzel</label>
+                <input type="text" id="fbBezeichnungKurz" name="BezeichnungKurz" maxlength="15" required>
+              </div>
+
+              <div class="form-row">
+                <label for="fbKennung">Kennung</label>
+                <input type="text" id="fbKennung" name="Kennung" maxlength="45">
+              </div>
+
+              <button type="submit">Speichern</button>
+              <p class="form-message" id="fachbereichFormMessage" role="status"></p>
+            </form>
+          </details>
         </section>
+
+        <dialog id="deleteDialog" class="confirm-dialog">
+          <form id="deleteForm">
+            <h3>Fachbereich löschen</h3>
+            <p>
+              Zum Bestätigen bitte die Bezeichnung
+              „<strong id="deleteTargetName"></strong>“ eingeben:
+            </p>
+
+            <input type="text" id="deleteConfirmInput" autocomplete="off" required>
+            <p class="form-message" id="deleteFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="deleteCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-danger">Löschen</button>
+            </div>
+          </form>
+        </dialog>
       </main>
 
       <footer>

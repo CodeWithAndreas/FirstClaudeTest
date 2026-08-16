@@ -1,5 +1,13 @@
 console.log("Standortmanager geladen");
 
+function formatDateDE(isoDate) {
+  if (!isoDate) {
+    return "";
+  }
+  const [year, month, day] = isoDate.split("-");
+  return `${day}.${month}.${year}`;
+}
+
 const sidebar = document.getElementById("sidebar");
 const sidebarToggle = document.getElementById("sidebarToggle");
 const breadcrumb = document.getElementById("breadcrumb");
@@ -594,13 +602,13 @@ async function loadMassnahmen() {
       gruppeCell.textContent = massnahme.GruppeBezeichnung || "";
 
       const zertCell = document.createElement("td");
-      zertCell.textContent = massnahme.ZertDatum;
+      zertCell.textContent = formatDateDE(massnahme.ZertDatum);
 
       const startCell = document.createElement("td");
-      startCell.textContent = massnahme.PlanStart;
+      startCell.textContent = formatDateDE(massnahme.PlanStart);
 
       const endeCell = document.createElement("td");
-      endeCell.textContent = massnahme.PlanEnde;
+      endeCell.textContent = formatDateDE(massnahme.PlanEnde);
 
       const actionsCell = document.createElement("td");
       const actionsWrap = document.createElement("div");
@@ -829,16 +837,16 @@ async function loadTeilnehmer() {
       nachnameCell.textContent = person.Nachname;
 
       const geburtsdatumCell = document.createElement("td");
-      geburtsdatumCell.textContent = person.Geburtsdatum;
+      geburtsdatumCell.textContent = formatDateDE(person.Geburtsdatum);
 
       const massnahmeCell = document.createElement("td");
       massnahmeCell.textContent = person.MassnahmeBezeichnung || "";
 
       const startCell = document.createElement("td");
-      startCell.textContent = person.Startdatum;
+      startCell.textContent = formatDateDE(person.Startdatum);
 
       const endeCell = document.createElement("td");
-      endeCell.textContent = person.Endedatum;
+      endeCell.textContent = formatDateDE(person.Endedatum);
 
       const emailCell = document.createElement("td");
       emailCell.textContent = person.Email || "";

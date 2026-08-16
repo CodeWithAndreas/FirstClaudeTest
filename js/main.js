@@ -9,8 +9,9 @@ const defaultPage = "teilnehmende";
 
 const pageLabels = {
   teilnehmende: "Teilnehmende",
-  massnahmen: "Maßnahmen",
   anwesenheiten: "Anwesenheiten",
+  massnahmen: "Maßnahmen",
+  gruppen: "Gruppen",
 };
 
 sidebarToggle.addEventListener("click", () => {

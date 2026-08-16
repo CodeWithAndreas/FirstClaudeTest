@@ -12,6 +12,7 @@ const pageLabels = {
   anwesenheiten: "Anwesenheiten",
   massnahmen: "Maßnahmen",
   gruppen: "Gruppen",
+  fachbereiche: "Fachbereiche",
 };
 
 sidebarToggle.addEventListener("click", () => {

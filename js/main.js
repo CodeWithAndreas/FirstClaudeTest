@@ -13,15 +13,21 @@ const sidebarToggle = document.getElementById("sidebarToggle");
 const breadcrumb = document.getElementById("breadcrumb");
 const navLinks = document.querySelectorAll(".sidebar-link[data-page]");
 const pages = document.querySelectorAll(".page");
-const defaultPage = "teilnehmende";
+const defaultPage = "dashboard";
 
 const pageLabels = {
+  dashboard: "Dashboard",
   teilnehmende: "Teilnehmende",
   anwesenheiten: "Anwesenheiten",
   massnahmen: "Maßnahmen",
   gruppen: "Gruppen",
   fachbereiche: "Fachbereiche",
 };
+
+const dashTeilnehmerCount = document.getElementById("dashTeilnehmerCount");
+const dashMassnahmenCount = document.getElementById("dashMassnahmenCount");
+const dashGruppenCount = document.getElementById("dashGruppenCount");
+const dashFachbereicheCount = document.getElementById("dashFachbereicheCount");
 
 sidebarToggle.addEventListener("click", () => {
   const collapsed = sidebar.classList.toggle("collapsed");
@@ -41,6 +47,13 @@ function showPage(pageId) {
   });
 
   breadcrumb.textContent = `Start / ${pageLabels[targetId]}`;
+
+  if (targetId === "dashboard") {
+    loadDashboardStats();
+  }
+  if (targetId === "anwesenheiten") {
+    ensureAwInitialized();
+  }
 }
 
 function handleRouteChange() {
@@ -49,7 +62,33 @@ function handleRouteChange() {
 }
 
 window.addEventListener("hashchange", handleRouteChange);
-handleRouteChange();
+
+// Dashboard
+
+async function loadDashboardStats() {
+  const endpoints = [
+    ["/api/teilnehmer", dashTeilnehmerCount],
+    ["/api/massnahmen", dashMassnahmenCount],
+    ["/api/gruppen", dashGruppenCount],
+    ["/api/fachbereiche", dashFachbereicheCount],
+  ];
+
+  await Promise.all(
+    endpoints.map(async ([url, element]) => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error("Kennzahl konnte nicht geladen werden.");
+        }
+        const data = await response.json();
+        element.textContent = data.length;
+      } catch (err) {
+        console.error(err);
+        element.textContent = "–";
+      }
+    })
+  );
+}
 
 // Fachbereiche
 
@@ -653,6 +692,9 @@ async function loadMassnahmen() {
       row.append(bezeichnungCell, vtCell, gruppeCell, zertCell, startCell, endeCell, actionsCell);
       massnahmenTableBody.appendChild(row);
     });
+
+    loadMassnahmeOptionsInto(tnMassnahmeSelect, { includeVt: true });
+    loadMassnahmeOptionsInto(editTnMassnahmeSelect, { includeVt: true });
   } catch (err) {
     console.error(err);
     massnahmenTableBody.innerHTML = "";
@@ -776,7 +818,7 @@ const editTeilnehmerFormMessage = document.getElementById("editTeilnehmerFormMes
 const editTeilnehmerCancelBtn = document.getElementById("editTeilnehmerCancelBtn");
 const editTnMassnahmeSelect = document.getElementById("editTnMassnahmeID");
 
-async function loadMassnahmeOptionsInto(selectElement) {
+async function loadMassnahmeOptionsInto(selectElement, { includeVt = false } = {}) {
   try {
     const response = await fetch("/api/massnahmen");
     if (!response.ok) {
@@ -789,7 +831,7 @@ async function loadMassnahmeOptionsInto(selectElement) {
     massnahmen.forEach((massnahme) => {
       const option = document.createElement("option");
       option.value = massnahme.ID;
-      option.textContent = massnahme.Bezeichnung;
+      option.textContent = includeVt ? `${massnahme.Bezeichnung} ${massnahme.VT}` : massnahme.Bezeichnung;
       option.dataset.massnahme = "true";
       selectElement.appendChild(option);
     });
@@ -840,7 +882,7 @@ async function loadTeilnehmer() {
       geburtsdatumCell.textContent = formatDateDE(person.Geburtsdatum);
 
       const massnahmeCell = document.createElement("td");
-      massnahmeCell.textContent = person.MassnahmeBezeichnung || "";
+      massnahmeCell.textContent = [person.MassnahmeBezeichnung, person.VT].filter(Boolean).join(" ");
 
       const startCell = document.createElement("td");
       startCell.textContent = formatDateDE(person.Startdatum);
@@ -1009,6 +1051,717 @@ editTeilnehmerForm.addEventListener("submit", async (event) => {
   }
 });
 
-loadMassnahmeOptionsInto(tnMassnahmeSelect);
-loadMassnahmeOptionsInto(editTnMassnahmeSelect);
+// Anwesenheiten
+
+const awFachbereichFilter = document.getElementById("awFachbereichFilter");
+const awGruppeFilter = document.getElementById("awGruppeFilter");
+const awMassnahmeFilter = document.getElementById("awMassnahmeFilter");
+const awVtFilter = document.getElementById("awVtFilter");
+const awNameFilter = document.getElementById("awNameFilter");
+const awResetFilterBtn = document.getElementById("awResetFilterBtn");
+const awPrevMonthBtn = document.getElementById("awPrevMonthBtn");
+const awNextMonthBtn = document.getElementById("awNextMonthBtn");
+const awMonthLabel = document.getElementById("awMonthLabel");
+const awTableHeadRow = document.getElementById("awTableHeadRow");
+const awTableBody = document.getElementById("awTableBody");
+
+const MONTH_NAMES_DE = [
+  "Januar", "Februar", "März", "April", "Mai", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "Dezember",
+];
+const WEEKDAY_SHORT_DE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+const awToday = new Date();
+let awYear = awToday.getFullYear();
+let awMonth = awToday.getMonth() + 1;
+
+let awTeilnehmer = [];
+let awStatusList = [];
+let awAttendance = new Map();
+let awGruppen = [];
+let awMassnahmen = [];
+
+function awPad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function awIsoDate(year, month, day) {
+  return `${year}-${awPad(month)}-${awPad(day)}`;
+}
+
+function awDaysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function awAttendanceKey(teilnehmerId, datum) {
+  return `${teilnehmerId}|${datum}`;
+}
+
+async function loadAwStatusList() {
+  try {
+    const response = await fetch("/api/anwesenheitsstatus");
+    if (!response.ok) {
+      throw new Error("Anwesenheitsstatus konnte nicht geladen werden.");
+    }
+    awStatusList = await response.json();
+  } catch (err) {
+    console.error(err);
+    awStatusList = [];
+  }
+}
+
+async function loadAwTeilnehmer() {
+  try {
+    const response = await fetch("/api/teilnehmer");
+    if (!response.ok) {
+      throw new Error("Teilnehmende konnten nicht geladen werden.");
+    }
+    awTeilnehmer = await response.json();
+  } catch (err) {
+    console.error(err);
+    awTeilnehmer = [];
+  }
+}
+
+async function loadAwGruppen() {
+  try {
+    const response = await fetch("/api/gruppen");
+    if (!response.ok) {
+      throw new Error("Gruppen konnten nicht geladen werden.");
+    }
+    awGruppen = await response.json();
+  } catch (err) {
+    console.error(err);
+    awGruppen = [];
+  }
+}
+
+async function loadAwMassnahmen() {
+  try {
+    const response = await fetch("/api/massnahmen");
+    if (!response.ok) {
+      throw new Error("Maßnahmen konnten nicht geladen werden.");
+    }
+    awMassnahmen = await response.json();
+  } catch (err) {
+    console.error(err);
+    awMassnahmen = [];
+  }
+}
+
+function awMassnahmenForFachbereichUndGruppe() {
+  const fachbereichId = awFachbereichFilter.value;
+  const gruppeId = awGruppeFilter.value;
+
+  return awMassnahmen.filter((massnahme) => {
+    if (gruppeId) {
+      return String(massnahme.GruppeID || "") === gruppeId;
+    }
+    if (fachbereichId) {
+      const gruppe = awGruppen.find((g) => g.ID === massnahme.GruppeID);
+      return Boolean(gruppe) && String(gruppe.FachbereichID || "") === fachbereichId;
+    }
+    return true;
+  });
+}
+
+function refreshAwGruppeOptions() {
+  const fachbereichId = awFachbereichFilter.value;
+  const gruppen = fachbereichId
+    ? awGruppen.filter((g) => String(g.FachbereichID || "") === fachbereichId)
+    : awGruppen;
+
+  const currentValue = awGruppeFilter.value;
+  awGruppeFilter.querySelectorAll("option[data-gruppe]").forEach((option) => option.remove());
+
+  gruppen
+    .slice()
+    .sort((a, b) => a.Bezeichnung.localeCompare(b.Bezeichnung, "de"))
+    .forEach((gruppe) => {
+      const option = document.createElement("option");
+      option.value = gruppe.ID;
+      option.textContent = gruppe.Bezeichnung;
+      option.dataset.gruppe = "true";
+      awGruppeFilter.appendChild(option);
+    });
+
+  awGruppeFilter.value = gruppen.some((g) => String(g.ID) === currentValue) ? currentValue : "";
+}
+
+function refreshAwMassnahmeOptions() {
+  const bezeichnungen = [...new Set(awMassnahmenForFachbereichUndGruppe().map((m) => m.Bezeichnung).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, "de")
+  );
+
+  const currentValue = awMassnahmeFilter.value;
+  awMassnahmeFilter.querySelectorAll("option[data-massnahme]").forEach((option) => option.remove());
+
+  bezeichnungen.forEach((bezeichnung) => {
+    const option = document.createElement("option");
+    option.value = bezeichnung;
+    option.textContent = bezeichnung;
+    option.dataset.massnahme = "true";
+    awMassnahmeFilter.appendChild(option);
+  });
+
+  awMassnahmeFilter.value = bezeichnungen.includes(currentValue) ? currentValue : "";
+}
+
+function refreshAwVtOptions() {
+  const massnahmeBezeichnung = awMassnahmeFilter.value;
+  const relevant = awMassnahmenForFachbereichUndGruppe().filter(
+    (m) => !massnahmeBezeichnung || m.Bezeichnung === massnahmeBezeichnung
+  );
+  const vtValues = [...new Set(relevant.map((m) => m.VT).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "de", { numeric: true })
+  );
+
+  const currentValue = awVtFilter.value;
+  awVtFilter.querySelectorAll("option[data-vt]").forEach((option) => option.remove());
+
+  vtValues.forEach((vt) => {
+    const option = document.createElement("option");
+    option.value = vt;
+    option.textContent = vt;
+    option.dataset.vt = "true";
+    awVtFilter.appendChild(option);
+  });
+
+  awVtFilter.value = vtValues.includes(currentValue) ? currentValue : "";
+}
+
+async function loadAwAttendance() {
+  awAttendance = new Map();
+  try {
+    const response = await fetch(`/api/anwesenheiten?monat=${awYear}-${awPad(awMonth)}`);
+    if (!response.ok) {
+      throw new Error("Anwesenheiten konnten nicht geladen werden.");
+    }
+    const rows = await response.json();
+    rows.forEach((row) => {
+      awAttendance.set(awAttendanceKey(row.TeilnehmerID, row.Datum), row.StatusID);
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function updateAwMonthLabel() {
+  awMonthLabel.textContent = `${MONTH_NAMES_DE[awMonth - 1]} ${awYear}`;
+}
+
+function buildAwTableHead() {
+  awTableHeadRow.querySelectorAll("th.day-col").forEach((th) => th.remove());
+
+  const days = awDaysInMonth(awYear, awMonth);
+  for (let day = 1; day <= days; day++) {
+    const weekday = new Date(awYear, awMonth - 1, day).getDay();
+    const th = document.createElement("th");
+    th.className = "day-col";
+    if (weekday === 0 || weekday === 6) {
+      th.classList.add("weekend");
+    }
+    th.innerHTML = `<span class="day-num">${day}</span><span class="day-weekday">${WEEKDAY_SHORT_DE[weekday]}</span>`;
+    awTableHeadRow.appendChild(th);
+  }
+}
+
+function awMatchesFilter(person) {
+  const fachbereichId = awFachbereichFilter.value;
+  const gruppeId = awGruppeFilter.value;
+  const massnahmeBezeichnung = awMassnahmeFilter.value;
+  const vt = awVtFilter.value;
+  const nameQuery = awNameFilter.value.trim().toLowerCase();
+
+  if (fachbereichId && String(person.FachbereichID || "") !== fachbereichId) {
+    return false;
+  }
+  if (gruppeId && String(person.GruppeID || "") !== gruppeId) {
+    return false;
+  }
+  if (massnahmeBezeichnung && (person.MassnahmeBezeichnung || "") !== massnahmeBezeichnung) {
+    return false;
+  }
+  if (vt && (person.VT || "") !== vt) {
+    return false;
+  }
+  if (nameQuery) {
+    const fullName = `${person.Vorname} ${person.Nachname}`.toLowerCase();
+    if (!fullName.includes(nameQuery)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function saveAwCell(teilnehmerId, datum, statusId, selectElement) {
+  const previousValue = selectElement.dataset.previousValue || "";
+
+  try {
+    const response = await fetch("/api/anwesenheiten", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ TeilnehmerID: teilnehmerId, Datum: datum, StatusID: statusId || null }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Anwesenheit konnte nicht gespeichert werden.");
+    }
+
+    selectElement.dataset.previousValue = statusId;
+    const key = awAttendanceKey(teilnehmerId, datum);
+    if (statusId) {
+      awAttendance.set(key, Number(statusId));
+    } else {
+      awAttendance.delete(key);
+    }
+  } catch (err) {
+    console.error(err);
+    selectElement.value = previousValue;
+    alert(err.message);
+  }
+}
+
+let awRowEntries = [];
+let awEmptyRow = null;
+
+function buildAwTableRows() {
+  awTableBody.innerHTML = "";
+  awRowEntries = [];
+
+  const days = awDaysInMonth(awYear, awMonth);
+
+  awEmptyRow = document.createElement("tr");
+  const emptyCell = document.createElement("td");
+  emptyCell.colSpan = 4 + days;
+  emptyCell.textContent = "Keine Teilnehmenden gefunden.";
+  awEmptyRow.appendChild(emptyCell);
+  awTableBody.appendChild(awEmptyRow);
+
+  awTeilnehmer.forEach((person) => {
+    const row = document.createElement("tr");
+
+    const vornameCell = document.createElement("td");
+    vornameCell.className = "col-sticky col-vorname";
+    vornameCell.textContent = person.Vorname;
+
+    const nachnameCell = document.createElement("td");
+    nachnameCell.className = "col-sticky col-nachname";
+    nachnameCell.textContent = person.Nachname;
+
+    const vtCell = document.createElement("td");
+    vtCell.className = "col-sticky col-vt";
+    vtCell.textContent = person.VT || "";
+
+    const gruppeCell = document.createElement("td");
+    gruppeCell.className = "col-sticky col-gruppe";
+    gruppeCell.textContent = person.GruppeKennung || "";
+
+    row.append(vornameCell, nachnameCell, vtCell, gruppeCell);
+
+    for (let day = 1; day <= days; day++) {
+      const datum = awIsoDate(awYear, awMonth, day);
+      const weekday = new Date(awYear, awMonth - 1, day).getDay();
+
+      const dayCell = document.createElement("td");
+      dayCell.className = "day-col";
+      if (weekday === 0 || weekday === 6) {
+        dayCell.classList.add("weekend");
+      }
+
+      const select = document.createElement("select");
+      select.className = "day-select";
+      select.setAttribute("aria-label", `${person.Vorname} ${person.Nachname}, ${awPad(day)}.${awPad(awMonth)}.${awYear}`);
+
+      const emptyOption = document.createElement("option");
+      emptyOption.value = "";
+      emptyOption.textContent = "–";
+      select.appendChild(emptyOption);
+
+      const currentStatusId = awAttendance.get(awAttendanceKey(person.ID, datum));
+      const currentValue = currentStatusId != null ? String(currentStatusId) : "";
+
+      if (currentValue) {
+        const currentStatus = awStatusList.find((status) => status.ID === currentStatusId);
+        if (currentStatus) {
+          const currentOption = document.createElement("option");
+          currentOption.value = currentStatus.ID;
+          currentOption.textContent = currentStatus.Kurzzeichen;
+          currentOption.title = currentStatus.Bezeichnung;
+          select.appendChild(currentOption);
+        }
+      }
+
+      select.value = currentValue;
+      select.dataset.previousValue = currentValue;
+
+      // Restliche Status-Optionen werden erst bei Bedarf ergänzt, damit beim
+      // Seitenaufbau nicht für alle Tageszellen sämtliche Optionen (7x
+      // Anzahl Zellen) erzeugt werden müssen (spürbar bei vielen Teilnehmenden).
+      const ensureAwSelectOptions = function () {
+        if (select.dataset.optionsLoaded === "true") {
+          return;
+        }
+        select.dataset.optionsLoaded = "true";
+        const existingValues = new Set(Array.from(select.options).map((option) => option.value));
+        awStatusList.forEach((status) => {
+          if (existingValues.has(String(status.ID))) {
+            return;
+          }
+          const option = document.createElement("option");
+          option.value = status.ID;
+          option.textContent = status.Kurzzeichen;
+          option.title = status.Bezeichnung;
+          select.appendChild(option);
+        });
+      };
+
+      select.addEventListener("mousedown", ensureAwSelectOptions);
+      select.addEventListener("focus", ensureAwSelectOptions);
+
+      select.addEventListener("change", () => {
+        saveAwCell(person.ID, datum, select.value, select);
+      });
+
+      dayCell.appendChild(select);
+      row.appendChild(dayCell);
+    }
+
+    awTableBody.appendChild(row);
+    awRowEntries.push({ person, row });
+  });
+
+  applyAwFilters();
+}
+
+function applyAwFilters() {
+  let visibleCount = 0;
+
+  awRowEntries.forEach(({ person, row }) => {
+    const visible = awMatchesFilter(person);
+    row.style.display = visible ? "" : "none";
+    if (visible) {
+      visibleCount++;
+    }
+  });
+
+  if (awEmptyRow) {
+    awEmptyRow.style.display = visibleCount === 0 ? "" : "none";
+  }
+}
+
+async function changeAwMonth(delta) {
+  awMonth += delta;
+  if (awMonth < 1) {
+    awMonth = 12;
+    awYear -= 1;
+  } else if (awMonth > 12) {
+    awMonth = 1;
+    awYear += 1;
+  }
+  updateAwMonthLabel();
+  buildAwTableHead();
+  await loadAwAttendance();
+  buildAwTableRows();
+}
+
+awPrevMonthBtn.addEventListener("click", () => changeAwMonth(-1));
+awNextMonthBtn.addEventListener("click", () => changeAwMonth(1));
+
+awFachbereichFilter.addEventListener("change", () => {
+  refreshAwGruppeOptions();
+  refreshAwMassnahmeOptions();
+  refreshAwVtOptions();
+  applyAwFilters();
+});
+
+awGruppeFilter.addEventListener("change", () => {
+  refreshAwMassnahmeOptions();
+  refreshAwVtOptions();
+  applyAwFilters();
+});
+
+awMassnahmeFilter.addEventListener("change", () => {
+  refreshAwVtOptions();
+  applyAwFilters();
+});
+
+awVtFilter.addEventListener("change", applyAwFilters);
+awNameFilter.addEventListener("input", applyAwFilters);
+
+awResetFilterBtn.addEventListener("click", () => {
+  awFachbereichFilter.value = "";
+  awGruppeFilter.value = "";
+  awMassnahmeFilter.value = "";
+  awVtFilter.value = "";
+  awNameFilter.value = "";
+  refreshAwGruppeOptions();
+  refreshAwMassnahmeOptions();
+  refreshAwVtOptions();
+  applyAwFilters();
+});
+
+// PDF-Bericht
+
+const awPdfReportBtn = document.getElementById("awPdfReportBtn");
+const pdfConfirmDialog = document.getElementById("pdfConfirmDialog");
+const pdfConfirmCancelBtn = document.getElementById("pdfConfirmCancelBtn");
+const pdfConfirmOkBtn = document.getElementById("pdfConfirmOkBtn");
+
+const awPdfVtReportBtn = document.getElementById("awPdfVtReportBtn");
+const pdfVtConfirmDialog = document.getElementById("pdfVtConfirmDialog");
+const pdfVtConfirmCancelBtn = document.getElementById("pdfVtConfirmCancelBtn");
+const pdfVtConfirmOkBtn = document.getElementById("pdfVtConfirmOkBtn");
+
+function awSanitizeFilenamePart(text) {
+  return text
+    .trim()
+    .replace(/[<>:"/\\|?*]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function awFilterLabel(selectElement) {
+  if (!selectElement.value) {
+    return "alle";
+  }
+  return selectElement.selectedOptions[0].textContent.trim();
+}
+
+function buildAwReportHeaderLines() {
+  return [
+    `Fachbereich: ${awFilterLabel(awFachbereichFilter)}`,
+    `Gruppe: ${awFilterLabel(awGruppeFilter)}`,
+    `Maßnahmebezeichnung: ${awFilterLabel(awMassnahmeFilter)}`,
+    `VT: ${awFilterLabel(awVtFilter)}`,
+    `Name: ${awNameFilter.value.trim() || "alle"}`,
+    `Monat: ${MONTH_NAMES_DE[awMonth - 1]} ${awYear}`,
+  ];
+}
+
+function buildAwReportFilename() {
+  const parts = ["Anwesenheiten"];
+
+  if (awFachbereichFilter.value) {
+    parts.push(awSanitizeFilenamePart(awFilterLabel(awFachbereichFilter)));
+  }
+  if (awGruppeFilter.value) {
+    parts.push(awSanitizeFilenamePart(awFilterLabel(awGruppeFilter)));
+  }
+  if (awMassnahmeFilter.value) {
+    parts.push(awSanitizeFilenamePart(awFilterLabel(awMassnahmeFilter)));
+  }
+  if (awVtFilter.value) {
+    parts.push(awSanitizeFilenamePart(awFilterLabel(awVtFilter)));
+  }
+  if (awNameFilter.value.trim()) {
+    parts.push(awSanitizeFilenamePart(awNameFilter.value.trim()));
+  }
+
+  parts.push(awSanitizeFilenamePart(MONTH_NAMES_DE[awMonth - 1]));
+  parts.push(String(awYear));
+
+  return `${parts.join("_")}.pdf`;
+}
+
+function buildAwReportHeaderLinesForVt(vt) {
+  return buildAwReportHeaderLines().map((line) => (line.startsWith("VT:") ? `VT: ${vt}` : line));
+}
+
+function drawAwReportPage(doc, marginX, headerLines, people) {
+  const days = awDaysInMonth(awYear, awMonth);
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(0, 58, 77);
+  doc.text("Anwesenheitsbericht", marginX, 34);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(51, 51, 51);
+  doc.text(headerLines, marginX, 52, { lineHeightFactor: 1.35 });
+
+  const nameColWidth = 65;
+  const vtColWidth = 32;
+  const gruppeColWidth = 42;
+  const fixedColsWidth = nameColWidth * 2 + vtColWidth + gruppeColWidth;
+  const dayColWidth = Math.max(14, (pageWidth - marginX * 2 - fixedColsWidth) / days);
+
+  const tableHead = ["Vorname", "Nachname", "VT", "Gruppe"];
+  for (let day = 1; day <= days; day++) {
+    const weekday = new Date(awYear, awMonth - 1, day).getDay();
+    tableHead.push(`${day}\n${WEEKDAY_SHORT_DE[weekday]}`);
+  }
+
+  const tableBody = people.map((person) => {
+    const row = [person.Vorname, person.Nachname, person.VT || "", person.GruppeKennung || ""];
+    for (let day = 1; day <= days; day++) {
+      const datum = awIsoDate(awYear, awMonth, day);
+      const statusId = awAttendance.get(awAttendanceKey(person.ID, datum));
+      const status = awStatusList.find((s) => s.ID === statusId);
+      row.push(status ? status.Kurzzeichen : "");
+    }
+    return row;
+  });
+
+  const columnStyles = {
+    0: { cellWidth: nameColWidth, halign: "left" },
+    1: { cellWidth: nameColWidth, halign: "left" },
+    2: { cellWidth: vtColWidth, halign: "center" },
+    3: { cellWidth: gruppeColWidth, halign: "center" },
+  };
+  for (let i = 0; i < days; i++) {
+    columnStyles[4 + i] = { cellWidth: dayColWidth, halign: "center" };
+  }
+
+  doc.autoTable({
+    head: [tableHead],
+    body: tableBody,
+    startY: 52 + headerLines.length * 13 + 10,
+    margin: { left: marginX, right: marginX },
+    theme: "grid",
+    styles: { fontSize: 7, cellPadding: 2.5, valign: "middle", lineColor: [238, 239, 241], lineWidth: 0.5 },
+    headStyles: { fillColor: [0, 173, 238], textColor: 255, fontSize: 6.5, halign: "center" },
+    bodyStyles: { textColor: [51, 51, 51] },
+    alternateRowStyles: { fillColor: [243, 247, 250] },
+    columnStyles,
+    didDrawPage: () => {
+      const pageHeight = doc.internal.pageSize.getHeight();
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(`Erstellt am ${new Date().toLocaleDateString("de-DE")}`, marginX, pageHeight - 15);
+    },
+  });
+}
+
+function generateAwPdfReport() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const marginX = 30;
+
+  const filtered = awTeilnehmer.filter(awMatchesFilter);
+  drawAwReportPage(doc, marginX, buildAwReportHeaderLines(), filtered);
+
+  doc.save(buildAwReportFilename());
+}
+
+function generateAwPdfReportByVt() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const marginX = 30;
+
+  const filtered = awTeilnehmer.filter(awMatchesFilter);
+  const vtGroups = new Map();
+  filtered.forEach((person) => {
+    const vt = person.VT || "ohne VT";
+    if (!vtGroups.has(vt)) {
+      vtGroups.set(vt, []);
+    }
+    vtGroups.get(vt).push(person);
+  });
+
+  const sortedVts = [...vtGroups.keys()].sort((a, b) => a.localeCompare(b, "de", { numeric: true }));
+
+  if (sortedVts.length === 0) {
+    drawAwReportPage(doc, marginX, buildAwReportHeaderLines(), []);
+  } else {
+    sortedVts.forEach((vt, index) => {
+      if (index > 0) {
+        doc.addPage();
+      }
+      drawAwReportPage(doc, marginX, buildAwReportHeaderLinesForVt(vt), vtGroups.get(vt));
+    });
+  }
+
+  doc.save(buildAwReportFilename().replace(/\.pdf$/, "_je-VT.pdf"));
+}
+
+awPdfReportBtn.addEventListener("click", () => {
+  pdfConfirmDialog.showModal();
+});
+
+pdfConfirmCancelBtn.addEventListener("click", () => {
+  pdfConfirmDialog.close();
+});
+
+pdfConfirmOkBtn.addEventListener("click", () => {
+  pdfConfirmDialog.close();
+
+  const originalLabel = awPdfReportBtn.textContent;
+  awPdfReportBtn.disabled = true;
+  awPdfReportBtn.textContent = "Erstelle Bericht…";
+
+  try {
+    generateAwPdfReport();
+  } catch (err) {
+    console.error(err);
+    alert("Der PDF-Bericht konnte nicht erstellt werden.");
+  } finally {
+    awPdfReportBtn.disabled = false;
+    awPdfReportBtn.textContent = originalLabel;
+  }
+});
+
+awPdfVtReportBtn.addEventListener("click", () => {
+  pdfVtConfirmDialog.showModal();
+});
+
+pdfVtConfirmCancelBtn.addEventListener("click", () => {
+  pdfVtConfirmDialog.close();
+});
+
+pdfVtConfirmOkBtn.addEventListener("click", () => {
+  pdfVtConfirmDialog.close();
+
+  const originalLabel = awPdfVtReportBtn.textContent;
+  awPdfVtReportBtn.disabled = true;
+  awPdfVtReportBtn.textContent = "Erstelle Bericht…";
+
+  try {
+    generateAwPdfReportByVt();
+  } catch (err) {
+    console.error(err);
+    alert("Der PDF-Bericht konnte nicht erstellt werden.");
+  } finally {
+    awPdfVtReportBtn.disabled = false;
+    awPdfVtReportBtn.textContent = originalLabel;
+  }
+});
+
+async function initAnwesenheiten() {
+  updateAwMonthLabel();
+  buildAwTableHead();
+
+  await Promise.all([
+    loadFachbereichOptionsInto(awFachbereichFilter),
+    loadAwGruppen(),
+    loadAwMassnahmen(),
+    loadAwStatusList(),
+    loadAwTeilnehmer(),
+    loadAwAttendance(),
+  ]);
+
+  refreshAwGruppeOptions();
+  refreshAwMassnahmeOptions();
+  refreshAwVtOptions();
+
+  buildAwTableRows();
+}
+
+let awInitialized = false;
+
+async function ensureAwInitialized() {
+  if (awInitialized) {
+    return;
+  }
+  awInitialized = true;
+  await initAnwesenheiten();
+}
+
+loadMassnahmeOptionsInto(tnMassnahmeSelect, { includeVt: true });
+loadMassnahmeOptionsInto(editTnMassnahmeSelect, { includeVt: true });
 loadTeilnehmer();
+
+handleRouteChange();

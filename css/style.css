@@ -211,6 +211,35 @@ footer {
   color: var(--color-text-muted);
 }
 
+/* Dashboard */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--color-bg-light);
+  border-radius: var(--radius-md);
+}
+
+.stat-card .stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+.stat-card .stat-label {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
 /* Data table */
 
 .table-scroll {
@@ -482,4 +511,188 @@ footer {
 
 .edit-dialog .form-row {
   text-align: left;
+}
+
+/* Filter bar */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filter-bar .form-row {
+  margin-bottom: 0;
+  min-width: 180px;
+}
+
+.filter-bar .form-row.filter-name {
+  min-width: 220px;
+}
+
+.filter-reset-btn {
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-light);
+  color: var(--color-text);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  height: fit-content;
+}
+
+.filter-reset-btn:hover {
+  background: var(--color-border);
+}
+
+/* Month navigation */
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.month-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-light);
+  color: var(--color-primary-dark);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.month-nav-btn:hover {
+  background: var(--color-border);
+}
+
+.month-nav-label {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  min-width: 140px;
+  text-align: center;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.report-btn {
+  padding: 0.6rem 1.5rem;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  color: #ffffff;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.report-btn:hover {
+  background: var(--color-primary-mid);
+}
+
+.report-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Anwesenheiten-Tabelle */
+
+.anwesenheiten-table {
+  table-layout: fixed;
+}
+
+.anwesenheiten-table th,
+.anwesenheiten-table td {
+  padding: 0.4rem 0.35rem;
+}
+
+.anwesenheiten-table .col-sticky {
+  position: sticky;
+  background: var(--color-bg);
+  z-index: 1;
+}
+
+.anwesenheiten-table thead .col-sticky {
+  z-index: 2;
+}
+
+.anwesenheiten-table .col-vorname {
+  left: 0;
+  width: 110px;
+}
+
+.anwesenheiten-table .col-nachname {
+  left: 110px;
+  width: 110px;
+}
+
+.anwesenheiten-table .col-vt {
+  left: 220px;
+  width: 60px;
+}
+
+.anwesenheiten-table .col-gruppe {
+  left: 280px;
+  width: 110px;
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+}
+
+.anwesenheiten-table .day-col {
+  width: 58px;
+  text-align: center;
+}
+
+.anwesenheiten-table .day-col.weekend {
+  background: var(--color-bg-light);
+}
+
+.anwesenheiten-table th.day-col {
+  font-size: 0.75rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.anwesenheiten-table .day-num {
+  display: block;
+  font-weight: 700;
+}
+
+.anwesenheiten-table .day-weekday {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.anwesenheiten-table .day-select {
+  width: 100%;
+  padding: 0.2rem 0.15rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.8rem;
+  background: #ffffff;
+  color: var(--color-text);
+  text-align: center;
+  text-align-last: center;
+}
+
+.anwesenheiten-table .day-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
 }

@@ -309,9 +309,13 @@ app.get("/api/teilnehmer", async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT t.ID, t.Vorname, t.Nachname, t.Geburtsdatum, t.MassnahmeID, m.Bezeichnung AS MassnahmeBezeichnung,
+              m.VT, m.GruppeID, g.Bezeichnung AS GruppeBezeichnung, g.Kennung AS GruppeKennung, g.FachbereichID,
+              f.BezeichnungLang AS FachbereichBezeichnung,
               t.Startdatum, t.Endedatum, t.Email, t.Telefon
        FROM teilnehmer t
        LEFT JOIN massnahme m ON m.ID = t.MassnahmeID
+       LEFT JOIN gruppe g ON g.ID = m.GruppeID
+       LEFT JOIN fachbereich f ON f.ID = g.FachbereichID
        ORDER BY t.Nachname, t.Vorname`
     );
     res.json(rows);
@@ -409,6 +413,69 @@ app.delete("/api/teilnehmer/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Teilnehmer konnte nicht gelöscht werden." });
+  }
+});
+
+app.get("/api/anwesenheitsstatus", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT ID, Bezeichnung, Kurzzeichen FROM anwesenheitsstatus ORDER BY ID"
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Anwesenheitsstatus konnte nicht geladen werden." });
+  }
+});
+
+app.get("/api/anwesenheiten", async (req, res) => {
+  const monat = req.query.monat;
+
+  if (!/^\d{4}-\d{2}$/.test(monat || "")) {
+    return res.status(400).json({ error: "Ungültiger Monat (Format YYYY-MM erwartet)." });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      "SELECT ID, TeilnehmerID, Datum, StatusID FROM anwesenheit WHERE DATE_FORMAT(Datum, '%Y-%m') = ?",
+      [monat]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Anwesenheiten konnten nicht geladen werden." });
+  }
+});
+
+app.put("/api/anwesenheiten", async (req, res) => {
+  const { TeilnehmerID, Datum, StatusID } = req.body;
+  const teilnehmerId = Number(TeilnehmerID);
+
+  if (!Number.isInteger(teilnehmerId) || !/^\d{4}-\d{2}-\d{2}$/.test(Datum || "")) {
+    return res.status(400).json({ error: "Teilnehmer und Datum sind erforderlich." });
+  }
+
+  try {
+    if (!StatusID) {
+      await pool.query("DELETE FROM anwesenheit WHERE TeilnehmerID = ? AND Datum = ?", [teilnehmerId, Datum]);
+      return res.status(204).end();
+    }
+
+    const statusId = Number(StatusID);
+    if (!Number.isInteger(statusId)) {
+      return res.status(400).json({ error: "Ungültiger Status." });
+    }
+
+    await pool.query(
+      `INSERT INTO anwesenheit (TeilnehmerID, Datum, StatusID) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE StatusID = VALUES(StatusID)`,
+      [teilnehmerId, Datum, statusId]
+    );
+
+    res.json({ TeilnehmerID: teilnehmerId, Datum, StatusID: statusId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Anwesenheit konnte nicht gespeichert werden." });
   }
 });
 

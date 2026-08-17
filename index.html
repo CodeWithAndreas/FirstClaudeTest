@@ -36,16 +36,15 @@
       <nav class="sidebar-nav">
         <ul>
           <li>
-            <a href="#teilnehmende" class="sidebar-link" data-page="teilnehmende">
+            <a href="#dashboard" class="sidebar-link" data-page="dashboard">
               <span class="icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  <line x1="12" y1="20" x2="12" y2="10"></line>
+                  <line x1="18" y1="20" x2="18" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="16"></line>
                 </svg>
               </span>
-              <span class="label">Teilnehmende</span>
+              <span class="label">Dashboard</span>
             </a>
           </li>
           <li>
@@ -60,6 +59,19 @@
                 </svg>
               </span>
               <span class="label">Anwesenheiten</span>
+            </a>
+          </li>
+          <li>
+            <a href="#teilnehmende" class="sidebar-link" data-page="teilnehmende">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </span>
+              <span class="label">Teilnehmende</span>
             </a>
           </li>
           <li>
@@ -104,6 +116,30 @@
 
     <div class="content">
       <main>
+        <section id="page-dashboard" class="page">
+          <h2>Dashboard</h2>
+          <p>Übersicht über den Standort.</p>
+
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span class="stat-value" id="dashTeilnehmerCount">–</span>
+              <span class="stat-label">Teilnehmende</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="dashMassnahmenCount">–</span>
+              <span class="stat-label">Maßnahmen</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="dashGruppenCount">–</span>
+              <span class="stat-label">Gruppen</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="dashFachbereicheCount">–</span>
+              <span class="stat-label">Fachbereiche</span>
+            </div>
+          </div>
+        </section>
+
         <section id="page-teilnehmende" class="page">
           <h2>Teilnehmende</h2>
 
@@ -239,8 +275,98 @@
 
         <section id="page-anwesenheiten" class="page">
           <h2>Anwesenheiten</h2>
-          <p>Übersicht der Anwesenheiten.</p>
+
+          <div class="filter-bar">
+            <div class="form-row">
+              <label for="awFachbereichFilter">Fachbereich</label>
+              <select id="awFachbereichFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="awGruppeFilter">Gruppe</label>
+              <select id="awGruppeFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="awMassnahmeFilter">Maßnahmebezeichnung</label>
+              <select id="awMassnahmeFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="awVtFilter">VT</label>
+              <select id="awVtFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row filter-name">
+              <label for="awNameFilter">Name</label>
+              <input type="text" id="awNameFilter" placeholder="Name suchen…">
+            </div>
+
+            <button type="button" id="awResetFilterBtn" class="filter-reset-btn">Filter zurücksetzen</button>
+          </div>
+
+          <div class="month-nav">
+            <button type="button" id="awPrevMonthBtn" class="month-nav-btn" aria-label="Vorheriger Monat">‹</button>
+            <span id="awMonthLabel" class="month-nav-label"></span>
+            <button type="button" id="awNextMonthBtn" class="month-nav-btn" aria-label="Nächster Monat">›</button>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table anwesenheiten-table">
+              <thead>
+                <tr id="awTableHeadRow">
+                  <th class="col-sticky col-vorname">Vorname</th>
+                  <th class="col-sticky col-nachname">Nachname</th>
+                  <th class="col-sticky col-vt">VT</th>
+                  <th class="col-sticky col-gruppe">Gruppe</th>
+                </tr>
+              </thead>
+              <tbody id="awTableBody">
+                <tr>
+                  <td colspan="4">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="report-actions">
+            <button type="button" id="awPdfReportBtn" class="report-btn">PDF-Bericht erstellen</button>
+            <button type="button" id="awPdfVtReportBtn" class="report-btn">PDF-Bericht je VT erstellen</button>
+          </div>
         </section>
+
+        <dialog id="pdfConfirmDialog" class="confirm-dialog">
+          <h3>Bericht erstellen</h3>
+          <p>
+            Soll der Anwesenheitsbericht für die aktuelle Filterauswahl und den
+            angezeigten Monat als PDF erstellt und heruntergeladen werden?
+          </p>
+          <div class="dialog-actions">
+            <button type="button" id="pdfConfirmCancelBtn" class="btn-secondary">Abbrechen</button>
+            <button type="button" id="pdfConfirmOkBtn" class="btn-primary">Bericht erstellen</button>
+          </div>
+        </dialog>
+
+        <dialog id="pdfVtConfirmDialog" class="confirm-dialog">
+          <h3>Bericht je VT erstellen</h3>
+          <p>
+            Soll der Anwesenheitsbericht für die aktuelle Filterauswahl und den
+            angezeigten Monat als PDF erstellt und heruntergeladen werden, mit
+            einer eigenen Seite je VT?
+          </p>
+          <div class="dialog-actions">
+            <button type="button" id="pdfVtConfirmCancelBtn" class="btn-secondary">Abbrechen</button>
+            <button type="button" id="pdfVtConfirmOkBtn" class="btn-primary">Bericht erstellen</button>
+          </div>
+        </dialog>
 
         <section id="page-massnahmen" class="page">
           <h2>Maßnahmen</h2>
@@ -530,6 +656,8 @@
     </div>
   </div>
 
+  <script src="js/vendor/jspdf.umd.min.js"></script>
+  <script src="js/vendor/jspdf.plugin.autotable.min.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

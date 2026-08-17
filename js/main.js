@@ -1325,6 +1325,47 @@ async function saveAwCell(teilnehmerId, datum, statusId, selectElement) {
 
 let awRowEntries = [];
 let awEmptyRow = null;
+let awSortKey = null;
+let awSortDirection = "asc";
+
+const awSortHeaders = Array.from(document.querySelectorAll("#awTableHeadRow th.sortable-col"));
+
+function awSortValue(person, key) {
+  return (person[key] || "").toString();
+}
+
+function applyAwSort() {
+  awSortHeaders.forEach((th) => {
+    th.classList.remove("sort-asc", "sort-desc");
+    if (th.dataset.sortKey === awSortKey) {
+      th.classList.add(awSortDirection === "asc" ? "sort-asc" : "sort-desc");
+    }
+  });
+
+  if (!awSortKey) {
+    return;
+  }
+
+  awRowEntries.sort((a, b) => {
+    const result = awSortValue(a.person, awSortKey).localeCompare(awSortValue(b.person, awSortKey), "de", { numeric: true });
+    return awSortDirection === "asc" ? result : -result;
+  });
+
+  awRowEntries.forEach(({ row }) => awTableBody.appendChild(row));
+}
+
+awSortHeaders.forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.sortKey;
+    if (awSortKey === key) {
+      awSortDirection = awSortDirection === "asc" ? "desc" : "asc";
+    } else {
+      awSortKey = key;
+      awSortDirection = "asc";
+    }
+    applyAwSort();
+  });
+});
 
 function buildAwTableRows() {
   awTableBody.innerHTML = "";
@@ -1432,6 +1473,7 @@ function buildAwTableRows() {
     awRowEntries.push({ person, row });
   });
 
+  applyAwSort();
   applyAwFilters();
 }
 

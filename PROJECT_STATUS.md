@@ -185,6 +185,17 @@ zusammen (nicht gesetzte Filter tragen nicht zum Dateinamen bei), z. B.
 `Anwesenheiten_Informatik_August_2026.pdf`; der Je-VT-Bericht hängt zusätzlich
 `_je-VT` an.
 
+Die Spaltenköpfe Nachname, VT und Gruppe sind klickbar (`.sortable-col` in
+`index.html`, `data-sort-key` = Feldname auf `person`-Objekt); ein Klick
+sortiert `awRowEntries` auf- (erster Klick) bzw. absteigend (zweiter Klick auf
+dieselbe Spalte) per `localeCompare(..., "de", { numeric: true })` und hängt
+die Zeilen-DOM-Knoten in der neuen Reihenfolge per `appendChild` wieder ein
+(kein Neuaufbau der Zellen, wichtig für die Performance bei vielen
+Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
+`sort-asc`/`sort-desc`) zeigt Spalte und Richtung. Die aktive Sortierung
+(`awSortKey`/`awSortDirection`) bleibt über Monatswechsel hinweg erhalten, da
+`applyAwSort()` am Ende von `buildAwTableRows()` erneut aufgerufen wird.
+
 ## Noch offen / nicht begonnen
 
 - Keine Benutzer-Authentifizierung/Login – die App ist komplett offen.

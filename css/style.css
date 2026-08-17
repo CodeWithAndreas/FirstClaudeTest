@@ -653,6 +653,35 @@ footer {
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
 }
 
+.anwesenheiten-table th.sortable-col {
+  cursor: pointer;
+  user-select: none;
+}
+
+.anwesenheiten-table th.sortable-col:hover {
+  color: var(--color-primary);
+}
+
+.anwesenheiten-table .sort-indicator {
+  display: inline-block;
+  width: 0.8em;
+  margin-left: 0.1em;
+  opacity: 0.5;
+}
+
+.anwesenheiten-table th.sort-asc .sort-indicator::after {
+  content: "\25B2";
+}
+
+.anwesenheiten-table th.sort-desc .sort-indicator::after {
+  content: "\25BC";
+}
+
+.anwesenheiten-table th.sort-asc .sort-indicator,
+.anwesenheiten-table th.sort-desc .sort-indicator {
+  opacity: 1;
+}
+
 .anwesenheiten-table .day-col {
   width: 58px;
   text-align: center;

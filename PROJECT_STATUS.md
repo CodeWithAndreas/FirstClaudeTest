@@ -28,6 +28,11 @@ server/
   server.js       Express-App: liefert die statischen Dateien UND die REST-API,
                   inkl. Session-Auth, Rollen-/Fachbereichs-Scoping und
                   idempotentem DB-Bootstrap (Tabellen + Rollen-Seed + Admin-Seed)
+  schema.sql      Grundschema (fachbereich/gruppe/massnahme/teilnehmer/
+                  anwesenheit(sstatus)) zum Einspielen auf einer neuen/leeren
+                  MySQL-Instanz, siehe README.md "Setup auf einem neuen PC".
+                  Die benutzer*-Tabellen sind bewusst NICHT enthalten, die
+                  legt server.js selbst an.
   package.json    Abhängigkeiten: express, mysql2, dotenv, bcryptjs, express-session
   .env            Echte DB-Zugangsdaten + SESSION_SECRET (NICHT committed, in .gitignore)
   .env.example    Vorlage für .env

@@ -1,6 +1,6 @@
 # Standortmanager – Projektstatus
 
-Stand: 2026-08-17. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
+Stand: 2026-08-18. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
 ## Überblick
@@ -25,18 +25,22 @@ js/vendor/        Vendorte Drittanbieter-Libs als reine Static Files (kein npm/
                   auf der Anwesenheiten-Seite. Per <script>-Tag vor main.js
                   eingebunden, daher hängt sich das Plugin an window.jspdf.jsPDF.
 server/
-  server.js       Express-App: liefert die statischen Dateien UND die REST-API
-  package.json    Abhängigkeiten: express, mysql2, dotenv
-  .env            Echte DB-Zugangsdaten (NICHT committed, in .gitignore)
+  server.js       Express-App: liefert die statischen Dateien UND die REST-API,
+                  inkl. Session-Auth, Rollen-/Fachbereichs-Scoping und
+                  idempotentem DB-Bootstrap (Tabellen + Rollen-Seed + Admin-Seed)
+  package.json    Abhängigkeiten: express, mysql2, dotenv, bcryptjs, express-session
+  .env            Echte DB-Zugangsdaten + SESSION_SECRET (NICHT committed, in .gitignore)
   .env.example    Vorlage für .env
 ```
 
 ## Design / Layout
 
-- Top-Navigation: Titel "Standortmanager" + Breadcrumb links, Logo rechts
-- Linke Sidebar: ein-/ausklappbar (Chevron-Button), 6 Menüpunkte in dieser
+- Top-Navigation: Titel "Standortmanager" + Breadcrumb links, rechts
+  Username + Icon "Passwort ändern" + Icon "Abmelden" + Logo
+- Linke Sidebar: ein-/ausklappbar (Chevron-Button), 7 Menüpunkte in dieser
   Reihenfolge: **Dashboard, Anwesenheiten, Teilnehmende, Maßnahmen, Gruppen,
-  Fachbereiche**
+  Fachbereiche, Benutzer** – die letzten beiden Punkte sind nur für die Rolle
+  Administrator sichtbar (`applyRolePermissions()` in `js/main.js`)
 - Routing client-seitig über `location.hash` (`#teilnehmende`, `#massnahmen`, …),
   keine echten Unterseiten/Reloads. Startseite (kein/unbekannter Hash) ist
   `dashboard` (`defaultPage` in `js/main.js`).
@@ -63,6 +67,18 @@ Verbindung: Host `127.0.0.1`, Port `3306`, User `root`, SSL aktiviert
 | `teilnehmer`  | ID, Vorname, Nachname, Geburtsdatum, MassnahmeID, Startdatum, Endedatum, Email, Telefon     | MassnahmeID → massnahme.ID (NOT NULL) |
 | `anwesenheitsstatus` | ID, Bezeichnung, Kurzzeichen                                                        | – |
 | `anwesenheit` | ID, TeilnehmerID, Datum, StatusID                                                         | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE), StatusID → anwesenheitsstatus.ID; UNIQUE(TeilnehmerID, Datum) |
+| `benutzer`    | ID, Username (UNIQUE), PasswortHash, Vorname, Nachname, Email, Telefon, ErstelltAm         | – |
+| `rolle`       | ID, Bezeichnung (UNIQUE)                                                                   | – |
+| `benutzer_rolle` | BenutzerID, RolleID (Composite-PK)                                                       | BenutzerID → benutzer.ID (ON DELETE CASCADE), RolleID → rolle.ID (ON DELETE CASCADE) |
+| `benutzer_fachbereich` | BenutzerID, FachbereichID (Composite-PK)                                           | BenutzerID → benutzer.ID (ON DELETE CASCADE), FachbereichID → fachbereich.ID (ON DELETE CASCADE) |
+
+Die vier `benutzer*`-Tabellen existieren in keiner separaten `.sql`-Datei,
+sondern werden von `bootstrapDatabase()` in `server/server.js` bei jedem
+Serverstart per `CREATE TABLE IF NOT EXISTS` idempotent sichergestellt
+(kein Migrationstool im Projekt). Dieselbe Funktion seedet `rolle` mit den
+5 festen Rollen (`INSERT IGNORE`) und legt bei leerer `benutzer`-Tabelle
+einmalig das Admin-Konto an (Username `admin`, Startpasswort `Admin2026!`,
+Rolle Administrator – Konsolenmeldung nur beim erstmaligen Anlegen).
 
 ## Fertiggestellte Features (pro Seite gleiches Muster)
 
@@ -107,6 +123,72 @@ API-Routen (alle in `server/server.js`, alle unter `/api/...`):
 - `anwesenheitsstatus`: GET (Kurzzeichen-Liste für die Dropdowns)
 - `anwesenheiten`: GET `?monat=YYYY-MM`, PUT (Upsert pro Teilnehmer+Datum;
   `StatusID: null` löscht den Eintrag wieder)
+- `login` (POST), `logout` (POST), `me` (GET), `me/passwort` (PUT),
+  `rollen` (GET, statische Liste), `benutzer` (GET/POST/PUT/DELETE,
+  admin-only)
+
+Alle Routen außer `POST /api/login` verlangen eine aktive Session
+(`requireAuth`-Middleware, `app.use("/api", requireAuth)` direkt nach
+`login`/`logout`); `fachbereiche` (POST/PUT/DELETE) und alle `benutzer`-Routen
+verlangen zusätzlich die Rolle Administrator (`requireRole("Administrator")`).
+`gruppen`, `massnahmen`, `teilnehmer` und `anwesenheiten` sind für Nutzer mit
+ausschließlich den Rollen Ausbilder/Fachbereichsleiter serverseitig auf deren
+zugewiesene Fachbereiche gefiltert (`isRestrictedUser()`/`fachbereichInScope()`
+in `server.js`) – sowohl beim Lesen (`WHERE ... IN (?)` bzw. Join-Filter) als
+auch beim Schreiben (POST/PUT/DELETE prüfen den Fachbereich des Ziel- **und**
+bei PUT auch des Ausgangsdatensatzes, sonst 403). `GET /api/fachbereiche`
+bleibt für alle Rollen erreichbar (wird für Dropdowns/Filter auf anderen
+Seiten gebraucht), liefert eingeschränkten Nutzern aber nur ihre eigenen
+Fachbereiche.
+
+### Login, Rollen und Benutzerverwaltung
+
+Die App verlangt seit dieser Session ein Login für die komplette Anwendung
+(kein anonymer Zugriff mehr). Beim Laden prüft `checkSession()` in
+`js/main.js` per `GET /api/me`, ob eine Session existiert; ohne Session zeigt
+`body.logged-out` (CSS) ausschließlich `#loginScreen`, mit Session wird die
+App-Shell eingeblendet und `initializeApp()` bündelt sämtliche zuvor über die
+Datei verstreuten initialen `loadX()`-Aufrufe (vorher an Modul-Ebene direkt
+bei den jeweiligen Formular-Definitionen, jetzt erst nach erfolgreichem
+Login/Session-Check). Ein einmalig installierter `window.fetch`-Wrapper am
+Dateianfang schaltet bei jedem `401` (außer beim initialen `/api/me`-Check)
+automatisch zurück auf den Login-Screen, ohne dass die ~30 bestehenden
+`fetch()`-Aufrufe im Code angepasst werden mussten.
+
+Fünf feste Rollen (Tabelle `rolle`, keine eigene Verwaltungs-UI, nur
+Zuweisung über die Benutzer-Seite): Ausbilder, Fachbereichsleiter,
+Lehrgangsorganisation, Administrator, Bildungsstättenleiter. Ein Benutzer
+kann mehrere Rollen und mehrere Fachbereiche haben. Hat ein Benutzer
+mindestens eine der Rollen Administrator/Lehrgangsorganisation/
+Bildungsstättenleiter, sieht und bearbeitet er alle Fachbereiche
+uneingeschränkt; hat er ausschließlich Ausbilder und/oder
+Fachbereichsleiter, ist er auf seine zugewiesenen Fachbereiche beschränkt
+(`isRestrictedUser()` in `server.js`). Rollen/Fachbereiche eines Nutzers
+werden beim Login einmalig geladen und in der Session gecacht – ändert der
+Admin sie während einer aktiven Sitzung, wirkt sich das erst beim nächsten
+Login der betroffenen Person aus (bewusster Trade-off gegen DB-Abfragen bei
+jedem Request).
+
+Die neue **Benutzer-Seite** (nur für Administrator sichtbar, Sidebar +
+`showPage()`-Guard blocken sie sonst auch bei direktem Hash-Aufruf) folgt
+1:1 dem Fachbereiche-CRUD-Muster (Tabelle, einklappbares Neuanlage-Formular,
+Bearbeiten-`<dialog>`, geteilter Lösch-Dialog über `openDeleteDialog`).
+Rollen und Fachbereiche werden je als Checkbox-Gruppe dargestellt
+(`.checkbox-group`). Beim Bearbeiten bleibt das Passwortfeld leer; nur bei
+Eingabe wird das Passwort geändert, sonst bleibt es unverändert (Contract:
+leer = unverändert). Ein Admin kann sich nicht selbst löschen (400).
+
+**Passwort ändern**: Icon in der Kopfzeile öffnet `#changePasswordDialog`
+(aktuelles Passwort, neues Passwort, Wiederholung); serverseitige Prüfung
+des aktuellen Passworts gegen den eigenen Hash über `PUT /api/me/passwort`,
+Mindestlänge 8 Zeichen. **Abmelden**: Icon daneben ruft `POST /api/logout`
+und lädt die Seite neu (setzt zuverlässig allen clientseitigen Zustand
+zurück, z. B. `awGruppen`/`awMassnahmen`-Caches der Anwesenheiten-Seite).
+
+Passwort-Hashing über `bcryptjs` (reines JS, keine native Kompilierung nötig
+unter Windows), Sessions über `express-session` mit In-Memory-Store und
+httpOnly-Cookie (`SESSION_SECRET` in `.env`) – bei Serverneustart müssen sich
+alle Nutzer neu einloggen, für dieses interne Tool akzeptiert.
 
 ### Anwesenheiten-Seite
 
@@ -127,6 +209,15 @@ Nachlade-Requests bei Filteränderung); Auswahl einer übergeordneten Stufe
 setzt nicht mehr passende untergeordnete Filter automatisch zurück. Umgesetzt
 in `js/main.js` (Abschnitt "Anwesenheiten" am Dateiende,
 `refreshAwGruppeOptions`/`refreshAwMassnahmeOptions`/`refreshAwVtOptions`).
+
+Zusätzlich zu den manuellen Filtern blendet `awMatchesFilter()` Teilnehmende
+grundsätzlich aus, deren Gültigkeitszeitraum (`Startdatum`/`Endedatum` aus
+`teilnehmer`) den gewählten Monat nicht überschneidet – liegt der Monat
+komplett vor `Startdatum` oder komplett nach `Endedatum`, wird die Zeile nicht
+angezeigt (Vergleich per ISO-Datumsstrings, da lexikografisch sortierbar).
+Da diese Prüfung vom Monat abhängt, wirkt sie automatisch bei jedem
+Monatswechsel neu (über den ohnehin bei `changeAwMonth()` ausgelösten
+`buildAwTableRows()` → `applyAwFilters()`-Ablauf), ohne eigene Verdrahtung.
 
 **Performance:** Bei größeren Teilnehmerzahlen (z. B. 148 Teilnehmende × 31
 Tage = ~4.600 `<select>`-Elemente) darf die Tabelle NICHT bei jeder
@@ -198,10 +289,17 @@ Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
 
 ## Noch offen / nicht begonnen
 
-- Keine Benutzer-Authentifizierung/Login – die App ist komplett offen.
 - Keine serverseitige Bestätigungsprüfung beim Löschen (Client prüft den
   eingegebenen Namen, Server löscht rein anhand der ID).
 - Kein automatisiertes Test-Setup.
+- Rollen-/Fachbereichs-Änderungen an einem Benutzer wirken erst nach dessen
+  nächstem Login (Session-Cache, siehe oben) – kein Mechanismus, um aktive
+  Sessions bei Rechteänderung sofort zu invalidieren.
+- Sessions sind In-Memory (express-session Default) – bei Serverneustart
+  müssen sich alle Nutzer neu einloggen; für produktiven Mehr-Instanzen-Betrieb
+  wäre ein externer Session-Store (z. B. MySQL/Redis) nötig.
+- Keine "Passwort vergessen"-Funktion – ein vergessenes Passwort kann aktuell
+  nur ein Administrator über die Benutzer-Seite zurücksetzen.
 
 ## Lokale Entwicklungsumgebung – wichtige Hinweise
 
@@ -229,5 +327,7 @@ Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
 
 ## Empfohlene nächste Schritte
 
-1. Ggf. Authentifizierung ergänzen, bevor die App außerhalb von localhost
-   erreichbar gemacht wird.
+1. Vor produktivem Einsatz außerhalb von localhost: `SESSION_SECRET` in der
+   echten `.env` auf einen starken, zufälligen Wert setzen (ist bereits
+   vorbereitet, siehe `.env.example`) und das Admin-Startpasswort
+   `Admin2026!` sofort nach dem ersten Login ändern.

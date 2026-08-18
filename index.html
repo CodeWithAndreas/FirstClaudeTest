@@ -9,11 +9,44 @@
   <link href="https://fonts.googleapis.com/css2?family=Istok+Web:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="logged-out">
+  <div id="loginScreen" class="login-screen">
+    <form id="loginForm" class="login-form">
+      <h1>Standortmanager</h1>
+      <div class="form-row">
+        <label for="loginUsername">Benutzername</label>
+        <input type="text" id="loginUsername" name="Username" autocomplete="username" required>
+      </div>
+      <div class="form-row">
+        <label for="loginPasswort">Passwort</label>
+        <input type="password" id="loginPasswort" name="Passwort" autocomplete="current-password" required>
+      </div>
+      <button type="submit">Anmelden</button>
+      <p class="form-message" id="loginFormMessage" role="status"></p>
+    </form>
+  </div>
+
   <header class="topbar">
     <div class="topbar-title">
       <h1>Standortmanager</h1>
       <nav class="breadcrumb" id="breadcrumb" aria-label="Standort auf der Website"></nav>
+    </div>
+
+    <div class="topbar-actions">
+      <span class="topbar-username" id="topbarUsername"></span>
+      <button type="button" class="icon-btn" id="changePasswordBtn" aria-label="Passwort ändern" title="Passwort ändern">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      </button>
+      <button type="button" class="icon-btn" id="logoutBtn" aria-label="Abmelden" title="Abmelden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <polyline points="16 17 21 12 16 7"></polyline>
+          <line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg>
+      </button>
     </div>
 
     <a href="#" class="topbar-logo" aria-label="Standortmanager Startseite">
@@ -108,6 +141,16 @@
                 </svg>
               </span>
               <span class="label">Fachbereiche</span>
+            </a>
+          </li>
+          <li>
+            <a href="#benutzer" class="sidebar-link" data-page="benutzer">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+                </svg>
+              </span>
+              <span class="label">Benutzer</span>
             </a>
           </li>
         </ul>
@@ -626,6 +669,162 @@
 
             <div class="dialog-actions">
               <button type="button" id="editFachbereichCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
+        <section id="page-benutzer" class="page">
+          <h2>Benutzer</h2>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Vorname</th>
+                  <th>Nachname</th>
+                  <th>Email</th>
+                  <th>Telefon</th>
+                  <th>Rollen</th>
+                  <th>Fachbereiche</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="benutzerTableBody">
+                <tr>
+                  <td colspan="8">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <details class="collapsible-form">
+            <summary>Neuer Benutzer</summary>
+
+            <form id="benutzerForm" class="data-form">
+              <div class="form-row">
+                <label for="buUsername">Username</label>
+                <input type="text" id="buUsername" name="Username" maxlength="50" required autocomplete="off">
+              </div>
+
+              <div class="form-row">
+                <label for="buPasswort">Passwort</label>
+                <input type="password" id="buPasswort" name="Passwort" autocomplete="new-password" required>
+              </div>
+
+              <div class="form-row">
+                <label for="buVorname">Vorname</label>
+                <input type="text" id="buVorname" name="Vorname" maxlength="100" required>
+              </div>
+
+              <div class="form-row">
+                <label for="buNachname">Nachname</label>
+                <input type="text" id="buNachname" name="Nachname" maxlength="100" required>
+              </div>
+
+              <div class="form-row">
+                <label for="buEmail">Email</label>
+                <input type="email" id="buEmail" name="Email" maxlength="255">
+              </div>
+
+              <div class="form-row">
+                <label for="buTelefon">Telefon</label>
+                <input type="text" id="buTelefon" name="Telefon" maxlength="50">
+              </div>
+
+              <div class="form-row">
+                <label>Rollen</label>
+                <div class="checkbox-group" id="buRollenCheckboxes"></div>
+              </div>
+
+              <div class="form-row">
+                <label>Fachbereiche</label>
+                <div class="checkbox-group" id="buFachbereicheCheckboxes"></div>
+              </div>
+
+              <button type="submit">Speichern</button>
+              <p class="form-message" id="benutzerFormMessage" role="status"></p>
+            </form>
+          </details>
+        </section>
+
+        <dialog id="editBenutzerDialog" class="confirm-dialog edit-dialog">
+          <form id="editBenutzerForm">
+            <h3>Benutzer bearbeiten</h3>
+
+            <div class="form-row">
+              <label for="editBuUsername">Username</label>
+              <input type="text" id="editBuUsername" name="Username" maxlength="50" required autocomplete="off">
+            </div>
+
+            <div class="form-row">
+              <label for="editBuPasswort">Passwort</label>
+              <input type="password" id="editBuPasswort" name="Passwort" autocomplete="new-password" placeholder="Leer lassen, um das Passwort nicht zu ändern">
+            </div>
+
+            <div class="form-row">
+              <label for="editBuVorname">Vorname</label>
+              <input type="text" id="editBuVorname" name="Vorname" maxlength="100" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editBuNachname">Nachname</label>
+              <input type="text" id="editBuNachname" name="Nachname" maxlength="100" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editBuEmail">Email</label>
+              <input type="email" id="editBuEmail" name="Email" maxlength="255">
+            </div>
+
+            <div class="form-row">
+              <label for="editBuTelefon">Telefon</label>
+              <input type="text" id="editBuTelefon" name="Telefon" maxlength="50">
+            </div>
+
+            <div class="form-row">
+              <label>Rollen</label>
+              <div class="checkbox-group" id="editBuRollenCheckboxes"></div>
+            </div>
+
+            <div class="form-row">
+              <label>Fachbereiche</label>
+              <div class="checkbox-group" id="editBuFachbereicheCheckboxes"></div>
+            </div>
+
+            <p class="form-message" id="editBenutzerFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="editBenutzerCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog id="changePasswordDialog" class="confirm-dialog">
+          <form id="changePasswordForm">
+            <h3>Passwort ändern</h3>
+
+            <div class="form-row">
+              <label for="cpAktuellesPasswort">Aktuelles Passwort</label>
+              <input type="password" id="cpAktuellesPasswort" name="AktuellesPasswort" autocomplete="current-password" required>
+            </div>
+
+            <div class="form-row">
+              <label for="cpNeuesPasswort">Neues Passwort</label>
+              <input type="password" id="cpNeuesPasswort" name="NeuesPasswort" autocomplete="new-password" required>
+            </div>
+
+            <div class="form-row">
+              <label for="cpNeuesPasswortWiederholung">Neues Passwort wiederholen</label>
+              <input type="password" id="cpNeuesPasswortWiederholung" name="NeuesPasswortWiederholung" autocomplete="new-password" required>
+            </div>
+
+            <p class="form-message" id="changePasswordFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="changePasswordCancelBtn" class="btn-secondary">Abbrechen</button>
               <button type="submit" class="btn-primary">Speichern</button>
             </div>
           </form>

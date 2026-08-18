@@ -1,5 +1,16 @@
 console.log("Standortmanager geladen");
 
+const nativeFetch = window.fetch;
+window.fetch = async (...args) => {
+  const response = await nativeFetch(...args);
+  if (response.status === 401 && args[0] !== "/api/me") {
+    document.body.classList.add("logged-out");
+  }
+  return response;
+};
+
+let currentUser = null;
+
 function formatDateDE(isoDate) {
   if (!isoDate) {
     return "";
@@ -14,6 +25,7 @@ const breadcrumb = document.getElementById("breadcrumb");
 const navLinks = document.querySelectorAll(".sidebar-link[data-page]");
 const pages = document.querySelectorAll(".page");
 const defaultPage = "dashboard";
+const adminOnlyPages = ["fachbereiche", "benutzer"];
 
 const pageLabels = {
   dashboard: "Dashboard",
@@ -22,7 +34,17 @@ const pageLabels = {
   massnahmen: "Maßnahmen",
   gruppen: "Gruppen",
   fachbereiche: "Fachbereiche",
+  benutzer: "Benutzer",
 };
+
+// Login / Header
+
+const loginForm = document.getElementById("loginForm");
+const loginUsername = document.getElementById("loginUsername");
+const loginPasswort = document.getElementById("loginPasswort");
+const loginFormMessage = document.getElementById("loginFormMessage");
+const topbarUsername = document.getElementById("topbarUsername");
+const logoutBtn = document.getElementById("logoutBtn");
 
 const dashTeilnehmerCount = document.getElementById("dashTeilnehmerCount");
 const dashMassnahmenCount = document.getElementById("dashMassnahmenCount");
@@ -36,7 +58,11 @@ sidebarToggle.addEventListener("click", () => {
 });
 
 function showPage(pageId) {
-  const targetId = document.getElementById(`page-${pageId}`) ? pageId : defaultPage;
+  let targetId = document.getElementById(`page-${pageId}`) ? pageId : defaultPage;
+
+  if (adminOnlyPages.includes(targetId) && !(currentUser && currentUser.roles.includes("Administrator"))) {
+    targetId = defaultPage;
+  }
 
   pages.forEach((page) => {
     page.classList.toggle("active", page.id === `page-${targetId}`);
@@ -225,8 +251,6 @@ fachbereichForm.addEventListener("submit", async (event) => {
     fachbereichFormMessage.classList.add("error");
   }
 });
-
-loadFachbereiche();
 
 // Fachbereich bearbeiten
 
@@ -502,9 +526,6 @@ gruppeForm.addEventListener("submit", async (event) => {
   }
 });
 
-loadFachbereichOptionsInto(grpFachbereichSelect);
-loadGruppen();
-
 // Gruppe bearbeiten
 
 const editGruppeDialog = document.getElementById("editGruppeDialog");
@@ -562,8 +583,6 @@ editGruppeForm.addEventListener("submit", async (event) => {
     editGruppeFormMessage.className = "form-message error";
   }
 });
-
-loadFachbereichOptionsInto(editGrpFachbereichSelect);
 
 // Maßnahmen
 
@@ -800,10 +819,6 @@ editMassnahmeForm.addEventListener("submit", async (event) => {
     editMassnahmeFormMessage.className = "form-message error";
   }
 });
-
-loadGruppeOptionsInto(mnGruppeSelect);
-loadGruppeOptionsInto(editMnGruppeSelect);
-loadMassnahmen();
 
 // Teilnehmende
 
@@ -1273,6 +1288,11 @@ function awMatchesFilter(person) {
   const vt = awVtFilter.value;
   const nameQuery = awNameFilter.value.trim().toLowerCase();
 
+  const monthStart = awIsoDate(awYear, awMonth, 1);
+  const monthEnd = awIsoDate(awYear, awMonth, awDaysInMonth(awYear, awMonth));
+  if ((person.Endedatum || "") < monthStart || (person.Startdatum || "") > monthEnd) {
+    return false;
+  }
   if (fachbereichId && String(person.FachbereichID || "") !== fachbereichId) {
     return false;
   }
@@ -1802,8 +1822,452 @@ async function ensureAwInitialized() {
   await initAnwesenheiten();
 }
 
-loadMassnahmeOptionsInto(tnMassnahmeSelect, { includeVt: true });
-loadMassnahmeOptionsInto(editTnMassnahmeSelect, { includeVt: true });
-loadTeilnehmer();
+// Benutzerverwaltung
 
-handleRouteChange();
+const benutzerTableBody = document.getElementById("benutzerTableBody");
+const benutzerForm = document.getElementById("benutzerForm");
+const benutzerFormMessage = document.getElementById("benutzerFormMessage");
+const buRollenCheckboxes = document.getElementById("buRollenCheckboxes");
+const buFachbereicheCheckboxes = document.getElementById("buFachbereicheCheckboxes");
+
+let rollenCache = [];
+let benutzerFachbereicheCache = [];
+
+async function loadRollenCache() {
+  try {
+    const response = await fetch("/api/rollen");
+    if (!response.ok) {
+      throw new Error("Rollen konnten nicht geladen werden.");
+    }
+    rollenCache = await response.json();
+  } catch (err) {
+    console.error(err);
+    rollenCache = [];
+  }
+}
+
+async function loadBenutzerFachbereicheCache() {
+  try {
+    const response = await fetch("/api/fachbereiche");
+    if (!response.ok) {
+      throw new Error("Fachbereiche konnten nicht geladen werden.");
+    }
+    benutzerFachbereicheCache = await response.json();
+  } catch (err) {
+    console.error(err);
+    benutzerFachbereicheCache = [];
+  }
+}
+
+function buildCheckboxGroup(container, items, { idKey = "ID", labelKey, checkedIds = [] }) {
+  container.innerHTML = "";
+  items.forEach((item) => {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = item[idKey];
+    checkbox.checked = checkedIds.includes(item[idKey]);
+    label.appendChild(checkbox);
+    label.append(` ${item[labelKey]}`);
+    container.appendChild(label);
+  });
+}
+
+function getCheckedValues(container) {
+  return Array.from(container.querySelectorAll("input[type=checkbox]:checked")).map((cb) => Number(cb.value));
+}
+
+async function loadBenutzerFormOptions() {
+  await Promise.all([loadRollenCache(), loadBenutzerFachbereicheCache()]);
+  buildCheckboxGroup(buRollenCheckboxes, rollenCache, { labelKey: "Bezeichnung", checkedIds: [] });
+  buildCheckboxGroup(buFachbereicheCheckboxes, benutzerFachbereicheCache, { labelKey: "BezeichnungLang", checkedIds: [] });
+}
+
+async function loadBenutzer() {
+  benutzerTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 8;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  benutzerTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch("/api/benutzer");
+    if (!response.ok) {
+      throw new Error("Benutzer konnten nicht geladen werden.");
+    }
+    const benutzerListe = await response.json();
+
+    benutzerTableBody.innerHTML = "";
+
+    if (benutzerListe.length === 0) {
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 8;
+      emptyCell.textContent = "Noch keine Benutzer vorhanden.";
+      emptyRow.appendChild(emptyCell);
+      benutzerTableBody.appendChild(emptyRow);
+      return;
+    }
+
+    benutzerListe.forEach((benutzer) => {
+      const row = document.createElement("tr");
+
+      const usernameCell = document.createElement("td");
+      usernameCell.textContent = benutzer.Username;
+
+      const vornameCell = document.createElement("td");
+      vornameCell.textContent = benutzer.Vorname;
+
+      const nachnameCell = document.createElement("td");
+      nachnameCell.textContent = benutzer.Nachname;
+
+      const emailCell = document.createElement("td");
+      emailCell.textContent = benutzer.Email || "";
+
+      const telefonCell = document.createElement("td");
+      telefonCell.textContent = benutzer.Telefon || "";
+
+      const rollenCell = document.createElement("td");
+      rollenCell.textContent = benutzer.RolleNamen.join(", ");
+
+      const fachbereicheCell = document.createElement("td");
+      fachbereicheCell.textContent = benutzer.FachbereichNamen.join(", ");
+
+      const actionsCell = document.createElement("td");
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-edit-btn";
+      editBtn.setAttribute("aria-label", `${benutzer.Username} bearbeiten`);
+      editBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      editBtn.addEventListener("click", () => openEditBenutzerDialog(benutzer));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "row-delete-btn";
+      deleteBtn.setAttribute("aria-label", `${benutzer.Username} löschen`);
+      deleteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+          <path d="M10 11v6"></path>
+          <path d="M14 11v6"></path>
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      deleteBtn.addEventListener("click", () =>
+        openDeleteDialog({
+          name: benutzer.Username,
+          endpoint: `/api/benutzer/${benutzer.ID}`,
+          reload: loadBenutzer,
+        })
+      );
+
+      actionsWrap.append(editBtn, deleteBtn);
+      actionsCell.appendChild(actionsWrap);
+
+      row.append(
+        usernameCell,
+        vornameCell,
+        nachnameCell,
+        emailCell,
+        telefonCell,
+        rollenCell,
+        fachbereicheCell,
+        actionsCell
+      );
+      benutzerTableBody.appendChild(row);
+    });
+  } catch (err) {
+    console.error(err);
+    benutzerTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 8;
+    errorCell.textContent = "Fehler beim Laden der Benutzer.";
+    errorRow.appendChild(errorCell);
+    benutzerTableBody.appendChild(errorRow);
+  }
+}
+
+benutzerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(benutzerForm);
+  const payload = {
+    Username: formData.get("Username").trim(),
+    Passwort: formData.get("Passwort"),
+    Vorname: formData.get("Vorname").trim(),
+    Nachname: formData.get("Nachname").trim(),
+    Email: formData.get("Email").trim(),
+    Telefon: formData.get("Telefon").trim(),
+    RolleIDs: getCheckedValues(buRollenCheckboxes),
+    FachbereichIDs: getCheckedValues(buFachbereicheCheckboxes),
+  };
+
+  benutzerFormMessage.textContent = "";
+  benutzerFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/benutzer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Benutzer konnte nicht gespeichert werden.");
+    }
+
+    benutzerForm.reset();
+    buildCheckboxGroup(buRollenCheckboxes, rollenCache, { labelKey: "Bezeichnung", checkedIds: [] });
+    buildCheckboxGroup(buFachbereicheCheckboxes, benutzerFachbereicheCache, { labelKey: "BezeichnungLang", checkedIds: [] });
+    benutzerFormMessage.textContent = "Benutzer gespeichert.";
+    benutzerFormMessage.classList.add("success");
+    await loadBenutzer();
+  } catch (err) {
+    benutzerFormMessage.textContent = err.message;
+    benutzerFormMessage.classList.add("error");
+  }
+});
+
+// Benutzer bearbeiten
+
+const editBenutzerDialog = document.getElementById("editBenutzerDialog");
+const editBenutzerForm = document.getElementById("editBenutzerForm");
+const editBenutzerFormMessage = document.getElementById("editBenutzerFormMessage");
+const editBenutzerCancelBtn = document.getElementById("editBenutzerCancelBtn");
+const editBuRollenCheckboxes = document.getElementById("editBuRollenCheckboxes");
+const editBuFachbereicheCheckboxes = document.getElementById("editBuFachbereicheCheckboxes");
+
+let editingBenutzerId = null;
+
+function openEditBenutzerDialog(benutzer) {
+  editingBenutzerId = benutzer.ID;
+  editBenutzerForm.elements.Username.value = benutzer.Username;
+  editBenutzerForm.elements.Passwort.value = "";
+  editBenutzerForm.elements.Vorname.value = benutzer.Vorname;
+  editBenutzerForm.elements.Nachname.value = benutzer.Nachname;
+  editBenutzerForm.elements.Email.value = benutzer.Email || "";
+  editBenutzerForm.elements.Telefon.value = benutzer.Telefon || "";
+  buildCheckboxGroup(editBuRollenCheckboxes, rollenCache, { labelKey: "Bezeichnung", checkedIds: benutzer.RolleIDs });
+  buildCheckboxGroup(editBuFachbereicheCheckboxes, benutzerFachbereicheCache, {
+    labelKey: "BezeichnungLang",
+    checkedIds: benutzer.FachbereichIDs,
+  });
+  editBenutzerFormMessage.textContent = "";
+  editBenutzerFormMessage.className = "form-message";
+  editBenutzerDialog.showModal();
+}
+
+editBenutzerCancelBtn.addEventListener("click", () => {
+  editBenutzerDialog.close();
+});
+
+editBenutzerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(editBenutzerForm);
+  const payload = {
+    Username: formData.get("Username").trim(),
+    Passwort: formData.get("Passwort"),
+    Vorname: formData.get("Vorname").trim(),
+    Nachname: formData.get("Nachname").trim(),
+    Email: formData.get("Email").trim(),
+    Telefon: formData.get("Telefon").trim(),
+    RolleIDs: getCheckedValues(editBuRollenCheckboxes),
+    FachbereichIDs: getCheckedValues(editBuFachbereicheCheckboxes),
+  };
+
+  editBenutzerFormMessage.textContent = "";
+  editBenutzerFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/benutzer/${editingBenutzerId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Benutzer konnte nicht aktualisiert werden.");
+    }
+
+    editBenutzerDialog.close();
+    editingBenutzerId = null;
+    await loadBenutzer();
+  } catch (err) {
+    editBenutzerFormMessage.textContent = err.message;
+    editBenutzerFormMessage.className = "form-message error";
+  }
+});
+
+// Passwort ändern
+
+const changePasswordBtn = document.getElementById("changePasswordBtn");
+const changePasswordDialog = document.getElementById("changePasswordDialog");
+const changePasswordForm = document.getElementById("changePasswordForm");
+const changePasswordFormMessage = document.getElementById("changePasswordFormMessage");
+const changePasswordCancelBtn = document.getElementById("changePasswordCancelBtn");
+
+changePasswordBtn.addEventListener("click", () => {
+  changePasswordForm.reset();
+  changePasswordFormMessage.textContent = "";
+  changePasswordFormMessage.className = "form-message";
+  changePasswordDialog.showModal();
+});
+
+changePasswordCancelBtn.addEventListener("click", () => {
+  changePasswordDialog.close();
+});
+
+changePasswordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(changePasswordForm);
+  const payload = {
+    AktuellesPasswort: formData.get("AktuellesPasswort"),
+    NeuesPasswort: formData.get("NeuesPasswort"),
+    NeuesPasswortWiederholung: formData.get("NeuesPasswortWiederholung"),
+  };
+
+  changePasswordFormMessage.textContent = "";
+  changePasswordFormMessage.className = "form-message";
+
+  if (payload.NeuesPasswort !== payload.NeuesPasswortWiederholung) {
+    changePasswordFormMessage.textContent = "Die Passwort-Wiederholung stimmt nicht überein.";
+    changePasswordFormMessage.classList.add("error");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/me/passwort", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Passwort konnte nicht geändert werden.");
+    }
+
+    changePasswordDialog.close();
+  } catch (err) {
+    changePasswordFormMessage.textContent = err.message;
+    changePasswordFormMessage.classList.add("error");
+  }
+});
+
+// Boot-Sequenz / Login
+
+function initializeApp() {
+  loadFachbereiche();
+  loadFachbereichOptionsInto(grpFachbereichSelect);
+  loadFachbereichOptionsInto(editGrpFachbereichSelect);
+  loadGruppen();
+  loadGruppeOptionsInto(mnGruppeSelect);
+  loadGruppeOptionsInto(editMnGruppeSelect);
+  loadMassnahmen();
+  loadMassnahmeOptionsInto(tnMassnahmeSelect, { includeVt: true });
+  loadMassnahmeOptionsInto(editTnMassnahmeSelect, { includeVt: true });
+  loadTeilnehmer();
+
+  if (currentUser.roles.includes("Administrator")) {
+    loadBenutzerFormOptions();
+    loadBenutzer();
+  }
+
+  handleRouteChange();
+}
+
+function applyRolePermissions(user) {
+  const isAdmin = (user.roles || []).includes("Administrator");
+
+  const fachbereicheLink = document.querySelector('.sidebar-link[data-page="fachbereiche"]');
+  if (fachbereicheLink) {
+    fachbereicheLink.closest("li").style.display = isAdmin ? "" : "none";
+  }
+
+  const benutzerLink = document.querySelector('.sidebar-link[data-page="benutzer"]');
+  if (benutzerLink) {
+    benutzerLink.closest("li").style.display = isAdmin ? "" : "none";
+  }
+}
+
+function showAppShell(user) {
+  currentUser = user;
+  document.body.classList.remove("logged-out");
+  topbarUsername.textContent = `${user.Vorname} ${user.Nachname}`;
+  applyRolePermissions(user);
+  initializeApp();
+}
+
+async function checkSession() {
+  try {
+    const response = await fetch("/api/me");
+    if (!response.ok) {
+      return;
+    }
+    const user = await response.json();
+    showAppShell(user);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(loginForm);
+  const payload = {
+    Username: formData.get("Username").trim(),
+    Passwort: formData.get("Passwort"),
+  };
+
+  loginFormMessage.textContent = "";
+  loginFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Anmeldung fehlgeschlagen.");
+    }
+
+    const user = await response.json();
+    loginForm.reset();
+    showAppShell(user);
+  } catch (err) {
+    loginPasswort.value = "";
+    loginFormMessage.textContent = err.message;
+    loginFormMessage.classList.add("error");
+  }
+});
+
+logoutBtn.addEventListener("click", async () => {
+  try {
+    await fetch("/api/logout", { method: "POST" });
+  } catch (err) {
+    console.error(err);
+  }
+  window.location.reload();
+});
+
+checkSession();

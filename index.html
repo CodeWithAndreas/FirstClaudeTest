@@ -922,6 +922,43 @@
           </form>
         </dialog>
 
+        <dialog id="resetBenutzerPasswortDialog" class="confirm-dialog">
+          <form id="resetBenutzerPasswortForm">
+            <h3>Passwort zurücksetzen</h3>
+            <p>Neues Passwort für <strong id="resetBenutzerPasswortUsername"></strong> festlegen:</p>
+
+            <div class="form-row">
+              <label for="rbpNeuesPasswort">Neues Passwort</label>
+              <input type="password" id="rbpNeuesPasswort" name="NeuesPasswort" autocomplete="new-password" required>
+            </div>
+
+            <div class="form-row">
+              <label for="rbpNeuesPasswortWiederholung">Neues Passwort wiederholen</label>
+              <input type="password" id="rbpNeuesPasswortWiederholung" name="NeuesPasswortWiederholung" autocomplete="new-password" required>
+            </div>
+
+            <p class="form-message" id="resetBenutzerPasswortFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="resetBenutzerPasswortCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog id="toggleBenutzerAktivDialog" class="confirm-dialog">
+          <h3 id="toggleBenutzerAktivTitle">Benutzerkonto deaktivieren</h3>
+          <p>
+            Soll das Benutzerkonto „<strong id="toggleBenutzerAktivUsername"></strong>“ wirklich
+            <span id="toggleBenutzerAktivAction"></span> werden?
+          </p>
+          <p class="form-message" id="toggleBenutzerAktivMessage" role="status"></p>
+          <div class="dialog-actions">
+            <button type="button" id="toggleBenutzerAktivCancelBtn" class="btn-secondary">Abbrechen</button>
+            <button type="button" id="toggleBenutzerAktivOkBtn" class="btn-primary">Deaktivieren</button>
+          </div>
+        </dialog>
+
         <dialog id="changePasswordDialog" class="confirm-dialog">
           <form id="changePasswordForm">
             <h3>Passwort ändern</h3>

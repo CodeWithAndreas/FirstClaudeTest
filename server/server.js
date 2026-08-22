@@ -56,9 +56,18 @@ async function bootstrapDatabase() {
       Nachname VARCHAR(100) NOT NULL,
       Email VARCHAR(255),
       Telefon VARCHAR(50),
+      Aktiv TINYINT(1) NOT NULL DEFAULT 1,
       ErstelltAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB
   `);
+
+  const [benutzerSpalten] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'benutzer' AND COLUMN_NAME = 'Aktiv'`
+  );
+  if (benutzerSpalten.length === 0) {
+    await pool.query("ALTER TABLE benutzer ADD COLUMN Aktiv TINYINT(1) NOT NULL DEFAULT 1");
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS rolle (
@@ -195,7 +204,7 @@ app.post("/api/login", async (req, res) => {
 
   try {
     const [rows] = await pool.query(
-      "SELECT ID, Username, PasswortHash, Vorname, Nachname FROM benutzer WHERE Username = ?",
+      "SELECT ID, Username, PasswortHash, Vorname, Nachname, Aktiv FROM benutzer WHERE Username = ?",
       [Username]
     );
 
@@ -204,6 +213,10 @@ app.post("/api/login", async (req, res) => {
 
     if (!benutzer || !passwortOk) {
       return res.status(401).json({ error: "Benutzername oder Passwort ist ungültig." });
+    }
+
+    if (!benutzer.Aktiv) {
+      return res.status(401).json({ error: "Dieses Benutzerkonto wurde deaktiviert." });
     }
 
     const { roles, fachbereichIds } = await loadUserAuthData(benutzer.ID);
@@ -293,6 +306,7 @@ async function attachRollenUndFachbereiche(benutzerRows) {
 
   return benutzerRows.map((b) => ({
     ...b,
+    Aktiv: Boolean(b.Aktiv),
     RolleIDs: rollenRows.filter((r) => r.BenutzerID === b.ID).map((r) => r.ID),
     RolleNamen: rollenRows.filter((r) => r.BenutzerID === b.ID).map((r) => r.Bezeichnung),
     FachbereichIDs: fbRows.filter((f) => f.BenutzerID === b.ID).map((f) => f.ID),
@@ -303,7 +317,7 @@ async function attachRollenUndFachbereiche(benutzerRows) {
 app.get("/api/benutzer", requireRole("Administrator"), async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT ID, Username, Vorname, Nachname, Email, Telefon, ErstelltAm FROM benutzer ORDER BY Nachname, Vorname"
+      "SELECT ID, Username, Vorname, Nachname, Email, Telefon, Aktiv, ErstelltAm FROM benutzer ORDER BY Nachname, Vorname"
     );
     res.json(await attachRollenUndFachbereiche(rows));
   } catch (err) {
@@ -367,7 +381,7 @@ app.post("/api/benutzer", requireRole("Administrator"), async (req, res) => {
     await conn.commit();
 
     const [rows] = await pool.query(
-      "SELECT ID, Username, Vorname, Nachname, Email, Telefon, ErstelltAm FROM benutzer WHERE ID = ?",
+      "SELECT ID, Username, Vorname, Nachname, Email, Telefon, Aktiv, ErstelltAm FROM benutzer WHERE ID = ?",
       [benutzerId]
     );
     const [withRelations] = await attachRollenUndFachbereiche(rows);
@@ -436,7 +450,7 @@ app.put("/api/benutzer/:id", requireRole("Administrator"), async (req, res) => {
     await conn.commit();
 
     const [rows] = await pool.query(
-      "SELECT ID, Username, Vorname, Nachname, Email, Telefon, ErstelltAm FROM benutzer WHERE ID = ?",
+      "SELECT ID, Username, Vorname, Nachname, Email, Telefon, Aktiv, ErstelltAm FROM benutzer WHERE ID = ?",
       [id]
     );
     const [withRelations] = await attachRollenUndFachbereiche(rows);
@@ -450,6 +464,67 @@ app.put("/api/benutzer/:id", requireRole("Administrator"), async (req, res) => {
     res.status(500).json({ error: "Benutzer konnte nicht aktualisiert werden." });
   } finally {
     conn.release();
+  }
+});
+
+app.put("/api/benutzer/:id/passwort", requireRole("Administrator"), async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const { NeuesPasswort, NeuesPasswortWiederholung } = req.body;
+
+  if (!NeuesPasswort || !NeuesPasswortWiederholung) {
+    return res.status(400).json({ error: "Alle Felder sind erforderlich." });
+  }
+  if (NeuesPasswort !== NeuesPasswortWiederholung) {
+    return res.status(400).json({ error: "Die Passwort-Wiederholung stimmt nicht überein." });
+  }
+  if (NeuesPasswort.length < 8) {
+    return res.status(400).json({ error: "Das neue Passwort muss mindestens 8 Zeichen lang sein." });
+  }
+
+  try {
+    const hash = await bcrypt.hash(NeuesPasswort, 10);
+    const [result] = await pool.query("UPDATE benutzer SET PasswortHash = ? WHERE ID = ?", [hash, id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Benutzer wurde nicht gefunden." });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Passwort konnte nicht geändert werden." });
+  }
+});
+
+app.put("/api/benutzer/:id/aktiv", requireRole("Administrator"), async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const aktiv = Boolean(req.body.Aktiv);
+
+  if (id === req.session.userId && !aktiv) {
+    return res.status(400).json({ error: "Der eigene Account kann nicht deaktiviert werden." });
+  }
+
+  try {
+    const [result] = await pool.query("UPDATE benutzer SET Aktiv = ? WHERE ID = ?", [aktiv, id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Benutzer wurde nicht gefunden." });
+    }
+
+    res.json({ success: true, Aktiv: aktiv });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Status konnte nicht geändert werden." });
   }
 });
 

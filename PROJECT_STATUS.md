@@ -3,17 +3,33 @@
 Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Beim Schreiben dieser Zeile lagen noch
-uncommittete Änderungen im Arbeitsverzeichnis (`git status` prüfen!) –
-die Erweiterung der Aktivitäten um die Felder `Thema` und `Bearbeiter`
-(siehe eigener Abschnitt weiter unten). Dafür wurde die Tabelle
-`aktivitaet` in der lokalen Dev-DB bereits per `ALTER TABLE` erweitert
-(Thema VARCHAR(60), Bearbeiter VARCHAR(200)), `schema.sql` entsprechend
-nachgezogen – bei einer frisch aufgesetzten DB reicht das aktualisierte
-Schema, bei einer bestehenden DB (z. B. auf einem anderen Rechner) muss
-dieselbe `ALTER TABLE`-Anweisung noch manuell nachgeholt werden. Vor dem
-Weiterarbeiten erst `git status`/`git diff` ansehen, um zu wissen, was
-bereits fertig, aber noch nicht committet ist.
+**Wichtig für eine neue Session:** Zwei weitere Icons je Zeile auf der
+Benutzer-Seite: Passwort zurücksetzen (ohne den vollständigen
+Bearbeiten-Dialog zu öffnen) sowie Benutzerkonto aktivieren/deaktivieren
+(siehe Abschnitt "Login, Rollen und Benutzerverwaltung" weiter unten).
+Für Letzteres wurde die Tabelle `benutzer` um die Spalte `Aktiv`
+erweitert – das übernimmt `bootstrapDatabase()` in `server.js` beim
+Serverstart automatisch und idempotent, es ist also keine manuelle
+DB-Migration nötig.
+
+**Historische Randnotiz (bewusst dokumentiert, damit es nicht erneut
+versucht wird):** In einer früheren Session wurden testweise
+rollenabhängige Löschrechte für Teilnehmende/Maßnahmen/Gruppen eingebaut
+(Ausbilder/Fachbereichsleiter dürfen unterschiedlich viel löschen) samt
+Umstellung der FK `fk_Massnahme_Gruppe1` auf `ON DELETE SET NULL`, damit
+eine Gruppe trotz zugeordneter Maßnahmen löschbar blieb. Das führte zu
+mehreren Folgefehlern (stale Dropdown-/Filter-Caches auf mehreren
+Seiten, siehe Git-Historie) und wurde auf ausdrücklichen Wunsch
+vollständig zurückgebaut. Der aktuelle, gewollte Zustand: Alle
+eingeschränkten Nutzer (Ausbilder wie Fachbereichsleiter) haben
+identische CRUD-Rechte innerhalb ihrer Fachbereiche, keine
+rollenabhängige Löschrechte-Differenzierung; die FK ist wieder auf den
+Standard ohne `ON DELETE`-Klausel (`RESTRICT`), Löschen einer Gruppe mit
+noch zugeordneten Maßnahmen schlägt daher bewusst fehl statt sie zu
+"verwaisen". Unverändert (schon vor jener Session so) bleibt, dass eine
+Maßnahme beim Anlegen/Bearbeiten bewusst *ohne* Gruppe gespeichert
+werden kann (Dropdown-Option „– keine Gruppe –“) – das ist ein
+eigenständiges, gewolltes Formularverhalten.
 
 ## Überblick
 
@@ -85,7 +101,7 @@ Verbindung: Host `127.0.0.1`, Port `3306`, User `root`, SSL aktiviert
 | `anwesenheitsstatus` | ID, Bezeichnung, Kurzzeichen                                                        | – |
 | `anwesenheit` | ID, TeilnehmerID, Datum, StatusID                                                         | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE), StatusID → anwesenheitsstatus.ID; UNIQUE(TeilnehmerID, Datum) |
 | `aktivitaet`  | ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, ErstelltAm             | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE) |
-| `benutzer`    | ID, Username (UNIQUE), PasswortHash, Vorname, Nachname, Email, Telefon, ErstelltAm         | – |
+| `benutzer`    | ID, Username (UNIQUE), PasswortHash, Vorname, Nachname, Email, Telefon, Aktiv, ErstelltAm  | – |
 | `rolle`       | ID, Bezeichnung (UNIQUE)                                                                   | – |
 | `benutzer_rolle` | BenutzerID, RolleID (Composite-PK)                                                       | BenutzerID → benutzer.ID (ON DELETE CASCADE), RolleID → rolle.ID (ON DELETE CASCADE) |
 | `benutzer_fachbereich` | BenutzerID, FachbereichID (Composite-PK)                                           | BenutzerID → benutzer.ID (ON DELETE CASCADE), FachbereichID → fachbereich.ID (ON DELETE CASCADE) |
@@ -96,7 +112,12 @@ Serverstart per `CREATE TABLE IF NOT EXISTS` idempotent sichergestellt
 (kein Migrationstool im Projekt). Dieselbe Funktion seedet `rolle` mit den
 5 festen Rollen (`INSERT IGNORE`) und legt bei leerer `benutzer`-Tabelle
 einmalig das Admin-Konto an (Username `admin`, Startpasswort `Admin2026!`,
-Rolle Administrator – Konsolenmeldung nur beim erstmaligen Anlegen).
+Rolle Administrator – Konsolenmeldung nur beim erstmaligen Anlegen). Für
+nachträglich auf `benutzer` ergänzte Spalten (bisher nur `Aktiv`) prüft
+`bootstrapDatabase()` zusätzlich per `INFORMATION_SCHEMA.COLUMNS`, ob die
+Spalte schon existiert, und holt sie sonst per `ALTER TABLE` nach – damit
+funktioniert sowohl eine frische als auch eine bereits bestehende
+`benutzer`-Tabelle ohne manuellen Eingriff.
 
 ## Fertiggestellte Features (pro Seite gleiches Muster)
 
@@ -241,7 +262,12 @@ API-Routen (alle in `server/server.js`, alle unter `/api/...`):
   Teilnehmenden-Tabelle
 - `login` (POST), `logout` (POST), `me` (GET), `me/passwort` (PUT),
   `rollen` (GET, statische Liste), `benutzer` (GET/POST/PUT/DELETE,
-  admin-only)
+  admin-only), `benutzer/:id/passwort` (PUT, admin-only, setzt nur
+  `PasswortHash` ohne Prüfung des aktuellen Passworts, da hier ein
+  Administrator das Passwort eines fremden Kontos zurücksetzt statt der
+  Nutzer selbst wie bei `me/passwort`), `benutzer/:id/aktiv` (PUT,
+  admin-only, Body `{Aktiv: boolean}`, 400 bei Versuch der
+  Selbstdeaktivierung)
 
 Alle Routen außer `POST /api/login` verlangen eine aktive Session
 (`requireAuth`-Middleware, `app.use("/api", requireAuth)` direkt nach
@@ -257,6 +283,16 @@ bei PUT auch des Ausgangsdatensatzes, sonst 403). `GET /api/fachbereiche`
 bleibt für alle Rollen erreichbar (wird für Dropdowns/Filter auf anderen
 Seiten gebraucht), liefert eingeschränkten Nutzern aber nur ihre eigenen
 Fachbereiche.
+
+Alle eingeschränkten Nutzer (Ausbilder wie Fachbereichsleiter) haben
+aktuell identische Rechte innerhalb ihrer zugewiesenen Fachbereiche –
+volles CRUD auf `gruppen`, `massnahmen`, `teilnehmer`, `anwesenheiten`
+und `aktivitaeten`, keine rollenabhängige Differenzierung zwischen den
+beiden Rollen. (In dieser Session war testweise eine feinere
+Löschrechte-Unterscheidung zwischen Ausbilder und Fachbereichsleiter
+sowie eine `ON DELETE SET NULL`-Umstellung für Maßnahmen eingebaut,
+wurde aber wegen mehrerer Folgefehler wieder vollständig zurückgebaut,
+siehe Hinweis am Dateianfang.)
 
 ### Login, Rollen und Benutzerverwaltung
 
@@ -294,6 +330,44 @@ Rollen und Fachbereiche werden je als Checkbox-Gruppe dargestellt
 (`.checkbox-group`). Beim Bearbeiten bleibt das Passwortfeld leer; nur bei
 Eingabe wird das Passwort geändert, sonst bleibt es unverändert (Contract:
 leer = unverändert). Ein Admin kann sich nicht selbst löschen (400).
+
+Zusätzlich zu Bearbeiten/Löschen hat jede Zeile ein drittes Icon
+(Schlüssel, `.row-reset-passwort-btn`) zum gezielten Zurücksetzen des
+Passworts, ohne den vollständigen Bearbeiten-Dialog mit allen Feldern
+öffnen zu müssen. Öffnet `#resetBenutzerPasswortDialog` (nur Neues
+Passwort + Wiederholung, Mindestlänge serverseitig 8 Zeichen wie beim
+regulären Bearbeiten), sendet `PUT /api/benutzer/:id/passwort` (eigener,
+schlanker Endpunkt statt des allgemeinen `PUT /api/benutzer/:id`, da
+dieser Username/Vorname/Nachname/Rollen/Fachbereiche im Body erwartet).
+Der Endpunkt ist wie alle `benutzer`-Routen `requireRole("Administrator")`
+geschützt; da die komplette Benutzer-Seite ohnehin nur für Administrator
+sichtbar/erreichbar ist (Sidebar + `showPage()`-Guard, siehe oben), ist
+das Icon serverseitig wie clientseitig durchgängig auf die Admin-Rolle
+beschränkt.
+
+Ein viertes Icon (Verbotssymbol bzw. Häkchen, `.row-toggle-aktiv-btn`)
+erlaubt das zeitweise **Deaktivieren/Aktivieren** eines Benutzerkontos.
+Welches Icon/welcher Tooltip angezeigt wird, hängt vom aktuellen
+`Aktiv`-Status ab (Verbotssymbol + "Konto deaktivieren", solange das
+Konto aktiv ist; Häkchen + "Konto aktivieren", sobald es deaktiviert
+ist). Klick öffnet `#toggleBenutzerAktivDialog` – ein generisches
+Bestätigungsfenster, dessen Titel/Text/Button-Beschriftung
+(„Deaktivieren“ vs. „Aktivieren“) sowie der Zielzustand dynamisch in
+`openToggleBenutzerAktivDialog()` (`js/main.js`) je nach aktuellem
+Status gesetzt werden, statt zwei separate Dialoge zu pflegen. Bestätigen
+sendet `PUT /api/benutzer/:id/aktiv` mit `{Aktiv: boolean}`
+(`requireRole("Administrator")`); ein Admin kann den eigenen Account
+nicht deaktivieren (400, analog zur bestehenden Selbstlöschsperre),
+Selbst-Reaktivieren ist dagegen erlaubt (ohnehin irrelevant, da ein
+deaktivierter Account sich nicht mehr einloggen kann). `POST
+/api/login` prüft `Aktiv` nach erfolgreicher Passwortprüfung und
+verweigert deaktivierten Konten den Login (401 „Dieses Benutzerkonto
+wurde deaktiviert.“); eine bereits laufende Session eines währenddessen
+deaktivierten Nutzers wird nicht aktiv beendet, das ist derselbe
+akzeptierte Trade-off wie bei Rollen-/Fachbereichsänderungen (siehe
+"Noch offen" unten). In der Tabelle wird der Username eines
+deaktivierten Kontos durchgestrichen dargestellt (Klasse
+`.username-deaktiviert` auf der Username-Zelle).
 
 **Passwort ändern**: Icon in der Kopfzeile öffnet `#changePasswordDialog`
 (aktuelles Passwort, neues Passwort, Wiederholung); serverseitige Prüfung
@@ -409,9 +483,12 @@ Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
 - Keine serverseitige Bestätigungsprüfung beim Löschen (Client prüft den
   eingegebenen Namen, Server löscht rein anhand der ID).
 - Kein automatisiertes Test-Setup.
-- Rollen-/Fachbereichs-Änderungen an einem Benutzer wirken erst nach dessen
-  nächstem Login (Session-Cache, siehe oben) – kein Mechanismus, um aktive
-  Sessions bei Rechteänderung sofort zu invalidieren.
+- Rollen-/Fachbereichs-Änderungen sowie das Deaktivieren eines Kontos
+  wirken erst ab dessen nächstem Login-Versuch (Session-Cache, siehe
+  oben) – kein Mechanismus, um aktive Sessions bei Rechteänderung oder
+  Deaktivierung sofort zu invalidieren. Ein bereits eingeloggter Nutzer
+  bleibt also bis zum nächsten Login bzw. Serverneustart aktiv nutzbar,
+  selbst wenn ein Administrator sein Konto zwischenzeitlich deaktiviert.
 - Sessions sind In-Memory (express-session Default) – bei Serverneustart
   müssen sich alle Nutzer neu einloggen; für produktiven Mehr-Instanzen-Betrieb
   wäre ein externer Session-Store (z. B. MySQL/Redis) nötig.

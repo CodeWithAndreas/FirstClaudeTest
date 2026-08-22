@@ -2435,6 +2435,7 @@ async function loadBenutzer() {
 
       const usernameCell = document.createElement("td");
       usernameCell.textContent = benutzer.Username;
+      usernameCell.classList.toggle("username-deaktiviert", !benutzer.Aktiv);
 
       const vornameCell = document.createElement("td");
       vornameCell.textContent = benutzer.Vorname;
@@ -2470,6 +2471,45 @@ async function loadBenutzer() {
       `;
       editBtn.addEventListener("click", () => openEditBenutzerDialog(benutzer));
 
+      const resetPasswortBtn = document.createElement("button");
+      resetPasswortBtn.type = "button";
+      resetPasswortBtn.className = "row-reset-passwort-btn";
+      resetPasswortBtn.setAttribute("aria-label", `Passwort von ${benutzer.Username} zurücksetzen`);
+      resetPasswortBtn.title = "Passwort zurücksetzen";
+      resetPasswortBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="15" r="4"></circle>
+          <path d="M10.5 12.5 20 3"></path>
+          <path d="M17 6l3 3"></path>
+          <path d="M14 9l3 3"></path>
+        </svg>
+      `;
+      resetPasswortBtn.addEventListener("click", () => openResetBenutzerPasswortDialog(benutzer));
+
+      const toggleAktivBtn = document.createElement("button");
+      toggleAktivBtn.type = "button";
+      toggleAktivBtn.className = "row-toggle-aktiv-btn";
+      if (benutzer.Aktiv) {
+        toggleAktivBtn.setAttribute("aria-label", `Benutzerkonto ${benutzer.Username} deaktivieren`);
+        toggleAktivBtn.title = "Konto deaktivieren";
+        toggleAktivBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+          </svg>
+        `;
+      } else {
+        toggleAktivBtn.setAttribute("aria-label", `Benutzerkonto ${benutzer.Username} aktivieren`);
+        toggleAktivBtn.title = "Konto aktivieren";
+        toggleAktivBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        `;
+      }
+      toggleAktivBtn.addEventListener("click", () => openToggleBenutzerAktivDialog(benutzer));
+
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "row-delete-btn";
@@ -2491,7 +2531,7 @@ async function loadBenutzer() {
         })
       );
 
-      actionsWrap.append(editBtn, deleteBtn);
+      actionsWrap.append(editBtn, resetPasswortBtn, toggleAktivBtn, deleteBtn);
       actionsCell.appendChild(actionsWrap);
 
       row.append(
@@ -2629,6 +2669,126 @@ editBenutzerForm.addEventListener("submit", async (event) => {
   } catch (err) {
     editBenutzerFormMessage.textContent = err.message;
     editBenutzerFormMessage.className = "form-message error";
+  }
+});
+
+// Benutzer-Passwort zurücksetzen (Admin)
+
+const resetBenutzerPasswortDialog = document.getElementById("resetBenutzerPasswortDialog");
+const resetBenutzerPasswortForm = document.getElementById("resetBenutzerPasswortForm");
+const resetBenutzerPasswortFormMessage = document.getElementById("resetBenutzerPasswortFormMessage");
+const resetBenutzerPasswortCancelBtn = document.getElementById("resetBenutzerPasswortCancelBtn");
+const resetBenutzerPasswortUsername = document.getElementById("resetBenutzerPasswortUsername");
+
+let resettingBenutzerId = null;
+
+function openResetBenutzerPasswortDialog(benutzer) {
+  resettingBenutzerId = benutzer.ID;
+  resetBenutzerPasswortUsername.textContent = benutzer.Username;
+  resetBenutzerPasswortForm.reset();
+  resetBenutzerPasswortFormMessage.textContent = "";
+  resetBenutzerPasswortFormMessage.className = "form-message";
+  resetBenutzerPasswortDialog.showModal();
+}
+
+resetBenutzerPasswortCancelBtn.addEventListener("click", () => {
+  resetBenutzerPasswortDialog.close();
+});
+
+resetBenutzerPasswortForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(resetBenutzerPasswortForm);
+  const payload = {
+    NeuesPasswort: formData.get("NeuesPasswort"),
+    NeuesPasswortWiederholung: formData.get("NeuesPasswortWiederholung"),
+  };
+
+  resetBenutzerPasswortFormMessage.textContent = "";
+  resetBenutzerPasswortFormMessage.className = "form-message";
+
+  if (payload.NeuesPasswort !== payload.NeuesPasswortWiederholung) {
+    resetBenutzerPasswortFormMessage.textContent = "Die Passwort-Wiederholung stimmt nicht überein.";
+    resetBenutzerPasswortFormMessage.classList.add("error");
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/benutzer/${resettingBenutzerId}/passwort`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Passwort konnte nicht geändert werden.");
+    }
+
+    resetBenutzerPasswortDialog.close();
+    resettingBenutzerId = null;
+  } catch (err) {
+    resetBenutzerPasswortFormMessage.textContent = err.message;
+    resetBenutzerPasswortFormMessage.classList.add("error");
+  }
+});
+
+// Benutzerkonto aktivieren/deaktivieren
+
+const toggleBenutzerAktivDialog = document.getElementById("toggleBenutzerAktivDialog");
+const toggleBenutzerAktivTitle = document.getElementById("toggleBenutzerAktivTitle");
+const toggleBenutzerAktivUsername = document.getElementById("toggleBenutzerAktivUsername");
+const toggleBenutzerAktivAction = document.getElementById("toggleBenutzerAktivAction");
+const toggleBenutzerAktivMessage = document.getElementById("toggleBenutzerAktivMessage");
+const toggleBenutzerAktivCancelBtn = document.getElementById("toggleBenutzerAktivCancelBtn");
+const toggleBenutzerAktivOkBtn = document.getElementById("toggleBenutzerAktivOkBtn");
+
+let toggleBenutzerAktivTarget = null;
+
+function openToggleBenutzerAktivDialog(benutzer) {
+  const nextAktiv = !benutzer.Aktiv;
+  toggleBenutzerAktivTarget = { id: benutzer.ID, nextAktiv };
+
+  toggleBenutzerAktivTitle.textContent = nextAktiv ? "Benutzerkonto aktivieren" : "Benutzerkonto deaktivieren";
+  toggleBenutzerAktivUsername.textContent = benutzer.Username;
+  toggleBenutzerAktivAction.textContent = nextAktiv ? "aktiviert" : "deaktiviert";
+  toggleBenutzerAktivOkBtn.textContent = nextAktiv ? "Aktivieren" : "Deaktivieren";
+  toggleBenutzerAktivMessage.textContent = "";
+  toggleBenutzerAktivMessage.className = "form-message";
+
+  toggleBenutzerAktivDialog.showModal();
+}
+
+toggleBenutzerAktivCancelBtn.addEventListener("click", () => {
+  toggleBenutzerAktivDialog.close();
+});
+
+toggleBenutzerAktivOkBtn.addEventListener("click", async () => {
+  if (!toggleBenutzerAktivTarget) {
+    return;
+  }
+
+  toggleBenutzerAktivMessage.textContent = "";
+  toggleBenutzerAktivMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/benutzer/${toggleBenutzerAktivTarget.id}/aktiv`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Aktiv: toggleBenutzerAktivTarget.nextAktiv }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Status konnte nicht geändert werden.");
+    }
+
+    toggleBenutzerAktivDialog.close();
+    toggleBenutzerAktivTarget = null;
+    await loadBenutzer();
+  } catch (err) {
+    toggleBenutzerAktivMessage.textContent = err.message;
+    toggleBenutzerAktivMessage.classList.add("error");
   }
 });
 

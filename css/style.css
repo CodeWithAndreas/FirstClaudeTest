@@ -369,7 +369,9 @@ body.logged-out .app-layout {
 
 .row-delete-btn,
 .row-edit-btn,
-.row-history-btn {
+.row-history-btn,
+.row-reset-passwort-btn,
+.row-toggle-aktiv-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -387,16 +389,25 @@ body.logged-out .app-layout {
 }
 
 .row-edit-btn:hover,
-.row-history-btn:hover {
+.row-history-btn:hover,
+.row-reset-passwort-btn:hover,
+.row-toggle-aktiv-btn:hover {
   background: var(--color-bg-light);
   color: var(--color-primary);
 }
 
 .row-delete-btn svg,
 .row-edit-btn svg,
-.row-history-btn svg {
+.row-history-btn svg,
+.row-reset-passwort-btn svg,
+.row-toggle-aktiv-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.username-deaktiviert {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
 }
 
 .history-btn-wrap {

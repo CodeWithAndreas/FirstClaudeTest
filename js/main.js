@@ -1362,11 +1362,14 @@ const aktTnVt = document.getElementById("aktTnVt");
 const aktFormTnName = document.getElementById("aktFormTnName");
 const aktFormTnVt = document.getElementById("aktFormTnVt");
 const aktFormZeitstempel = document.getElementById("aktFormZeitstempel");
+const aktFormBearbeiter = document.getElementById("aktFormBearbeiter");
 const aktivitaetListe = document.getElementById("aktivitaetListe");
 const aktivitaetDetailPlaceholder = document.getElementById("aktivitaetDetailPlaceholder");
 const aktivitaetDetailView = document.getElementById("aktivitaetDetailView");
 const aktDetailArt = document.getElementById("aktDetailArt");
+const aktDetailThema = document.getElementById("aktDetailThema");
 const aktDetailZeitstempel = document.getElementById("aktDetailZeitstempel");
+const aktDetailBearbeiter = document.getElementById("aktDetailBearbeiter");
 const aktDetailBemerkung = document.getElementById("aktDetailBemerkung");
 const aktDetailWiedervorlage = document.getElementById("aktDetailWiedervorlage");
 const aktNeueBtn = document.getElementById("aktNeueBtn");
@@ -1409,6 +1412,16 @@ function formatDateTimeDE(datetimeStr) {
   });
 }
 
+function aktivitaetBearbeiterInitialen(bearbeiter) {
+  if (!bearbeiter) {
+    return "";
+  }
+  const teile = bearbeiter.trim().split(/\s+/);
+  const erstesTeil = teile[0]?.[0] || "";
+  const letztesTeil = teile.length > 1 ? teile[teile.length - 1][0] : "";
+  return (erstesTeil + letztesTeil).toUpperCase();
+}
+
 function clearAktivitaetListSelection() {
   aktivitaetListe.querySelectorAll(".aktivitaet-list-item.active").forEach((item) => item.classList.remove("active"));
 }
@@ -1426,7 +1439,9 @@ function showAktivitaetDetail(aktivitaet) {
   aktivitaetDetailView.hidden = false;
 
   aktDetailArt.textContent = aktivitaet.Art;
+  aktDetailThema.textContent = aktivitaet.Thema || "–";
   aktDetailZeitstempel.textContent = formatDateTimeDE(aktivitaet.ErstelltAm);
+  aktDetailBearbeiter.textContent = aktivitaet.Bearbeiter || "–";
   aktDetailBemerkung.textContent = aktivitaet.Bemerkung || "–";
   aktDetailWiedervorlage.textContent = aktivitaet.Wiedervorlage ? formatDateDE(aktivitaet.Wiedervorlage) : "–";
 
@@ -1448,6 +1463,7 @@ function showAktivitaetForm() {
   aktFormTnName.textContent = person ? `${person.Vorname} ${person.Nachname}` : "";
   aktFormTnVt.textContent = (person && person.VT) || "";
   aktFormZeitstempel.textContent = new Date().toLocaleString("de-DE");
+  aktFormBearbeiter.textContent = currentUser ? `${currentUser.Vorname} ${currentUser.Nachname}` : "";
 
   clearAktivitaetListSelection();
 }
@@ -1471,15 +1487,29 @@ function renderAktivitaetListe(aktivitaeten) {
     item.className = "aktivitaet-list-item";
     item.dataset.id = aktivitaet.ID;
 
+    const headerRow = document.createElement("div");
+    headerRow.className = "aktivitaet-list-header";
+
     const datumSpan = document.createElement("span");
     datumSpan.className = "aktivitaet-list-datum";
     datumSpan.textContent = formatDateTimeDE(aktivitaet.ErstelltAm);
+
+    const bearbeiterSpan = document.createElement("span");
+    bearbeiterSpan.className = "aktivitaet-list-bearbeiter";
+    bearbeiterSpan.textContent = aktivitaetBearbeiterInitialen(aktivitaet.Bearbeiter);
+    bearbeiterSpan.title = aktivitaet.Bearbeiter || "";
+
+    headerRow.append(datumSpan, bearbeiterSpan);
+
+    const themaSpan = document.createElement("span");
+    themaSpan.className = "aktivitaet-list-thema";
+    themaSpan.textContent = aktivitaet.Thema || "–";
 
     const artSpan = document.createElement("span");
     artSpan.className = "aktivitaet-list-art";
     artSpan.textContent = aktivitaet.Art;
 
-    item.append(datumSpan, artSpan);
+    item.append(headerRow, themaSpan, artSpan);
     item.addEventListener("click", () => showAktivitaetDetail(aktivitaet));
     aktivitaetListe.appendChild(item);
   });
@@ -1526,6 +1556,7 @@ aktivitaetForm.addEventListener("submit", async (event) => {
   const payload = {
     TeilnehmerID: currentAktivitaetTeilnehmerId,
     Art: formData.get("Art"),
+    Thema: formData.get("Thema").trim(),
     Bemerkung: formData.get("Bemerkung").trim(),
     Wiedervorlage: formData.get("Wiedervorlage") || null,
   };

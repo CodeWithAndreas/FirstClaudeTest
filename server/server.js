@@ -1040,7 +1040,7 @@ app.get("/api/aktivitaeten", async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      "SELECT ID, TeilnehmerID, Art, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE TeilnehmerID = ? ORDER BY ErstelltAm DESC",
+      "SELECT ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE TeilnehmerID = ? ORDER BY ErstelltAm DESC",
       [teilnehmerId]
     );
     res.json(rows);
@@ -1051,11 +1051,15 @@ app.get("/api/aktivitaeten", async (req, res) => {
 });
 
 app.post("/api/aktivitaeten", async (req, res) => {
-  const { TeilnehmerID, Art, Bemerkung, Wiedervorlage } = req.body;
+  const { TeilnehmerID, Art, Thema, Bemerkung, Wiedervorlage } = req.body;
   const teilnehmerId = Number(TeilnehmerID);
+  const thema = typeof Thema === "string" ? Thema.trim() : "";
 
   if (!Number.isInteger(teilnehmerId) || !AKTIVITAET_ARTEN.includes(Art)) {
     return res.status(400).json({ error: "Teilnehmer und eine gültige Art sind erforderlich." });
+  }
+  if (thema.length > 60) {
+    return res.status(400).json({ error: "Thema darf höchstens 60 Zeichen lang sein." });
   }
 
   try {
@@ -1072,13 +1076,15 @@ app.post("/api/aktivitaeten", async (req, res) => {
       }
     }
 
+    const bearbeiter = `${req.session.vorname} ${req.session.nachname}`;
+
     const [result] = await pool.query(
-      "INSERT INTO aktivitaet (TeilnehmerID, Art, Bemerkung, Wiedervorlage) VALUES (?, ?, ?, ?)",
-      [teilnehmerId, Art, Bemerkung || null, Wiedervorlage || null]
+      "INSERT INTO aktivitaet (TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage) VALUES (?, ?, ?, ?, ?, ?)",
+      [teilnehmerId, Art, thema || null, bearbeiter, Bemerkung || null, Wiedervorlage || null]
     );
 
     const [rows] = await pool.query(
-      "SELECT ID, TeilnehmerID, Art, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE ID = ?",
+      "SELECT ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE ID = ?",
       [result.insertId]
     );
 

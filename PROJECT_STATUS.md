@@ -5,11 +5,15 @@ eine neue Session nahtlos anschließen kann.
 
 **Wichtig für eine neue Session:** Beim Schreiben dieser Zeile lagen noch
 uncommittete Änderungen im Arbeitsverzeichnis (`git status` prüfen!) –
-u. a. das komplette Aktivitätenverlauf-Feature (Master-Detail-Unterseite
-unter Teilnehmende, siehe eigener Abschnitt weiter unten) samt
-Badge-Anzeige am Uhr-Icon. Vor dem Weiterarbeiten erst `git status`/`git
-diff` ansehen, um zu wissen, was bereits fertig, aber noch nicht committet
-ist.
+die Erweiterung der Aktivitäten um die Felder `Thema` und `Bearbeiter`
+(siehe eigener Abschnitt weiter unten). Dafür wurde die Tabelle
+`aktivitaet` in der lokalen Dev-DB bereits per `ALTER TABLE` erweitert
+(Thema VARCHAR(60), Bearbeiter VARCHAR(200)), `schema.sql` entsprechend
+nachgezogen – bei einer frisch aufgesetzten DB reicht das aktualisierte
+Schema, bei einer bestehenden DB (z. B. auf einem anderen Rechner) muss
+dieselbe `ALTER TABLE`-Anweisung noch manuell nachgeholt werden. Vor dem
+Weiterarbeiten erst `git status`/`git diff` ansehen, um zu wissen, was
+bereits fertig, aber noch nicht committet ist.
 
 ## Überblick
 
@@ -80,7 +84,7 @@ Verbindung: Host `127.0.0.1`, Port `3306`, User `root`, SSL aktiviert
 | `teilnehmer`  | ID, Vorname, Nachname, Geburtsdatum, MassnahmeID, Startdatum, Endedatum, Email, Telefon     | MassnahmeID → massnahme.ID (NOT NULL) |
 | `anwesenheitsstatus` | ID, Bezeichnung, Kurzzeichen                                                        | – |
 | `anwesenheit` | ID, TeilnehmerID, Datum, StatusID                                                         | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE), StatusID → anwesenheitsstatus.ID; UNIQUE(TeilnehmerID, Datum) |
-| `aktivitaet`  | ID, TeilnehmerID, Art, Bemerkung, Wiedervorlage, ErstelltAm                                | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE) |
+| `aktivitaet`  | ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, ErstelltAm             | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE) |
 | `benutzer`    | ID, Username (UNIQUE), PasswortHash, Vorname, Nachname, Email, Telefon, ErstelltAm         | – |
 | `rolle`       | ID, Bezeichnung (UNIQUE)                                                                   | – |
 | `benutzer_rolle` | BenutzerID, RolleID (Composite-PK)                                                       | BenutzerID → benutzer.ID (ON DELETE CASCADE), RolleID → rolle.ID (ON DELETE CASCADE) |
@@ -184,6 +188,22 @@ man sofort das Ergebnis, ohne den neuen Eintrag manuell in der Liste
 suchen zu müssen. Erstmal gibt es bewusst kein Bearbeiten/Löschen
 einzelner Aktivitäten (nicht gefordert).
 
+Jede Aktivität hat zusätzlich ein **Thema** (Freitext, max. 60 Zeichen,
+`<input maxlength="60">` im Formular sowie serverseitige Längenprüfung
+in `POST /api/aktivitaeten`) und einen **Bearbeiter**. Der Bearbeiter wird
+nicht im Formular abgefragt, sondern serverseitig automatisch aus der
+Session gesetzt (`` `${req.session.vorname} ${req.session.nachname}` ``
+in `server.js`, dieselben Felder, die auch der Login in der Session
+ablegt) – der Client kann ihn also nicht manipulieren. Im
+Master-Detail-Layout wird das Thema in der Listenzeile (`.aktivitaet-
+list-thema`) sowie in der Detail-Ansicht angezeigt; der Bearbeiter wird
+in der Detail-Ansicht mit vollem Vor- und Nachnamen angezeigt, in der
+Listenzeile dagegen platzsparend nur als rundes Kürzel-Badge mit den
+Initialen (`aktivitaetBearbeiterInitialen()` in `js/main.js`, erster
+Buchstabe von Vor- und Nachname). Der volle Name steht als
+`title`-Attribut auf dem Badge und erscheint damit als natives
+Browser-Tooltip beim Hovern.
+
 Das Uhr-Icon in der Teilnehmenden-Tabelle trägt zusätzlich ein Badge mit der
 Anzahl der Aktivitäten des jeweiligen Teilnehmenden (`.history-btn-wrap` +
 `.aktivitaet-badge` in `index.html`/`css/style.css`, `updateAktivitaetBadge()`
@@ -212,7 +232,10 @@ API-Routen (alle in `server/server.js`, alle unter `/api/...`):
   `StatusID: null` löscht den Eintrag wieder)
 - `aktivitaeten`: GET `?teilnehmerId=<id>` (neueste zuerst), POST (Pflichtfelder
   `TeilnehmerID`, `Art` aus `["Gesprächsprotokoll", "Aktennotiz",
-  "Kontaktversuch"]`; kein PUT/DELETE, da erstmal nicht gefordert)
+  "Kontaktversuch"]`; optional `Thema`, max. 60 Zeichen, sonst 400;
+  `Bearbeiter` wird ausschließlich serverseitig aus der Session gesetzt,
+  ein evtl. mitgeschicktes `Bearbeiter`-Feld im Request-Body wird
+  ignoriert; kein PUT/DELETE, da erstmal nicht gefordert)
 - `aktivitaeten/summary`: GET, liefert je Teilnehmer mit mindestens einer
   Aktivität `{TeilnehmerID, Anzahl, HatAktuelle}` für die Badges in der
   Teilnehmenden-Tabelle

@@ -324,8 +324,12 @@
               <div id="aktivitaetDetailView" class="aktivitaet-detail-view" hidden>
                 <h3 id="aktDetailArt"></h3>
                 <dl class="aktivitaet-detail-fields">
+                  <dt>Thema</dt>
+                  <dd id="aktDetailThema"></dd>
                   <dt>Zeitstempel</dt>
                   <dd id="aktDetailZeitstempel"></dd>
+                  <dt>Bearbeiter</dt>
+                  <dd id="aktDetailBearbeiter"></dd>
                   <dt>Bemerkung</dt>
                   <dd id="aktDetailBemerkung"></dd>
                   <dt>Wiedervorlage</dt>
@@ -349,6 +353,12 @@
                   <span><strong>Teilnehmer:</strong> <span id="aktFormTnName"></span></span>
                   <span><strong>VT:</strong> <span id="aktFormTnVt"></span></span>
                   <span><strong>Zeitstempel:</strong> <span id="aktFormZeitstempel"></span></span>
+                  <span><strong>Bearbeiter:</strong> <span id="aktFormBearbeiter"></span></span>
+                </div>
+
+                <div class="form-row">
+                  <label for="aktThema">Thema</label>
+                  <input type="text" id="aktThema" name="Thema" maxlength="60">
                 </div>
 
                 <div class="form-row">

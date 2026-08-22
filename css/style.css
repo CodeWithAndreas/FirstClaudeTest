@@ -543,10 +543,37 @@ body.logged-out .app-layout {
   background: var(--color-primary);
 }
 
+.aktivitaet-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .aktivitaet-list-datum {
   font-weight: 700;
   color: var(--color-primary-dark);
   font-size: 0.9rem;
+}
+
+.aktivitaet-list-bearbeiter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-bg-light);
+  color: var(--color-primary-dark);
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.aktivitaet-list-thema {
+  font-weight: 700;
+  color: var(--color-text);
 }
 
 .aktivitaet-list-art {
@@ -555,7 +582,13 @@ body.logged-out .app-layout {
 }
 
 .aktivitaet-list-item.active .aktivitaet-list-datum,
+.aktivitaet-list-item.active .aktivitaet-list-thema,
 .aktivitaet-list-item.active .aktivitaet-list-art {
+  color: #ffffff;
+}
+
+.aktivitaet-list-item.active .aktivitaet-list-bearbeiter {
+  background: rgba(255, 255, 255, 0.25);
   color: #ffffff;
 }
 

@@ -3,12 +3,21 @@
 Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Löschrechte für Teilnehmende,
-Maßnahmen und Gruppen sind jetzt rollenabhängig differenziert: Ausbilder
-und Fachbereichsleiter dürfen keine Teilnehmenden/Maßnahmen mehr löschen,
-Ausbilder zusätzlich keine Gruppen; Fachbereichsleiter dürfen eine Gruppe
-nur löschen, wenn ihr keine Maßnahme mehr zugeordnet ist. Details siehe
-Unterabschnitt "Differenzierte Löschrechte" unter "Login, Rollen und
+**Wichtig für eine neue Session:** Das Dashboard hat jetzt unter den 4
+Statistikkarten einen zweispaltigen Bereich: links eine persönliche
+**Wiedervorlagen-Liste** (erster Baustein eines künftigen
+Nachrichtensystems, siehe Unterabschnitt "Wiedervorlage-Nachrichtenliste
+auf dem Dashboard" weiter unten), rechts ein Platzhalter für spätere
+"normale Nachrichten". Dafür wurde die Tabelle `aktivitaet` um
+`BearbeiterID` und `WiedervorlageErledigt` erweitert (Migration läuft
+wie bei `benutzer.Aktiv` idempotent über `bootstrapDatabase()`).
+
+Davor: Löschrechte für Teilnehmende, Maßnahmen und Gruppen sind
+rollenabhängig differenziert: Ausbilder und Fachbereichsleiter dürfen
+keine Teilnehmenden/Maßnahmen mehr löschen, Ausbilder zusätzlich keine
+Gruppen; Fachbereichsleiter dürfen eine Gruppe nur löschen, wenn ihr
+keine Maßnahme mehr zugeordnet ist. Details siehe Unterabschnitt
+"Differenzierte Löschrechte" unter "Login, Rollen und
 Benutzerverwaltung" weiter unten.
 
 **Historische Randnotiz zu diesem Thema (bewusst dokumentiert als
@@ -82,7 +91,11 @@ server/
 - Dashboard-Seite zeigt vier Stat-Karten (Anzahl Teilnehmende, Maßnahmen,
   Gruppen, Fachbereiche), Zahlen werden bei jedem Aufruf der Seite frisch aus
   den bestehenden GET-Endpunkten geladen (`loadDashboardStats()` in
-  `js/main.js`, kein eigener API-Endpunkt nötig).
+  `js/main.js`, kein eigener API-Endpunkt nötig). Darunter ein
+  zweispaltiger Bereich (`.master-detail.dashboard-messages` in
+  `index.html`/`css/style.css`): links die Wiedervorlagen-Liste (siehe
+  eigener Unterabschnitt weiter unten), rechts ein Platzhalter-Panel
+  "Nachrichten" für künftige weitere Nachrichtentypen.
 - Tabellen stecken in `.table-scroll` (horizontal scrollbar), Content-Bereich
   `max-width: 1680px`
 - Alle Datumsfelder werden in Tabellen als `TT.MM.JJJJ` angezeigt
@@ -102,7 +115,7 @@ Verbindung: Host `127.0.0.1`, Port `3306`, User `root`, SSL aktiviert
 | `teilnehmer`  | ID, Vorname, Nachname, Geburtsdatum, MassnahmeID, Startdatum, Endedatum, Email, Telefon     | MassnahmeID → massnahme.ID (NOT NULL) |
 | `anwesenheitsstatus` | ID, Bezeichnung, Kurzzeichen                                                        | – |
 | `anwesenheit` | ID, TeilnehmerID, Datum, StatusID                                                         | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE), StatusID → anwesenheitsstatus.ID; UNIQUE(TeilnehmerID, Datum) |
-| `aktivitaet`  | ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, ErstelltAm             | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE) |
+| `aktivitaet`  | ID, TeilnehmerID, Art, Thema, Bearbeiter, BearbeiterID, Bemerkung, Wiedervorlage, WiedervorlageErledigt, ErstelltAm | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE); BearbeiterID **ohne** FK (siehe unten) |
 | `benutzer`    | ID, Username (UNIQUE), PasswortHash, Vorname, Nachname, Email, Telefon, Aktiv, ErstelltAm  | – |
 | `rolle`       | ID, Bezeichnung (UNIQUE)                                                                   | – |
 | `benutzer_rolle` | BenutzerID, RolleID (Composite-PK)                                                       | BenutzerID → benutzer.ID (ON DELETE CASCADE), RolleID → rolle.ID (ON DELETE CASCADE) |
@@ -115,11 +128,20 @@ Serverstart per `CREATE TABLE IF NOT EXISTS` idempotent sichergestellt
 5 festen Rollen (`INSERT IGNORE`) und legt bei leerer `benutzer`-Tabelle
 einmalig das Admin-Konto an (Username `admin`, Startpasswort `Admin2026!`,
 Rolle Administrator – Konsolenmeldung nur beim erstmaligen Anlegen). Für
-nachträglich auf `benutzer` ergänzte Spalten (bisher nur `Aktiv`) prüft
-`bootstrapDatabase()` zusätzlich per `INFORMATION_SCHEMA.COLUMNS`, ob die
-Spalte schon existiert, und holt sie sonst per `ALTER TABLE` nach – damit
-funktioniert sowohl eine frische als auch eine bereits bestehende
-`benutzer`-Tabelle ohne manuellen Eingriff.
+nachträglich ergänzte Spalten auf Bestandstabellen (`benutzer.Aktiv`, sowie
+seit dieser Session `aktivitaet.BearbeiterID` und
+`aktivitaet.WiedervorlageErledigt`) prüft `bootstrapDatabase()` jeweils per
+`INFORMATION_SCHEMA.COLUMNS`, ob die Spalte schon existiert, und holt sie
+sonst per `ALTER TABLE` nach – damit funktioniert sowohl eine frische als
+auch eine bereits bestehende Tabelle ohne manuellen Eingriff. Wichtiger
+Unterschied bei `aktivitaet`: Diese Tabelle existiert (anders als
+`benutzer`) bereits vor dem ersten Serverstart, da sie Teil des
+`schema.sql`-Grundschemas ist – die neuen Spalten sind deshalb sowohl in
+`schema.sql` (für Neuinstallationen) als auch im `bootstrapDatabase()`-
+Migrationspfad (für Bestandsinstallationen) ergänzt. `BearbeiterID` hat
+dabei bewusst **keine FK-Constraint** auf `benutzer(ID)`, weil `benutzer`
+zum Zeitpunkt des `schema.sql`-Einspielens (vor dem allerersten
+Serverstart) noch gar nicht existiert.
 
 ## Fertiggestellte Features (pro Seite gleiches Muster)
 
@@ -242,6 +264,77 @@ aktualisiert (`refreshTnAktivitaetBadges()`, per `showPage()`-Hook auf
 `targetId === "teilnehmende"` ausgelöst – kein Tabellen-Neuaufbau, nur die
 vorhandenen Badge-Elemente werden aktualisiert).
 
+### Wiedervorlage-Nachrichtenliste auf dem Dashboard
+
+Erster Baustein eines künftigen, allgemeineren Nachrichtensystems
+("Jeder User bekommt eine Liste von Nachrichten, z. B. Aktivitäten von
+Teilnehmenden, später weitere Nachrichtentypen") – bewusst nur für
+diesen einen Nachrichtentyp gebaut, keine vorzeitige Abstraktion für
+noch nicht existierende Typen (User-zu-User-Nachrichten,
+Aufgabenzuweisung kommen laut Auftrag explizit erst später).
+
+Jede Aktivität mit gesetztem `Wiedervorlage`-Datum landet in der
+persönlichen Wiedervorlagen-Liste **ihres Erstellers** – Zuordnung über
+die neue Spalte `aktivitaet.BearbeiterID` (zusätzlich zum bisherigen
+`Bearbeiter`-Namensstring, der weiterhin nur zur Anzeige dient). Ältere,
+vor dieser Session angelegte Aktivitäten haben `BearbeiterID = NULL` und
+tauchen deshalb in niemandes Liste auf – akzeptierter Trade-off, kein
+rückwirkendes Namens-Matching auf den Bearbeiter-String (wäre bei
+Namensgleichheit/-änderung ohnehin unzuverlässig).
+
+Auf dem Dashboard (`renderWiedervorlagenListe()`/
+`loadDashboardWiedervorlagen()` in `js/main.js`) zeigt jeder
+Listeneintrag Datum, Name/VT des Teilnehmenden und Thema/Art; Termine in
+der Vergangenheit werden per `.overdue`-Klasse in der Akzentfarbe
+hervorgehoben (`istWiedervorlageUeberfaellig()`, rein clientseitige
+Zusatzoptik, keine explizite Anforderung). Klick auf den Eintrag springt
+zur bestehenden Teilnehmenden-Aktivitätenverlauf-Unterseite und wählt
+dort direkt die passende Aktivität im Detail-Panel aus – dafür wurde
+`openTeilnehmerAktivitaeten(person, aktivitaetId)` um einen zweiten,
+optionalen Parameter erweitert (Modul-Variable `pendingAktivitaetId`),
+den `loadTeilnehmerAktivitaetenPage()` nach dem Laden der Liste einmalig
+konsumiert und dann `showAktivitaetDetail()` statt des bisherigen
+`showAktivitaetPlaceholder()` aufruft (analog zum bereits bestehenden
+Muster nach dem Neuanlegen einer Aktivität). `showAktivitaetDetail()`
+zeigt bei einer bereits erledigten Wiedervorlage zusätzlich
+`"(erledigt)"` hinter dem Datum, damit der Status auch beim regulären
+Ansehen im Aktivitätenverlauf sichtbar bleibt.
+
+Zwei Aktionen pro Listeneintrag (Icons rechts, mit `event.stopPropagation()`
+gegen versehentliches Auslösen der Sprung-Navigation):
+
+- **Häkchen-Icon** (`markiereWiedervorlageErledigt()`): setzt
+  `WiedervorlageErledigt = 1` sofort per `PUT
+  /api/aktivitaeten/:id/erledigt`, **ohne** Bestätigungsdialog – bewusst
+  niedrigschwellig wie eine Todo-Checkbox, da keine Daten verloren gehen
+  (das Wiedervorlagedatum bleibt in der Aktivität erhalten, der Eintrag
+  verschwindet nur aus der offenen Liste).
+- **Kalender-Icon** (`openNeuerWiedervorlageterminDialog()`): öffnet
+  `#wiedervorlageTerminDialog` (Vorbild: `resetBenutzerPasswortDialog`)
+  mit einem vorbefüllten Datumsfeld; Speichern ruft `PUT
+  /api/aktivitaeten/:id/wiedervorlage` auf. Das überschreibt **nur das
+  Datumsfeld derselben Aktivität** (und setzt `WiedervorlageErledigt`
+  zurück auf `false`) – es entsteht bewusst **kein** neuer Eintrag im
+  Aktivitätenverlauf, das war eine explizite Vorgabe.
+
+Beide Schreib-Endpunkte sind serverseitig über das normale
+Fachbereichs-Scoping abgesichert (siehe oben), die Sichtbarkeit in der
+Dashboard-Liste selbst hängt dagegen ausschließlich von `BearbeiterID`
+ab, nicht vom Fachbereich – auch ein Administrator sieht dort nur seine
+eigenen erstellten Wiedervorlagen, nicht alle im System.
+
+Beim Testen der Umsetzung wurde ein CSS-Kaskaden-Bug gefunden und
+behoben: Die wiederverwendete `.aktivitaet-list-item`-Klasse setzt
+`flex-direction: column`, was in der neuen `.wiedervorlage-item`-Regel
+(gleiche Selektor-Spezifität, aber im Stylesheet weiter oben notiert)
+nicht automatisch überschrieben wurde – die Action-Icons landeten
+dadurch unter statt neben dem Text. Gelöst über den spezifischeren
+Selektor `.aktivitaet-list-item.wiedervorlage-item` statt
+`.wiedervorlage-item` allein. **Lehre:** Bei neuen Modifier-Klassen auf
+bestehende `.aktivitaet-list-item`-Elemente immer auf CSS-Spezifität vs.
+Deklarationsreihenfolge achten, nicht auf "steht weiter unten im File"
+verlassen.
+
 API-Routen (alle in `server/server.js`, alle unter `/api/...`):
 
 - `fachbereiche`: GET, POST, PUT `:id`, DELETE `:id`
@@ -253,15 +346,25 @@ API-Routen (alle in `server/server.js`, alle unter `/api/...`):
 - `anwesenheitsstatus`: GET (Kurzzeichen-Liste für die Dropdowns)
 - `anwesenheiten`: GET `?monat=YYYY-MM`, PUT (Upsert pro Teilnehmer+Datum;
   `StatusID: null` löscht den Eintrag wieder)
-- `aktivitaeten`: GET `?teilnehmerId=<id>` (neueste zuerst), POST (Pflichtfelder
-  `TeilnehmerID`, `Art` aus `["Gesprächsprotokoll", "Aktennotiz",
-  "Kontaktversuch"]`; optional `Thema`, max. 60 Zeichen, sonst 400;
-  `Bearbeiter` wird ausschließlich serverseitig aus der Session gesetzt,
-  ein evtl. mitgeschicktes `Bearbeiter`-Feld im Request-Body wird
-  ignoriert; kein PUT/DELETE, da erstmal nicht gefordert)
+- `aktivitaeten`: GET `?teilnehmerId=<id>` (neueste zuerst, inkl.
+  `WiedervorlageErledigt`), POST (Pflichtfelder `TeilnehmerID`, `Art` aus
+  `["Gesprächsprotokoll", "Aktennotiz", "Kontaktversuch"]`; optional
+  `Thema`, max. 60 Zeichen, sonst 400; `Bearbeiter` **und** `BearbeiterID`
+  werden ausschließlich serverseitig aus der Session gesetzt, ein evtl.
+  mitgeschicktes `Bearbeiter`-Feld im Request-Body wird ignoriert; kein
+  PUT/DELETE auf die Aktivität selbst, da erstmal nicht gefordert – siehe
+  aber die beiden Wiedervorlage-Sub-Routen unten)
 - `aktivitaeten/summary`: GET, liefert je Teilnehmer mit mindestens einer
   Aktivität `{TeilnehmerID, Anzahl, HatAktuelle}` für die Badges in der
   Teilnehmenden-Tabelle
+- `aktivitaeten/wiedervorlagen`: GET, liefert die offenen Wiedervorlagen
+  des eingeloggten Users (`BearbeiterID = req.session.userId`, kein
+  Fachbereichs-Filter – siehe Unterabschnitt weiter unten)
+- `aktivitaeten/:id/erledigt`: PUT (kein Body), markiert eine Wiedervorlage
+  als erledigt
+- `aktivitaeten/:id/wiedervorlage`: PUT, Body `{Wiedervorlage: "YYYY-MM-DD"}`,
+  überschreibt das Datum in derselben Aktivität und setzt
+  `WiedervorlageErledigt` zurück auf `false`
 - `login` (POST), `logout` (POST), `me` (GET), `me/passwort` (PUT),
   `rollen` (GET, statische Liste), `benutzer` (GET/POST/PUT/DELETE,
   admin-only), `benutzer/:id/passwort` (PUT, admin-only, setzt nur
@@ -284,7 +387,17 @@ auch beim Schreiben (POST/PUT/DELETE prüfen den Fachbereich des Ziel- **und**
 bei PUT auch des Ausgangsdatensatzes, sonst 403). `GET /api/fachbereiche`
 bleibt für alle Rollen erreichbar (wird für Dropdowns/Filter auf anderen
 Seiten gebraucht), liefert eingeschränkten Nutzern aber nur ihre eigenen
-Fachbereiche.
+Fachbereiche. Abweichend davon: `GET /api/aktivitaeten/wiedervorlagen`
+filtert bewusst **nicht** nach Fachbereich, sondern ausschließlich nach
+`BearbeiterID = req.session.userId` (siehe Unterabschnitt
+"Wiedervorlage-Nachrichtenliste auf dem Dashboard"); die beiden
+Schreib-Endpunkte `aktivitaeten/:id/erledigt` und
+`aktivitaeten/:id/wiedervorlage` verwenden dagegen wieder das normale
+Fachbereichs-Scoping wie alle anderen `aktivitaeten`-Schreibzugriffe,
+**ohne** zusätzliche Beschränkung auf den Ersteller – jeder Nutzer mit
+Fachbereichs-Zugriff auf den betroffenen Teilnehmenden darf eine fremde
+Wiedervorlage erledigt markieren oder verschieben, auch wenn sie in
+seiner eigenen Dashboard-Liste gar nicht auftaucht.
 
 Alle eingeschränkten Nutzer (Ausbilder wie Fachbereichsleiter) haben
 innerhalb ihrer zugewiesenen Fachbereiche identisches CRUD auf
@@ -533,6 +646,10 @@ Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
   wäre ein externer Session-Store (z. B. MySQL/Redis) nötig.
 - Keine "Passwort vergessen"-Funktion – ein vergessenes Passwort kann aktuell
   nur ein Administrator über die Benutzer-Seite zurücksetzen.
+- Das rechte Panel "Nachrichten" auf dem Dashboard ist bisher nur ein
+  Platzhalter (siehe "Wiedervorlage-Nachrichtenliste auf dem Dashboard")
+  – weitere Nachrichtentypen, User-zu-User-Nachrichten und
+  Aufgabenzuweisung sind bewusst noch nicht umgesetzt.
 
 ## Lokale Entwicklungsumgebung – wichtige Hinweise
 

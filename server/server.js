@@ -69,6 +69,20 @@ async function bootstrapDatabase() {
     await pool.query("ALTER TABLE benutzer ADD COLUMN Aktiv TINYINT(1) NOT NULL DEFAULT 1");
   }
 
+  const [aktivitaetSpalten] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'aktivitaet'
+       AND COLUMN_NAME IN ('BearbeiterID', 'WiedervorlageErledigt')`
+  );
+  const vorhandeneAktivitaetSpalten = aktivitaetSpalten.map((row) => row.COLUMN_NAME);
+  if (!vorhandeneAktivitaetSpalten.includes("BearbeiterID")) {
+    await pool.query("ALTER TABLE aktivitaet ADD COLUMN BearbeiterID INT DEFAULT NULL");
+    await pool.query("ALTER TABLE aktivitaet ADD INDEX idx_Aktivitaet_BearbeiterID (BearbeiterID)");
+  }
+  if (!vorhandeneAktivitaetSpalten.includes("WiedervorlageErledigt")) {
+    await pool.query("ALTER TABLE aktivitaet ADD COLUMN WiedervorlageErledigt TINYINT(1) NOT NULL DEFAULT 0");
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS rolle (
       ID INT AUTO_INCREMENT PRIMARY KEY,
@@ -1113,10 +1127,10 @@ app.get("/api/aktivitaeten", async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      "SELECT ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE TeilnehmerID = ? ORDER BY ErstelltAm DESC",
+      "SELECT ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, WiedervorlageErledigt, ErstelltAm FROM aktivitaet WHERE TeilnehmerID = ? ORDER BY ErstelltAm DESC",
       [teilnehmerId]
     );
-    res.json(rows);
+    res.json(rows.map((row) => ({ ...row, WiedervorlageErledigt: Boolean(row.WiedervorlageErledigt) })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Aktivitäten konnten nicht geladen werden." });
@@ -1152,16 +1166,16 @@ app.post("/api/aktivitaeten", async (req, res) => {
     const bearbeiter = `${req.session.vorname} ${req.session.nachname}`;
 
     const [result] = await pool.query(
-      "INSERT INTO aktivitaet (TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage) VALUES (?, ?, ?, ?, ?, ?)",
-      [teilnehmerId, Art, thema || null, bearbeiter, Bemerkung || null, Wiedervorlage || null]
+      "INSERT INTO aktivitaet (TeilnehmerID, Art, Thema, Bearbeiter, BearbeiterID, Bemerkung, Wiedervorlage) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [teilnehmerId, Art, thema || null, bearbeiter, req.session.userId, Bemerkung || null, Wiedervorlage || null]
     );
 
     const [rows] = await pool.query(
-      "SELECT ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE ID = ?",
+      "SELECT ID, TeilnehmerID, Art, Thema, Bearbeiter, Bemerkung, Wiedervorlage, WiedervorlageErledigt, ErstelltAm FROM aktivitaet WHERE ID = ?",
       [result.insertId]
     );
 
-    res.status(201).json(rows[0]);
+    res.status(201).json({ ...rows[0], WiedervorlageErledigt: Boolean(rows[0].WiedervorlageErledigt) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Aktivität konnte nicht gespeichert werden." });
@@ -1194,6 +1208,96 @@ app.get("/api/aktivitaeten/summary", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Aktivitäten-Übersicht konnte nicht geladen werden." });
+  }
+});
+
+app.get("/api/aktivitaeten/wiedervorlagen", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT a.ID, a.TeilnehmerID, a.Art, a.Thema, a.Wiedervorlage,
+              t.Vorname, t.Nachname, m.VT
+         FROM aktivitaet a
+         JOIN teilnehmer t ON t.ID = a.TeilnehmerID
+         JOIN massnahme m ON m.ID = t.MassnahmeID
+        WHERE a.BearbeiterID = ? AND a.WiedervorlageErledigt = 0 AND a.Wiedervorlage IS NOT NULL
+        ORDER BY a.Wiedervorlage ASC`,
+      [req.session.userId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Wiedervorlagen konnten nicht geladen werden." });
+  }
+});
+
+async function resolveAktivitaetFuerScope(id) {
+  const [rows] = await pool.query(
+    `SELECT a.ID, t.MassnahmeID FROM aktivitaet a JOIN teilnehmer t ON t.ID = a.TeilnehmerID WHERE a.ID = ?`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+app.put("/api/aktivitaeten/:id/erledigt", async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  try {
+    const aktivitaet = await resolveAktivitaetFuerScope(id);
+    if (!aktivitaet) {
+      return res.status(404).json({ error: "Aktivität wurde nicht gefunden." });
+    }
+
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(aktivitaet.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diese Aktivität." });
+      }
+    }
+
+    await pool.query("UPDATE aktivitaet SET WiedervorlageErledigt = 1 WHERE ID = ?", [id]);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Wiedervorlage konnte nicht als erledigt markiert werden." });
+  }
+});
+
+app.put("/api/aktivitaeten/:id/wiedervorlage", async (req, res) => {
+  const id = Number(req.params.id);
+  const { Wiedervorlage } = req.body;
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  if (!Wiedervorlage || Number.isNaN(Date.parse(Wiedervorlage))) {
+    return res.status(400).json({ error: "Ein gültiges Datum ist erforderlich." });
+  }
+
+  try {
+    const aktivitaet = await resolveAktivitaetFuerScope(id);
+    if (!aktivitaet) {
+      return res.status(404).json({ error: "Aktivität wurde nicht gefunden." });
+    }
+
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(aktivitaet.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diese Aktivität." });
+      }
+    }
+
+    await pool.query("UPDATE aktivitaet SET Wiedervorlage = ?, WiedervorlageErledigt = 0 WHERE ID = ?", [
+      Wiedervorlage,
+      id,
+    ]);
+    res.json({ Wiedervorlage });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Wiedervorlagetermin konnte nicht gespeichert werden." });
   }
 });
 

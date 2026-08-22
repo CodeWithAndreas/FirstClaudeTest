@@ -84,10 +84,15 @@ CREATE TABLE IF NOT EXISTS aktivitaet (
   Art VARCHAR(50) NOT NULL,
   Thema VARCHAR(60) DEFAULT NULL,
   Bearbeiter VARCHAR(200) DEFAULT NULL,
+  -- Keine FK auf benutzer(ID): die Tabelle benutzer existiert beim Einspielen
+  -- dieses Grundschemas noch nicht (siehe Kommentar am Dateianfang).
+  BearbeiterID INT DEFAULT NULL,
   Bemerkung TEXT,
   Wiedervorlage DATE DEFAULT NULL,
+  WiedervorlageErledigt TINYINT(1) NOT NULL DEFAULT 0,
   ErstelltAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (ID),
   KEY fk_Aktivitaet_Teilnehmer_idx (TeilnehmerID),
+  KEY idx_Aktivitaet_BearbeiterID (BearbeiterID),
   CONSTRAINT fk_Aktivitaet_Teilnehmer FOREIGN KEY (TeilnehmerID) REFERENCES teilnehmer (ID) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;

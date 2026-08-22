@@ -50,6 +50,12 @@ const dashTeilnehmerCount = document.getElementById("dashTeilnehmerCount");
 const dashMassnahmenCount = document.getElementById("dashMassnahmenCount");
 const dashGruppenCount = document.getElementById("dashGruppenCount");
 const dashFachbereicheCount = document.getElementById("dashFachbereicheCount");
+const dashWiedervorlagenListe = document.getElementById("dashWiedervorlagenListe");
+const wiedervorlageTerminDialog = document.getElementById("wiedervorlageTerminDialog");
+const wiedervorlageTerminForm = document.getElementById("wiedervorlageTerminForm");
+const wiedervorlageTerminInput = document.getElementById("wiedervorlageTerminInput");
+const wiedervorlageTerminMessage = document.getElementById("wiedervorlageTerminMessage");
+const wiedervorlageTerminCancelBtn = document.getElementById("wiedervorlageTerminCancelBtn");
 
 sidebarToggle.addEventListener("click", () => {
   const collapsed = sidebar.classList.toggle("collapsed");
@@ -84,6 +90,7 @@ function showPage(pageId) {
 
   if (targetId === "dashboard") {
     loadDashboardStats();
+    loadDashboardWiedervorlagen();
   }
   if (targetId === "anwesenheiten") {
     ensureAwInitialized();
@@ -129,6 +136,162 @@ async function loadDashboardStats() {
     })
   );
 }
+
+function istWiedervorlageUeberfaellig(datum) {
+  if (!datum) {
+    return false;
+  }
+  return new Date(datum) < new Date(new Date().toDateString());
+}
+
+function renderWiedervorlagenListe(wiedervorlagen) {
+  dashWiedervorlagenListe.innerHTML = "";
+
+  if (wiedervorlagen.length === 0) {
+    const emptyItem = document.createElement("li");
+    emptyItem.className = "aktivitaet-list-empty";
+    emptyItem.textContent = "Keine offenen Wiedervorlagen.";
+    dashWiedervorlagenListe.appendChild(emptyItem);
+    return;
+  }
+
+  wiedervorlagen.forEach((wv) => {
+    const item = document.createElement("li");
+    item.className = "aktivitaet-list-item wiedervorlage-item";
+    if (istWiedervorlageUeberfaellig(wv.Wiedervorlage)) {
+      item.classList.add("overdue");
+    }
+
+    const main = document.createElement("div");
+    main.className = "wiedervorlage-item-main";
+
+    const datumSpan = document.createElement("span");
+    datumSpan.className = "aktivitaet-list-datum";
+    datumSpan.textContent = formatDateDE(wv.Wiedervorlage);
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "wiedervorlage-item-name";
+    nameSpan.textContent = `${wv.Vorname} ${wv.Nachname}${wv.VT ? ` · VT ${wv.VT}` : ""}`;
+
+    const themaSpan = document.createElement("span");
+    themaSpan.className = "aktivitaet-list-thema";
+    themaSpan.textContent = wv.Thema || wv.Art;
+
+    main.append(datumSpan, nameSpan, themaSpan);
+    main.addEventListener("click", () => {
+      openTeilnehmerAktivitaeten({ ID: wv.TeilnehmerID, Vorname: wv.Vorname, Nachname: wv.Nachname, VT: wv.VT }, wv.ID);
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "wiedervorlage-item-actions";
+
+    const erledigtBtn = document.createElement("button");
+    erledigtBtn.type = "button";
+    erledigtBtn.className = "row-erledigt-btn";
+    erledigtBtn.setAttribute("aria-label", "Als erledigt markieren");
+    erledigtBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    `;
+    erledigtBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      markiereWiedervorlageErledigt(wv.ID);
+    });
+
+    const terminBtn = document.createElement("button");
+    terminBtn.type = "button";
+    terminBtn.className = "row-termin-btn";
+    terminBtn.setAttribute("aria-label", "Neuen Wiedervorlagetermin setzen");
+    terminBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+    `;
+    terminBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openNeuerWiedervorlageterminDialog(wv);
+    });
+
+    actions.append(erledigtBtn, terminBtn);
+    item.append(main, actions);
+    dashWiedervorlagenListe.appendChild(item);
+  });
+}
+
+async function loadDashboardWiedervorlagen() {
+  dashWiedervorlagenListe.innerHTML = "";
+  const loadingItem = document.createElement("li");
+  loadingItem.className = "aktivitaet-list-empty";
+  loadingItem.textContent = "Lädt…";
+  dashWiedervorlagenListe.appendChild(loadingItem);
+
+  try {
+    const response = await fetch("/api/aktivitaeten/wiedervorlagen");
+    if (!response.ok) {
+      throw new Error("Wiedervorlagen konnten nicht geladen werden.");
+    }
+    renderWiedervorlagenListe(await response.json());
+  } catch (err) {
+    console.error(err);
+    dashWiedervorlagenListe.innerHTML = "";
+    const errorItem = document.createElement("li");
+    errorItem.className = "aktivitaet-list-empty";
+    errorItem.textContent = "Fehler beim Laden der Wiedervorlagen.";
+    dashWiedervorlagenListe.appendChild(errorItem);
+  }
+}
+
+async function markiereWiedervorlageErledigt(id) {
+  try {
+    const response = await fetch(`/api/aktivitaeten/${id}/erledigt`, { method: "PUT" });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Wiedervorlage konnte nicht als erledigt markiert werden.");
+    }
+    await loadDashboardWiedervorlagen();
+  } catch (err) {
+    console.error(err);
+    alert(err.message);
+  }
+}
+
+let wiedervorlageTerminTargetId = null;
+
+function openNeuerWiedervorlageterminDialog(wv) {
+  wiedervorlageTerminTargetId = wv.ID;
+  wiedervorlageTerminForm.reset();
+  wiedervorlageTerminInput.value = wv.Wiedervorlage || "";
+  wiedervorlageTerminMessage.textContent = "";
+  wiedervorlageTerminMessage.className = "form-message";
+  wiedervorlageTerminDialog.showModal();
+}
+
+wiedervorlageTerminCancelBtn.addEventListener("click", () => wiedervorlageTerminDialog.close());
+
+wiedervorlageTerminForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const response = await fetch(`/api/aktivitaeten/${wiedervorlageTerminTargetId}/wiedervorlage`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Wiedervorlage: wiedervorlageTerminInput.value }),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Wiedervorlagetermin konnte nicht gespeichert werden.");
+    }
+    wiedervorlageTerminDialog.close();
+    wiedervorlageTerminTargetId = null;
+    await loadDashboardWiedervorlagen();
+  } catch (err) {
+    wiedervorlageTerminMessage.textContent = err.message;
+    wiedervorlageTerminMessage.classList.add("error");
+  }
+});
 
 // Fachbereiche
 
@@ -1388,10 +1551,12 @@ const aktAbbrechenBtn = document.getElementById("aktAbbrechenBtn");
 
 let currentAktivitaetTeilnehmerId = null;
 let currentAktivitaetTeilnehmer = null;
+let pendingAktivitaetId = null;
 
-function openTeilnehmerAktivitaeten(person) {
+function openTeilnehmerAktivitaeten(person, aktivitaetId = null) {
   currentAktivitaetTeilnehmerId = person.ID;
   currentAktivitaetTeilnehmer = person;
+  pendingAktivitaetId = aktivitaetId;
 
   if (window.location.hash === "#teilnehmende-aktivitaeten") {
     // Hash ist unverändert (z. B. nach Reload auf einer alten Aktivitäten-URL) -
@@ -1452,7 +1617,9 @@ function showAktivitaetDetail(aktivitaet) {
   aktDetailZeitstempel.textContent = formatDateTimeDE(aktivitaet.ErstelltAm);
   aktDetailBearbeiter.textContent = aktivitaet.Bearbeiter || "–";
   aktDetailBemerkung.textContent = aktivitaet.Bemerkung || "–";
-  aktDetailWiedervorlage.textContent = aktivitaet.Wiedervorlage ? formatDateDE(aktivitaet.Wiedervorlage) : "–";
+  aktDetailWiedervorlage.textContent = aktivitaet.Wiedervorlage
+    ? `${formatDateDE(aktivitaet.Wiedervorlage)}${aktivitaet.WiedervorlageErledigt ? " (erledigt)" : ""}`
+    : "–";
 
   aktivitaetListe.querySelectorAll(".aktivitaet-list-item").forEach((item) => {
     item.classList.toggle("active", Number(item.dataset.id) === aktivitaet.ID);
@@ -1544,6 +1711,13 @@ async function loadTeilnehmerAktivitaetenPage(teilnehmerId) {
     }
     const aktivitaeten = await response.json();
     renderAktivitaetListe(aktivitaeten);
+
+    const zielId = pendingAktivitaetId;
+    pendingAktivitaetId = null;
+    const treffer = zielId != null ? aktivitaeten.find((a) => a.ID === zielId) : null;
+    if (treffer) {
+      showAktivitaetDetail(treffer);
+    }
   } catch (err) {
     console.error(err);
     aktivitaetListe.innerHTML = "";

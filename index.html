@@ -181,6 +181,19 @@
               <span class="stat-label">Fachbereiche</span>
             </div>
           </div>
+
+          <div class="master-detail dashboard-messages">
+            <div class="dashboard-panel">
+              <h3>Offene Wiedervorlagen</h3>
+              <ul class="aktivitaet-list dashboard-wiedervorlage-list" id="dashWiedervorlagenListe">
+                <li class="aktivitaet-list-empty">Lädt…</li>
+              </ul>
+            </div>
+            <div class="dashboard-panel">
+              <h3>Nachrichten</h3>
+              <p class="detail-placeholder">Hier erscheinen zukünftig weitere Nachrichten.</p>
+            </div>
+          </div>
         </section>
 
         <section id="page-teilnehmende" class="page">
@@ -941,6 +954,24 @@
 
             <div class="dialog-actions">
               <button type="button" id="resetBenutzerPasswortCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog id="wiedervorlageTerminDialog" class="confirm-dialog">
+          <form id="wiedervorlageTerminForm">
+            <h3>Neuer Wiedervorlagetermin</h3>
+
+            <div class="form-row">
+              <label for="wiedervorlageTerminInput">Wiedervorlage am</label>
+              <input type="date" id="wiedervorlageTerminInput" required>
+            </div>
+
+            <p class="form-message" id="wiedervorlageTerminMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="wiedervorlageTerminCancelBtn" class="btn-secondary">Abbrechen</button>
               <button type="submit" class="btn-primary">Speichern</button>
             </div>
           </form>

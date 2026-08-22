@@ -327,6 +327,56 @@ body.logged-out .app-layout {
   font-size: 0.9rem;
 }
 
+.dashboard-messages {
+  margin-top: 2rem;
+}
+
+.dashboard-panel {
+  flex: 1;
+  min-width: 280px;
+}
+
+.dashboard-panel h3 {
+  margin-bottom: 0.75rem;
+}
+
+.dashboard-wiedervorlage-list {
+  max-height: none;
+}
+
+.aktivitaet-list-item.wiedervorlage-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: default;
+}
+
+.wiedervorlage-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+
+.wiedervorlage-item-name {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.wiedervorlage-item-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.wiedervorlage-item.overdue .aktivitaet-list-datum {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
 /* Data table */
 
 .table-scroll {
@@ -371,7 +421,9 @@ body.logged-out .app-layout {
 .row-edit-btn,
 .row-history-btn,
 .row-reset-passwort-btn,
-.row-toggle-aktiv-btn {
+.row-toggle-aktiv-btn,
+.row-erledigt-btn,
+.row-termin-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -391,7 +443,9 @@ body.logged-out .app-layout {
 .row-edit-btn:hover,
 .row-history-btn:hover,
 .row-reset-passwort-btn:hover,
-.row-toggle-aktiv-btn:hover {
+.row-toggle-aktiv-btn:hover,
+.row-erledigt-btn:hover,
+.row-termin-btn:hover {
   background: var(--color-bg-light);
   color: var(--color-primary);
 }
@@ -400,7 +454,9 @@ body.logged-out .app-layout {
 .row-edit-btn svg,
 .row-history-btn svg,
 .row-reset-passwort-btn svg,
-.row-toggle-aktiv-btn svg {
+.row-toggle-aktiv-btn svg,
+.row-erledigt-btn svg,
+.row-termin-btn svg {
   width: 18px;
   height: 18px;
 }

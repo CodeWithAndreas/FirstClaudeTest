@@ -368,7 +368,8 @@ body.logged-out .app-layout {
 }
 
 .row-delete-btn,
-.row-edit-btn {
+.row-edit-btn,
+.row-history-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -385,15 +386,43 @@ body.logged-out .app-layout {
   color: var(--color-accent);
 }
 
-.row-edit-btn:hover {
+.row-edit-btn:hover,
+.row-history-btn:hover {
   background: var(--color-bg-light);
   color: var(--color-primary);
 }
 
 .row-delete-btn svg,
-.row-edit-btn svg {
+.row-edit-btn svg,
+.row-history-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.history-btn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.aktivitaet-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #256927;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.aktivitaet-badge.badge-aktuell {
+  background: var(--color-primary);
 }
 
 /* Collapsible form */
@@ -434,6 +463,144 @@ body.logged-out .app-layout {
   background: #e9eff3;
 }
 
+/* Aktivitäten-Unterseite */
+
+.subpage-header {
+  margin-bottom: 1rem;
+}
+
+.aktivitaet-teilnehmer-info {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+
+.aktivitaet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--color-bg-light);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
+
+.master-detail {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.master-list-panel {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+.aktivitaet-neue-btn {
+  width: 100%;
+  padding: 0.6rem 1.5rem;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  color: #ffffff;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.aktivitaet-neue-btn:hover {
+  background: var(--color-primary-mid);
+}
+
+.aktivitaet-list {
+  list-style: none;
+  max-height: 65vh;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.aktivitaet-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.aktivitaet-list-item:last-child {
+  border-bottom: none;
+}
+
+.aktivitaet-list-item:hover {
+  background: var(--color-bg-light);
+}
+
+.aktivitaet-list-item.active {
+  background: var(--color-primary);
+}
+
+.aktivitaet-list-datum {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  font-size: 0.9rem;
+}
+
+.aktivitaet-list-art {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.aktivitaet-list-item.active .aktivitaet-list-datum,
+.aktivitaet-list-item.active .aktivitaet-list-art {
+  color: #ffffff;
+}
+
+.aktivitaet-list-empty {
+  padding: 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.detail-panel {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-bg-light);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+}
+
+.detail-placeholder {
+  color: var(--color-text-muted);
+}
+
+.aktivitaet-detail-view h3 {
+  color: var(--color-primary-dark);
+  margin-bottom: 0.75rem;
+}
+
+.aktivitaet-detail-fields dt {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-top: 0.75rem;
+}
+
+.aktivitaet-detail-fields dt:first-child {
+  margin-top: 0;
+}
+
+.aktivitaet-detail-fields dd {
+  white-space: pre-wrap;
+}
+
+.detail-panel .data-form {
+  max-width: none;
+  padding-top: 0;
+}
+
 /* Data form */
 
 .data-form {
@@ -459,7 +626,8 @@ body.logged-out .app-layout {
 }
 
 .form-row input,
-.form-row select {
+.form-row select,
+.form-row textarea {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -467,10 +635,12 @@ body.logged-out .app-layout {
   font-size: 1rem;
   background: #ffffff;
   color: var(--color-text);
+  resize: vertical;
 }
 
 .form-row input:focus,
-.form-row select:focus {
+.form-row select:focus,
+.form-row textarea:focus {
   outline: none;
   border-color: var(--color-primary);
 }

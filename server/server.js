@@ -1014,6 +1014,110 @@ app.delete("/api/teilnehmer/:id", async (req, res) => {
   }
 });
 
+// --- Aktivitäten ---
+
+const AKTIVITAET_ARTEN = ["Gesprächsprotokoll", "Aktennotiz", "Kontaktversuch"];
+
+app.get("/api/aktivitaeten", async (req, res) => {
+  const teilnehmerId = Number(req.query.teilnehmerId);
+
+  if (!Number.isInteger(teilnehmerId)) {
+    return res.status(400).json({ error: "Teilnehmer ist erforderlich." });
+  }
+
+  try {
+    const [teilnehmerRows] = await pool.query("SELECT MassnahmeID FROM teilnehmer WHERE ID = ?", [teilnehmerId]);
+    const teilnehmer = teilnehmerRows[0];
+    if (!teilnehmer) {
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(teilnehmer.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diesen Teilnehmer." });
+      }
+    }
+
+    const [rows] = await pool.query(
+      "SELECT ID, TeilnehmerID, Art, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE TeilnehmerID = ? ORDER BY ErstelltAm DESC",
+      [teilnehmerId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Aktivitäten konnten nicht geladen werden." });
+  }
+});
+
+app.post("/api/aktivitaeten", async (req, res) => {
+  const { TeilnehmerID, Art, Bemerkung, Wiedervorlage } = req.body;
+  const teilnehmerId = Number(TeilnehmerID);
+
+  if (!Number.isInteger(teilnehmerId) || !AKTIVITAET_ARTEN.includes(Art)) {
+    return res.status(400).json({ error: "Teilnehmer und eine gültige Art sind erforderlich." });
+  }
+
+  try {
+    const [teilnehmerRows] = await pool.query("SELECT MassnahmeID FROM teilnehmer WHERE ID = ?", [teilnehmerId]);
+    const teilnehmer = teilnehmerRows[0];
+    if (!teilnehmer) {
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(teilnehmer.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diesen Teilnehmer." });
+      }
+    }
+
+    const [result] = await pool.query(
+      "INSERT INTO aktivitaet (TeilnehmerID, Art, Bemerkung, Wiedervorlage) VALUES (?, ?, ?, ?)",
+      [teilnehmerId, Art, Bemerkung || null, Wiedervorlage || null]
+    );
+
+    const [rows] = await pool.query(
+      "SELECT ID, TeilnehmerID, Art, Bemerkung, Wiedervorlage, ErstelltAm FROM aktivitaet WHERE ID = ?",
+      [result.insertId]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Aktivität konnte nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/aktivitaeten/summary", async (req, res) => {
+  try {
+    let query = `SELECT a.TeilnehmerID, COUNT(*) AS Anzahl,
+        MAX(CASE WHEN a.ErstelltAm >= (NOW() - INTERVAL 14 DAY) THEN 1 ELSE 0 END) AS HatAktuelle
+       FROM aktivitaet a`;
+    const params = [];
+
+    if (isRestrictedUser(req)) {
+      const ids = req.session.fachbereichIds || [];
+      if (ids.length === 0) {
+        return res.json([]);
+      }
+      query += ` JOIN teilnehmer t ON t.ID = a.TeilnehmerID
+         JOIN massnahme m ON m.ID = t.MassnahmeID
+         JOIN gruppe g ON g.ID = m.GruppeID
+         WHERE g.FachbereichID IN (?)`;
+      params.push(ids);
+    }
+
+    query += " GROUP BY a.TeilnehmerID";
+
+    const [rows] = await pool.query(query, params);
+    res.json(rows.map((row) => ({ TeilnehmerID: row.TeilnehmerID, Anzahl: row.Anzahl, HatAktuelle: Boolean(row.HatAktuelle) })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Aktivitäten-Übersicht konnte nicht geladen werden." });
+  }
+});
+
 // --- Anwesenheiten ---
 
 app.get("/api/anwesenheitsstatus", async (req, res) => {

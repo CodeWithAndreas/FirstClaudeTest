@@ -298,6 +298,79 @@
           </details>
         </section>
 
+        <section id="page-teilnehmende-aktivitaeten" class="page">
+          <div class="subpage-header">
+            <button type="button" id="aktZurueckBtn" class="btn-secondary">← Zurück zu Teilnehmende</button>
+          </div>
+
+          <h2>Aktivitätenverlauf</h2>
+          <p class="aktivitaet-teilnehmer-info">
+            <strong id="aktTnName"></strong> · VT <span id="aktTnVt"></span>
+          </p>
+
+          <div class="master-detail">
+            <div class="master-list-panel">
+              <button type="button" id="aktNeueBtn" class="btn-primary aktivitaet-neue-btn">+ Neue Aktivität</button>
+              <ul class="aktivitaet-list" id="aktivitaetListe">
+                <li class="aktivitaet-list-empty">Lädt…</li>
+              </ul>
+            </div>
+
+            <div class="detail-panel">
+              <p class="detail-placeholder" id="aktivitaetDetailPlaceholder">
+                Wähle eine Aktivität aus der Liste aus oder lege über „+ Neue Aktivität“ einen neuen Eintrag an.
+              </p>
+
+              <div id="aktivitaetDetailView" class="aktivitaet-detail-view" hidden>
+                <h3 id="aktDetailArt"></h3>
+                <dl class="aktivitaet-detail-fields">
+                  <dt>Zeitstempel</dt>
+                  <dd id="aktDetailZeitstempel"></dd>
+                  <dt>Bemerkung</dt>
+                  <dd id="aktDetailBemerkung"></dd>
+                  <dt>Wiedervorlage</dt>
+                  <dd id="aktDetailWiedervorlage"></dd>
+                </dl>
+              </div>
+
+              <form id="aktivitaetForm" class="data-form" hidden>
+                <h3>Neue Aktivität</h3>
+
+                <div class="form-row">
+                  <label for="aktArt">Art</label>
+                  <select id="aktArt" name="Art" required>
+                    <option value="Gesprächsprotokoll">Gesprächsprotokoll</option>
+                    <option value="Aktennotiz">Aktennotiz</option>
+                    <option value="Kontaktversuch">Kontaktversuch</option>
+                  </select>
+                </div>
+
+                <div class="aktivitaet-meta">
+                  <span><strong>Teilnehmer:</strong> <span id="aktFormTnName"></span></span>
+                  <span><strong>VT:</strong> <span id="aktFormTnVt"></span></span>
+                  <span><strong>Zeitstempel:</strong> <span id="aktFormZeitstempel"></span></span>
+                </div>
+
+                <div class="form-row">
+                  <label for="aktBemerkung">Bemerkung</label>
+                  <textarea id="aktBemerkung" name="Bemerkung" rows="6"></textarea>
+                </div>
+
+                <div class="form-row">
+                  <label for="aktWiedervorlage">Wiedervorlage am</label>
+                  <input type="date" id="aktWiedervorlage" name="Wiedervorlage">
+                </div>
+
+                <div class="dialog-actions">
+                  <button type="button" id="aktAbbrechenBtn" class="btn-secondary">Zurück</button>
+                  <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+                <p class="form-message" id="aktivitaetFormMessage" role="status"></p>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <dialog id="editTeilnehmerDialog" class="confirm-dialog edit-dialog">
           <form id="editTeilnehmerForm">
             <h3>Teilnehmer/in bearbeiten</h3>

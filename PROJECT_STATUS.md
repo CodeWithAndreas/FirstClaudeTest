@@ -1,7 +1,15 @@
 # Standortmanager – Projektstatus
 
-Stand: 2026-08-18. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
+Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
+
+**Wichtig für eine neue Session:** Beim Schreiben dieser Zeile lagen noch
+uncommittete Änderungen im Arbeitsverzeichnis (`git status` prüfen!) –
+u. a. das komplette Aktivitätenverlauf-Feature (Master-Detail-Unterseite
+unter Teilnehmende, siehe eigener Abschnitt weiter unten) samt
+Badge-Anzeige am Uhr-Icon. Vor dem Weiterarbeiten erst `git status`/`git
+diff` ansehen, um zu wissen, was bereits fertig, aber noch nicht committet
+ist.
 
 ## Überblick
 
@@ -29,10 +37,10 @@ server/
                   inkl. Session-Auth, Rollen-/Fachbereichs-Scoping und
                   idempotentem DB-Bootstrap (Tabellen + Rollen-Seed + Admin-Seed)
   schema.sql      Grundschema (fachbereich/gruppe/massnahme/teilnehmer/
-                  anwesenheit(sstatus)) zum Einspielen auf einer neuen/leeren
-                  MySQL-Instanz, siehe README.md "Setup auf einem neuen PC".
-                  Die benutzer*-Tabellen sind bewusst NICHT enthalten, die
-                  legt server.js selbst an.
+                  anwesenheit(sstatus)/aktivitaet) zum Einspielen auf einer
+                  neuen/leeren MySQL-Instanz, siehe README.md "Setup auf einem
+                  neuen PC". Die benutzer*-Tabellen sind bewusst NICHT
+                  enthalten, die legt server.js selbst an.
   package.json    Abhängigkeiten: express, mysql2, dotenv, bcryptjs, express-session
   .env            Echte DB-Zugangsdaten + SESSION_SECRET (NICHT committed, in .gitignore)
   .env.example    Vorlage für .env
@@ -72,6 +80,7 @@ Verbindung: Host `127.0.0.1`, Port `3306`, User `root`, SSL aktiviert
 | `teilnehmer`  | ID, Vorname, Nachname, Geburtsdatum, MassnahmeID, Startdatum, Endedatum, Email, Telefon     | MassnahmeID → massnahme.ID (NOT NULL) |
 | `anwesenheitsstatus` | ID, Bezeichnung, Kurzzeichen                                                        | – |
 | `anwesenheit` | ID, TeilnehmerID, Datum, StatusID                                                         | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE), StatusID → anwesenheitsstatus.ID; UNIQUE(TeilnehmerID, Datum) |
+| `aktivitaet`  | ID, TeilnehmerID, Art, Bemerkung, Wiedervorlage, ErstelltAm                                | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE) |
 | `benutzer`    | ID, Username (UNIQUE), PasswortHash, Vorname, Nachname, Email, Telefon, ErstelltAm         | – |
 | `rolle`       | ID, Bezeichnung (UNIQUE)                                                                   | – |
 | `benutzer_rolle` | BenutzerID, RolleID (Composite-PK)                                                       | BenutzerID → benutzer.ID (ON DELETE CASCADE), RolleID → rolle.ID (ON DELETE CASCADE) |
@@ -132,6 +141,64 @@ ohne die Tabelle neu aufzubauen. Eigene `tnGruppen`/`tnMassnahmen`-Arrays
 Fachbereich-Dropdown nutzt den bereits vorhandenen generischen Helper
 `loadFachbereichOptionsInto()`.
 
+Jede Zeile der Teilnehmenden-Tabelle hat zusätzlich vor dem
+Bearbeiten-Icon ein Uhr-Icon (`.row-history-btn`), das zu einer
+**Aktivitätenverlauf-Unterseite** führt (`openTeilnehmerAktivitaeten(person)`
+in `js/main.js`). Diese Unterseite (`#page-teilnehmende-aktivitaeten`) ist
+kein eigener Sidebar-Punkt, sondern wird als "Unterfenster" von
+Teilnehmende behandelt: eigener Hash `#teilnehmende-aktivitaeten` (löst
+`hashchange` aus, landet also auch in der Browser-Chronik), aber die
+Sidebar markiert weiterhin "Teilnehmende" als aktiv und die Breadcrumb
+zeigt "Start / Teilnehmende / Aktivitätenverlauf" (Sonderfälle in
+`showPage()`). Welcher Teilnehmer gerade angezeigt wird, steht nur im
+JS-Zustand (`currentAktivitaetTeilnehmerId`/`currentAktivitaetTeilnehmer`,
+aus dem bereits geladenen `tnRowEntries`-Cache übernommen, keine
+Zusatzabfrage) – ein direkter Aufruf des Hashes ohne vorherige Auswahl
+(z. B. Neuladen der Seite) leitet automatisch zurück zu `#teilnehmende`.
+
+Oben auf der Unterseite: "Zurück zu Teilnehmende"-Button und Name/VT des
+Teilnehmenden. Darunter ein **Master-Detail-Layout** (`.master-detail` in
+`css/style.css`): links eine schmale, scrollbare Liste (`.aktivitaet-list`)
+mit einem Eintrag je Aktivität (Zeitstempel + Art, neueste zuerst – Sortierung
+kommt bereits so vom Server) und einem "+ Neue Aktivität"-Button darüber;
+rechts ein Detail-Panel, das genau einen von drei Zuständen zeigt
+(`showAktivitaetPlaceholder()`/`showAktivitaetDetail()`/`showAktivitaetForm()`
+in `js/main.js`, gesteuert über das `hidden`-Attribut, nie mehr als einer
+gleichzeitig sichtbar):
+1. **Platzhalter** (Default nach dem Laden/Wechsel des Teilnehmenden): Hinweistext.
+2. **Detail-Ansicht** (nach Klick auf einen Listeneintrag): reine Anzeige
+   von Art, Zeitstempel, Bemerkung und Wiedervorlage der gewählten
+   Aktivität; der angeklickte Listeneintrag bekommt `.active`
+   (blau hervorgehoben).
+3. **Formular** (nach Klick auf "+ Neue Aktivität"): Art-Dropdown
+   (Gesprächsprotokoll/Aktennotiz/Kontaktversuch – Liste erstmal fest im
+   HTML, keine eigene Verwaltungs-UI/-Tabelle dafür), Info-Block
+   (Teilnehmer/VT/aktueller Zeitstempel, wird bei jedem Öffnen neu
+   gesetzt), Bemerkungsfeld (`<textarea>`), Wiedervorlage-Datum sowie
+   Speichern- und Zurück-Button (Zurück verwirft nur und schaltet auf den
+   Platzhalter zurück, ohne zu speichern).
+
+Nach erfolgreichem Speichern wird die Liste neu geladen und die soeben
+angelegte Aktivität automatisch in der Detail-Ansicht ausgewählt – so sieht
+man sofort das Ergebnis, ohne den neuen Eintrag manuell in der Liste
+suchen zu müssen. Erstmal gibt es bewusst kein Bearbeiten/Löschen
+einzelner Aktivitäten (nicht gefordert).
+
+Das Uhr-Icon in der Teilnehmenden-Tabelle trägt zusätzlich ein Badge mit der
+Anzahl der Aktivitäten des jeweiligen Teilnehmenden (`.history-btn-wrap` +
+`.aktivitaet-badge` in `index.html`/`css/style.css`, `updateAktivitaetBadge()`
+in `js/main.js`). Kein Badge, wenn 0 Aktivitäten vorhanden sind; blau
+(`.badge-aktuell`), wenn mindestens eine Aktivität jünger als 14 Tage ist,
+sonst grün (Default-Badgefarbe = "nichts Aktuelles mehr"). Die Zahlen kommen aus `GET /api/aktivitaeten/summary`
+(gruppiert nach `TeilnehmerID`, `HatAktuelle` per
+`ErstelltAm >= NOW() - INTERVAL 14 DAY`, mit identischem
+Fachbereichs-Scoping wie die übrigen `aktivitaeten`-Routen), einmalig
+zusammen mit der Teilnehmerliste geladen (`loadTeilnehmer()`) und beim
+Zurückkehren von der Aktivitätenverlauf-Unterseite leichtgewichtig
+aktualisiert (`refreshTnAktivitaetBadges()`, per `showPage()`-Hook auf
+`targetId === "teilnehmende"` ausgelöst – kein Tabellen-Neuaufbau, nur die
+vorhandenen Badge-Elemente werden aktualisiert).
+
 API-Routen (alle in `server/server.js`, alle unter `/api/...`):
 
 - `fachbereiche`: GET, POST, PUT `:id`, DELETE `:id`
@@ -143,6 +210,12 @@ API-Routen (alle in `server/server.js`, alle unter `/api/...`):
 - `anwesenheitsstatus`: GET (Kurzzeichen-Liste für die Dropdowns)
 - `anwesenheiten`: GET `?monat=YYYY-MM`, PUT (Upsert pro Teilnehmer+Datum;
   `StatusID: null` löscht den Eintrag wieder)
+- `aktivitaeten`: GET `?teilnehmerId=<id>` (neueste zuerst), POST (Pflichtfelder
+  `TeilnehmerID`, `Art` aus `["Gesprächsprotokoll", "Aktennotiz",
+  "Kontaktversuch"]`; kein PUT/DELETE, da erstmal nicht gefordert)
+- `aktivitaeten/summary`: GET, liefert je Teilnehmer mit mindestens einer
+  Aktivität `{TeilnehmerID, Anzahl, HatAktuelle}` für die Badges in der
+  Teilnehmenden-Tabelle
 - `login` (POST), `logout` (POST), `me` (GET), `me/passwort` (PUT),
   `rollen` (GET, statische Liste), `benutzer` (GET/POST/PUT/DELETE,
   admin-only)
@@ -151,10 +224,11 @@ Alle Routen außer `POST /api/login` verlangen eine aktive Session
 (`requireAuth`-Middleware, `app.use("/api", requireAuth)` direkt nach
 `login`/`logout`); `fachbereiche` (POST/PUT/DELETE) und alle `benutzer`-Routen
 verlangen zusätzlich die Rolle Administrator (`requireRole("Administrator")`).
-`gruppen`, `massnahmen`, `teilnehmer` und `anwesenheiten` sind für Nutzer mit
-ausschließlich den Rollen Ausbilder/Fachbereichsleiter serverseitig auf deren
-zugewiesene Fachbereiche gefiltert (`isRestrictedUser()`/`fachbereichInScope()`
-in `server.js`) – sowohl beim Lesen (`WHERE ... IN (?)` bzw. Join-Filter) als
+`gruppen`, `massnahmen`, `teilnehmer`, `anwesenheiten`, `aktivitaeten` und
+`aktivitaeten/summary` sind für Nutzer mit ausschließlich den Rollen
+Ausbilder/Fachbereichsleiter serverseitig auf deren zugewiesene Fachbereiche gefiltert
+(`isRestrictedUser()`/`fachbereichInScope()` in `server.js`) – sowohl beim
+Lesen (`WHERE ... IN (?)` bzw. Join-Filter) als
 auch beim Schreiben (POST/PUT/DELETE prüfen den Fachbereich des Ziel- **und**
 bei PUT auch des Ausgangsdatensatzes, sonst 403). `GET /api/fachbereiche`
 bleibt für alle Rollen erreichbar (wird für Dropdowns/Filter auf anderen

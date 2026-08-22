@@ -64,21 +64,35 @@ function showPage(pageId) {
     targetId = defaultPage;
   }
 
+  if (targetId === "teilnehmende-aktivitaeten" && !currentAktivitaetTeilnehmerId) {
+    targetId = "teilnehmende";
+  }
+
   pages.forEach((page) => {
     page.classList.toggle("active", page.id === `page-${targetId}`);
   });
 
+  const activeNavPage = targetId === "teilnehmende-aktivitaeten" ? "teilnehmende" : targetId;
   navLinks.forEach((link) => {
-    link.classList.toggle("active", link.dataset.page === targetId);
+    link.classList.toggle("active", link.dataset.page === activeNavPage);
   });
 
-  breadcrumb.textContent = `Start / ${pageLabels[targetId]}`;
+  breadcrumb.textContent =
+    targetId === "teilnehmende-aktivitaeten"
+      ? "Start / Teilnehmende / Aktivitätenverlauf"
+      : `Start / ${pageLabels[targetId]}`;
 
   if (targetId === "dashboard") {
     loadDashboardStats();
   }
   if (targetId === "anwesenheiten") {
     ensureAwInitialized();
+  }
+  if (targetId === "teilnehmende" && tnRowEntries.length > 0) {
+    refreshTnAktivitaetBadges();
+  }
+  if (targetId === "teilnehmende-aktivitaeten") {
+    loadTeilnehmerAktivitaetenPage(currentAktivitaetTeilnehmerId);
   }
 }
 
@@ -871,6 +885,13 @@ async function loadTnMassnahmen() {
   }
 }
 
+async function initTnFilterOptions() {
+  await Promise.all([loadTnGruppen(), loadTnMassnahmen()]);
+  refreshTnGruppeOptions();
+  refreshTnMassnahmeOptions();
+  refreshTnVtOptions();
+}
+
 function tnMassnahmenForFachbereichUndGruppe() {
   const fachbereichId = tnFachbereichFilter.value;
   const gruppeId = tnGruppeFilter.value;
@@ -1051,6 +1072,43 @@ async function loadMassnahmeOptionsInto(selectElement, { includeVt = false } = {
   }
 }
 
+let tnAktivitaetSummary = new Map();
+
+async function loadTnAktivitaetSummary() {
+  try {
+    const response = await fetch("/api/aktivitaeten/summary");
+    if (!response.ok) {
+      throw new Error("Aktivitäten-Übersicht konnte nicht geladen werden.");
+    }
+    const rows = await response.json();
+    tnAktivitaetSummary = new Map(rows.map((row) => [row.TeilnehmerID, row]));
+  } catch (err) {
+    console.error(err);
+    tnAktivitaetSummary = new Map();
+  }
+}
+
+function updateAktivitaetBadge(badgeEl, teilnehmerId) {
+  const summary = tnAktivitaetSummary.get(teilnehmerId);
+  if (!summary || !summary.Anzahl) {
+    badgeEl.hidden = true;
+    return;
+  }
+  badgeEl.hidden = false;
+  badgeEl.textContent = summary.Anzahl;
+  badgeEl.classList.toggle("badge-aktuell", Boolean(summary.HatAktuelle));
+}
+
+async function refreshTnAktivitaetBadges() {
+  await loadTnAktivitaetSummary();
+  tnRowEntries.forEach(({ person, row }) => {
+    const badge = row.querySelector(".aktivitaet-badge");
+    if (badge) {
+      updateAktivitaetBadge(badge, person.ID);
+    }
+  });
+}
+
 async function loadTeilnehmer() {
   teilnehmerTableBody.innerHTML = "";
   const loadingRow = document.createElement("tr");
@@ -1061,7 +1119,7 @@ async function loadTeilnehmer() {
   teilnehmerTableBody.appendChild(loadingRow);
 
   try {
-    const response = await fetch("/api/teilnehmer");
+    const [response] = await Promise.all([fetch("/api/teilnehmer"), loadTnAktivitaetSummary()]);
     if (!response.ok) {
       throw new Error("Teilnehmende konnten nicht geladen werden.");
     }
@@ -1120,6 +1178,28 @@ async function loadTeilnehmer() {
       const actionsWrap = document.createElement("div");
       actionsWrap.className = "row-actions";
 
+      const historyBtnWrap = document.createElement("span");
+      historyBtnWrap.className = "history-btn-wrap";
+
+      const historyBtn = document.createElement("button");
+      historyBtn.type = "button";
+      historyBtn.className = "row-history-btn";
+      historyBtn.setAttribute("aria-label", `Aktivitäten von ${fullName} anzeigen`);
+      historyBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      `;
+      historyBtn.addEventListener("click", () => openTeilnehmerAktivitaeten(person));
+
+      const aktivitaetBadge = document.createElement("span");
+      aktivitaetBadge.className = "aktivitaet-badge";
+      aktivitaetBadge.hidden = true;
+      updateAktivitaetBadge(aktivitaetBadge, person.ID);
+
+      historyBtnWrap.append(historyBtn, aktivitaetBadge);
+
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "row-edit-btn";
@@ -1153,7 +1233,7 @@ async function loadTeilnehmer() {
         })
       );
 
-      actionsWrap.append(editBtn, deleteBtn);
+      actionsWrap.append(historyBtnWrap, editBtn, deleteBtn);
       actionsCell.appendChild(actionsWrap);
 
       row.append(vornameCell, nachnameCell, geburtsdatumCell, massnahmeCell, startCell, endeCell, emailCell, telefonCell, actionsCell);
@@ -1271,6 +1351,206 @@ editTeilnehmerForm.addEventListener("submit", async (event) => {
   } catch (err) {
     editTeilnehmerFormMessage.textContent = err.message;
     editTeilnehmerFormMessage.className = "form-message error";
+  }
+});
+
+// Aktivitätenverlauf (Unterseite von Teilnehmende, Master-Detail)
+
+const aktZurueckBtn = document.getElementById("aktZurueckBtn");
+const aktTnName = document.getElementById("aktTnName");
+const aktTnVt = document.getElementById("aktTnVt");
+const aktFormTnName = document.getElementById("aktFormTnName");
+const aktFormTnVt = document.getElementById("aktFormTnVt");
+const aktFormZeitstempel = document.getElementById("aktFormZeitstempel");
+const aktivitaetListe = document.getElementById("aktivitaetListe");
+const aktivitaetDetailPlaceholder = document.getElementById("aktivitaetDetailPlaceholder");
+const aktivitaetDetailView = document.getElementById("aktivitaetDetailView");
+const aktDetailArt = document.getElementById("aktDetailArt");
+const aktDetailZeitstempel = document.getElementById("aktDetailZeitstempel");
+const aktDetailBemerkung = document.getElementById("aktDetailBemerkung");
+const aktDetailWiedervorlage = document.getElementById("aktDetailWiedervorlage");
+const aktNeueBtn = document.getElementById("aktNeueBtn");
+const aktivitaetForm = document.getElementById("aktivitaetForm");
+const aktivitaetFormMessage = document.getElementById("aktivitaetFormMessage");
+const aktAbbrechenBtn = document.getElementById("aktAbbrechenBtn");
+
+let currentAktivitaetTeilnehmerId = null;
+let currentAktivitaetTeilnehmer = null;
+
+function openTeilnehmerAktivitaeten(person) {
+  currentAktivitaetTeilnehmerId = person.ID;
+  currentAktivitaetTeilnehmer = person;
+
+  if (window.location.hash === "#teilnehmende-aktivitaeten") {
+    // Hash ist unverändert (z. B. nach Reload auf einer alten Aktivitäten-URL) -
+    // ein erneutes Setzen desselben Hash-Werts löst kein hashchange aus,
+    // daher hier direkt die Seite anzeigen.
+    showPage("teilnehmende-aktivitaeten");
+  } else {
+    window.location.hash = "teilnehmende-aktivitaeten";
+  }
+}
+
+aktZurueckBtn.addEventListener("click", () => {
+  window.location.hash = "teilnehmende";
+});
+
+function formatDateTimeDE(datetimeStr) {
+  if (!datetimeStr) {
+    return "";
+  }
+  const date = new Date(datetimeStr.replace(" ", "T"));
+  return date.toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function clearAktivitaetListSelection() {
+  aktivitaetListe.querySelectorAll(".aktivitaet-list-item.active").forEach((item) => item.classList.remove("active"));
+}
+
+function showAktivitaetPlaceholder() {
+  aktivitaetDetailPlaceholder.hidden = false;
+  aktivitaetDetailView.hidden = true;
+  aktivitaetForm.hidden = true;
+  clearAktivitaetListSelection();
+}
+
+function showAktivitaetDetail(aktivitaet) {
+  aktivitaetDetailPlaceholder.hidden = true;
+  aktivitaetForm.hidden = true;
+  aktivitaetDetailView.hidden = false;
+
+  aktDetailArt.textContent = aktivitaet.Art;
+  aktDetailZeitstempel.textContent = formatDateTimeDE(aktivitaet.ErstelltAm);
+  aktDetailBemerkung.textContent = aktivitaet.Bemerkung || "–";
+  aktDetailWiedervorlage.textContent = aktivitaet.Wiedervorlage ? formatDateDE(aktivitaet.Wiedervorlage) : "–";
+
+  aktivitaetListe.querySelectorAll(".aktivitaet-list-item").forEach((item) => {
+    item.classList.toggle("active", Number(item.dataset.id) === aktivitaet.ID);
+  });
+}
+
+function showAktivitaetForm() {
+  aktivitaetDetailPlaceholder.hidden = true;
+  aktivitaetDetailView.hidden = true;
+  aktivitaetForm.hidden = false;
+
+  aktivitaetForm.reset();
+  aktivitaetFormMessage.textContent = "";
+  aktivitaetFormMessage.className = "form-message";
+
+  const person = currentAktivitaetTeilnehmer;
+  aktFormTnName.textContent = person ? `${person.Vorname} ${person.Nachname}` : "";
+  aktFormTnVt.textContent = (person && person.VT) || "";
+  aktFormZeitstempel.textContent = new Date().toLocaleString("de-DE");
+
+  clearAktivitaetListSelection();
+}
+
+aktNeueBtn.addEventListener("click", showAktivitaetForm);
+aktAbbrechenBtn.addEventListener("click", showAktivitaetPlaceholder);
+
+function renderAktivitaetListe(aktivitaeten) {
+  aktivitaetListe.innerHTML = "";
+
+  if (aktivitaeten.length === 0) {
+    const emptyItem = document.createElement("li");
+    emptyItem.className = "aktivitaet-list-empty";
+    emptyItem.textContent = "Noch keine Aktivitäten vorhanden.";
+    aktivitaetListe.appendChild(emptyItem);
+    return;
+  }
+
+  aktivitaeten.forEach((aktivitaet) => {
+    const item = document.createElement("li");
+    item.className = "aktivitaet-list-item";
+    item.dataset.id = aktivitaet.ID;
+
+    const datumSpan = document.createElement("span");
+    datumSpan.className = "aktivitaet-list-datum";
+    datumSpan.textContent = formatDateTimeDE(aktivitaet.ErstelltAm);
+
+    const artSpan = document.createElement("span");
+    artSpan.className = "aktivitaet-list-art";
+    artSpan.textContent = aktivitaet.Art;
+
+    item.append(datumSpan, artSpan);
+    item.addEventListener("click", () => showAktivitaetDetail(aktivitaet));
+    aktivitaetListe.appendChild(item);
+  });
+}
+
+async function loadTeilnehmerAktivitaetenPage(teilnehmerId) {
+  const person = currentAktivitaetTeilnehmer;
+  aktTnName.textContent = person ? `${person.Vorname} ${person.Nachname}` : "";
+  aktTnVt.textContent = (person && person.VT) || "";
+
+  showAktivitaetPlaceholder();
+
+  aktivitaetListe.innerHTML = "";
+  const loadingItem = document.createElement("li");
+  loadingItem.className = "aktivitaet-list-empty";
+  loadingItem.textContent = "Lädt…";
+  aktivitaetListe.appendChild(loadingItem);
+
+  try {
+    const response = await fetch(`/api/aktivitaeten?teilnehmerId=${teilnehmerId}`);
+    if (!response.ok) {
+      throw new Error("Aktivitäten konnten nicht geladen werden.");
+    }
+    const aktivitaeten = await response.json();
+    renderAktivitaetListe(aktivitaeten);
+  } catch (err) {
+    console.error(err);
+    aktivitaetListe.innerHTML = "";
+    const errorItem = document.createElement("li");
+    errorItem.className = "aktivitaet-list-empty";
+    errorItem.textContent = "Fehler beim Laden der Aktivitäten.";
+    aktivitaetListe.appendChild(errorItem);
+  }
+}
+
+aktivitaetForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!currentAktivitaetTeilnehmerId) {
+    return;
+  }
+
+  const formData = new FormData(aktivitaetForm);
+  const payload = {
+    TeilnehmerID: currentAktivitaetTeilnehmerId,
+    Art: formData.get("Art"),
+    Bemerkung: formData.get("Bemerkung").trim(),
+    Wiedervorlage: formData.get("Wiedervorlage") || null,
+  };
+
+  aktivitaetFormMessage.textContent = "";
+  aktivitaetFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/aktivitaeten", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Aktivität konnte nicht gespeichert werden.");
+    }
+
+    const createdAktivitaet = await response.json();
+    await loadTeilnehmerAktivitaetenPage(currentAktivitaetTeilnehmerId);
+    showAktivitaetDetail(createdAktivitaet);
+  } catch (err) {
+    aktivitaetFormMessage.textContent = err.message;
+    aktivitaetFormMessage.classList.add("error");
   }
 });
 
@@ -2391,8 +2671,7 @@ function initializeApp() {
   loadMassnahmeOptionsInto(tnMassnahmeSelect, { includeVt: true });
   loadMassnahmeOptionsInto(editTnMassnahmeSelect, { includeVt: true });
   loadFachbereichOptionsInto(tnFachbereichFilter);
-  loadTnGruppen();
-  loadTnMassnahmen();
+  initTnFilterOptions();
   loadTeilnehmer();
 
   if (currentUser.roles.includes("Administrator")) {

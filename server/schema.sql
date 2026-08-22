@@ -77,3 +77,15 @@ INSERT IGNORE INTO anwesenheitsstatus (ID, Bezeichnung, Kurzzeichen) VALUES
   (4, 'Krank mit AU', 'K'),
   (5, 'Urlaub', 'U'),
   (6, 'Praktikum', 'PR');
+
+CREATE TABLE IF NOT EXISTS aktivitaet (
+  ID INT NOT NULL AUTO_INCREMENT,
+  TeilnehmerID INT NOT NULL,
+  Art VARCHAR(50) NOT NULL,
+  Bemerkung TEXT,
+  Wiedervorlage DATE DEFAULT NULL,
+  ErstelltAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (ID),
+  KEY fk_Aktivitaet_Teilnehmer_idx (TeilnehmerID),
+  CONSTRAINT fk_Aktivitaet_Teilnehmer FOREIGN KEY (TeilnehmerID) REFERENCES teilnehmer (ID) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;

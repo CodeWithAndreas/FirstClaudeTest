@@ -3,30 +3,32 @@
 Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Zwei weitere Icons je Zeile auf der
-Benutzer-Seite: Passwort zurücksetzen (ohne den vollständigen
-Bearbeiten-Dialog zu öffnen) sowie Benutzerkonto aktivieren/deaktivieren
-(siehe Abschnitt "Login, Rollen und Benutzerverwaltung" weiter unten).
-Für Letzteres wurde die Tabelle `benutzer` um die Spalte `Aktiv`
-erweitert – das übernimmt `bootstrapDatabase()` in `server.js` beim
-Serverstart automatisch und idempotent, es ist also keine manuelle
-DB-Migration nötig.
+**Wichtig für eine neue Session:** Löschrechte für Teilnehmende,
+Maßnahmen und Gruppen sind jetzt rollenabhängig differenziert: Ausbilder
+und Fachbereichsleiter dürfen keine Teilnehmenden/Maßnahmen mehr löschen,
+Ausbilder zusätzlich keine Gruppen; Fachbereichsleiter dürfen eine Gruppe
+nur löschen, wenn ihr keine Maßnahme mehr zugeordnet ist. Details siehe
+Unterabschnitt "Differenzierte Löschrechte" unter "Login, Rollen und
+Benutzerverwaltung" weiter unten.
 
-**Historische Randnotiz (bewusst dokumentiert, damit es nicht erneut
-versucht wird):** In einer früheren Session wurden testweise
-rollenabhängige Löschrechte für Teilnehmende/Maßnahmen/Gruppen eingebaut
-(Ausbilder/Fachbereichsleiter dürfen unterschiedlich viel löschen) samt
-Umstellung der FK `fk_Massnahme_Gruppe1` auf `ON DELETE SET NULL`, damit
-eine Gruppe trotz zugeordneter Maßnahmen löschbar blieb. Das führte zu
-mehreren Folgefehlern (stale Dropdown-/Filter-Caches auf mehreren
-Seiten, siehe Git-Historie) und wurde auf ausdrücklichen Wunsch
-vollständig zurückgebaut. Der aktuelle, gewollte Zustand: Alle
-eingeschränkten Nutzer (Ausbilder wie Fachbereichsleiter) haben
-identische CRUD-Rechte innerhalb ihrer Fachbereiche, keine
-rollenabhängige Löschrechte-Differenzierung; die FK ist wieder auf den
-Standard ohne `ON DELETE`-Klausel (`RESTRICT`), Löschen einer Gruppe mit
-noch zugeordneten Maßnahmen schlägt daher bewusst fehl statt sie zu
-"verwaisen". Unverändert (schon vor jener Session so) bleibt, dass eine
+**Historische Randnotiz zu diesem Thema (bewusst dokumentiert als
+Warnung für zukünftige Änderungen an dieser Stelle):** In einer
+früheren Session wurde ein ganz ähnliches Feature bereits einmal
+eingebaut, dabei aber zusätzlich die FK `fk_Massnahme_Gruppe1` auf
+`ON DELETE SET NULL` umgestellt, damit eine Gruppe trotz zugeordneter
+Maßnahmen löschbar blieb. Das führte zu mehreren Folgefehlern (stale
+Dropdown-/Filter-Caches auf mehreren Seiten, siehe Git-Historie) und
+wurde damals auf ausdrücklichen Wunsch vollständig zurückgebaut. Bei
+der jetzigen (zweiten, erfolgreichen) Umsetzung wurde die FK bewusst
+**nicht** angetastet (bleibt `RESTRICT`) – genau das war die
+Fehlerursache beim ersten Versuch. Eine Gruppe mit noch zugeordneten
+Maßnahmen lässt sich also weiterhin grundsätzlich nicht löschen; für
+Fachbereichsleiter wird das zusätzlich vorab per eigener
+`COUNT`-Abfrage geprüft, um statt eines generischen FK-Fehlers eine
+klare 400-Fehlermeldung zu liefern. **Lehre für künftige Änderungen an
+diesem Feature:** Die FK auf `SET NULL` umzustellen (oder Maßnahmen
+beim Gruppen-Löschen zu "verwaisen") nicht erneut versuchen, ohne die
+damaligen Folgefehler zu berücksichtigen. Unverändert bleibt, dass eine
 Maßnahme beim Anlegen/Bearbeiten bewusst *ohne* Gruppe gespeichert
 werden kann (Dropdown-Option „– keine Gruppe –“) – das ist ein
 eigenständiges, gewolltes Formularverhalten.
@@ -285,14 +287,51 @@ Seiten gebraucht), liefert eingeschränkten Nutzern aber nur ihre eigenen
 Fachbereiche.
 
 Alle eingeschränkten Nutzer (Ausbilder wie Fachbereichsleiter) haben
-aktuell identische Rechte innerhalb ihrer zugewiesenen Fachbereiche –
-volles CRUD auf `gruppen`, `massnahmen`, `teilnehmer`, `anwesenheiten`
-und `aktivitaeten`, keine rollenabhängige Differenzierung zwischen den
-beiden Rollen. (In dieser Session war testweise eine feinere
-Löschrechte-Unterscheidung zwischen Ausbilder und Fachbereichsleiter
-sowie eine `ON DELETE SET NULL`-Umstellung für Maßnahmen eingebaut,
-wurde aber wegen mehrerer Folgefehler wieder vollständig zurückgebaut,
-siehe Hinweis am Dateianfang.)
+innerhalb ihrer zugewiesenen Fachbereiche identisches CRUD auf
+`gruppen`, `massnahmen`, `teilnehmer`, `anwesenheiten` und
+`aktivitaeten` – **mit Ausnahme des Löschens** von Gruppen/Maßnahmen/
+Teilnehmenden, das seit dieser Session rollenabhängig differenziert ist
+(siehe Unterabschnitt "Differenzierte Löschrechte" weiter unten).
+
+### Differenzierte Löschrechte (Gruppen/Maßnahmen/Teilnehmende)
+
+- `DELETE /api/teilnehmer/:id` und `DELETE /api/massnahmen/:id` sind für
+  restringierte Nutzer (Ausbilder **und** Fachbereichsleiter) komplett
+  gesperrt (403 „Keine Berechtigung zum Löschen von …“), unabhängig vom
+  Fachbereich. Nur Nutzer mit einer der `UNRESTRICTED_ROLLEN`
+  (Administrator, Lehrgangsorganisation, Bildungsstättenleiter) dürfen
+  löschen.
+- `DELETE /api/gruppen/:id`: Ausbilder ist es komplett untersagt (403,
+  Prüfung über `hasRole(req, "Fachbereichsleiter")` in `server.js`).
+  Fachbereichsleiter darf eine Gruppe nur löschen, wenn ihr keine
+  Maßnahme mehr zugeordnet ist – geprüft per expliziter
+  `SELECT COUNT(*) FROM massnahme WHERE GruppeID = ?` **vor** dem
+  eigentlichen `DELETE`, damit eine klare 400-Fehlermeldung („Gruppe
+  hat noch zugeordnete Maßnahmen und kann nicht gelöscht werden.“)
+  statt eines generischen FK-Fehlers kommt. Hat ein Nutzer sowohl
+  Ausbilder- als auch Fachbereichsleiter-Rolle, gilt die
+  Fachbereichsleiter-Berechtigung (die Rolle schaltet frei, nicht ein).
+  Für nicht-restringierte Rollen bleibt das Verhalten unverändert: die
+  FK `fk_Massnahme_Gruppe1` ist weiterhin `RESTRICT` (kein
+  `ON DELETE`-Zusatz), Löschen einer Gruppe mit noch zugeordneten
+  Maßnahmen schlägt also serverseitig so oder so fehl.
+- `GET /api/gruppen` liefert dafür zusätzlich `MassnahmenAnzahl` je
+  Zeile (Subquery `SELECT COUNT(*) FROM massnahme WHERE GruppeID = g.ID`),
+  damit der Client das Lösch-Icon pro Zeile passend ein-/ausblenden kann.
+- Clientseitig (`js/main.js`) blenden `canDeleteMassnahmenOderTeilnehmer()`
+  und `canDeleteGruppe(gruppe)` (Abschnitt vor `applyRolePermissions()`)
+  das jeweilige Lösch-Icon in den drei Tabellen komplett aus, statt es
+  nur zu deaktivieren – das Icon erscheint für die betroffenen Rollen gar
+  nicht erst im DOM. Die serverseitige Prüfung ist trotzdem die
+  eigentliche Absicherung, die clientseitige nur UX (analog zum
+  bestehenden Muster bei den Fachbereichs-Berechtigungen).
+- Alle Fälle wurden nach der Umsetzung live gegen den laufenden Server
+  per curl verifiziert (Ausbilder-Sperre auf allen drei Routen,
+  Fachbereichsleiter-Sperre bei Teilnehmenden/Maßnahmen, 400 bei
+  Gruppe mit abhängigen Maßnahmen, 403 bei fremdem Fachbereich,
+  erfolgreiches Löschen einer eigens angelegten leeren Test-Gruppe als
+  Fachbereichsleiter) – mit eigens angelegten und danach wieder
+  gelöschten Testbenutzern/-daten, ohne echte Datensätze zu verändern.
 
 ### Login, Rollen und Benutzerverwaltung
 

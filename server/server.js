@@ -147,6 +147,10 @@ function isRestrictedUser(req) {
   return !roles.some((r) => UNRESTRICTED_ROLLEN.includes(r));
 }
 
+function hasRole(req, roleName) {
+  return (req.session.roles || []).includes(roleName);
+}
+
 function fachbereichInScope(req, fachbereichId) {
   if (!isRestrictedUser(req)) {
     return true;
@@ -658,7 +662,8 @@ app.delete("/api/fachbereiche/:id", requireRole("Administrator"), async (req, re
 
 app.get("/api/gruppen", async (req, res) => {
   try {
-    let query = `SELECT g.ID, g.Bezeichnung, g.Kennung, g.FachbereichID, f.BezeichnungLang AS FachbereichBezeichnung
+    let query = `SELECT g.ID, g.Bezeichnung, g.Kennung, g.FachbereichID, f.BezeichnungLang AS FachbereichBezeichnung,
+              (SELECT COUNT(*) FROM massnahme m WHERE m.GruppeID = g.ID) AS MassnahmenAnzahl
        FROM gruppe g
        LEFT JOIN fachbereich f ON f.ID = g.FachbereichID`;
     const params = [];
@@ -771,6 +776,15 @@ app.delete("/api/gruppen/:id", async (req, res) => {
       }
       if (!fachbereichInScope(req, existing.FachbereichID)) {
         return res.status(403).json({ error: "Keine Berechtigung für diesen Fachbereich." });
+      }
+      if (!hasRole(req, "Fachbereichsleiter")) {
+        return res.status(403).json({ error: "Keine Berechtigung zum Löschen von Gruppen." });
+      }
+      const [countRows] = await pool.query("SELECT COUNT(*) AS anzahl FROM massnahme WHERE GruppeID = ?", [id]);
+      if (countRows[0].anzahl > 0) {
+        return res
+          .status(400)
+          .json({ error: "Gruppe hat noch zugeordnete Maßnahmen und kann nicht gelöscht werden." });
       }
     }
 
@@ -911,15 +925,7 @@ app.delete("/api/massnahmen/:id", async (req, res) => {
 
   try {
     if (isRestrictedUser(req)) {
-      const [existingRows] = await pool.query("SELECT GruppeID FROM massnahme WHERE ID = ?", [id]);
-      const existing = existingRows[0];
-      if (!existing) {
-        return res.status(404).json({ error: "Maßnahme wurde nicht gefunden." });
-      }
-      const fachbereichId = await resolveFachbereichForGruppe(existing.GruppeID);
-      if (!fachbereichInScope(req, fachbereichId)) {
-        return res.status(403).json({ error: "Keine Berechtigung für diesen Fachbereich." });
-      }
+      return res.status(403).json({ error: "Keine Berechtigung zum Löschen von Maßnahmen." });
     }
 
     const [result] = await pool.query("DELETE FROM massnahme WHERE ID = ?", [id]);
@@ -1065,15 +1071,7 @@ app.delete("/api/teilnehmer/:id", async (req, res) => {
 
   try {
     if (isRestrictedUser(req)) {
-      const [existingRows] = await pool.query("SELECT MassnahmeID FROM teilnehmer WHERE ID = ?", [id]);
-      const existing = existingRows[0];
-      if (!existing) {
-        return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
-      }
-      const fachbereichId = await resolveFachbereichForMassnahme(existing.MassnahmeID);
-      if (!fachbereichInScope(req, fachbereichId)) {
-        return res.status(403).json({ error: "Keine Berechtigung für diesen Fachbereich." });
-      }
+      return res.status(403).json({ error: "Keine Berechtigung zum Löschen von Teilnehmenden." });
     }
 
     const [result] = await pool.query("DELETE FROM teilnehmer WHERE ID = ?", [id]);

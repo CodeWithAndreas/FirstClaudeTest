@@ -487,7 +487,10 @@ async function loadGruppen() {
         })
       );
 
-      actionsWrap.append(editBtn, deleteBtn);
+      actionsWrap.append(editBtn);
+      if (canDeleteGruppe(gruppe)) {
+        actionsWrap.append(deleteBtn);
+      }
       actionsCell.appendChild(actionsWrap);
 
       row.append(bezeichnungCell, kennungCell, fachbereichCell, actionsCell);
@@ -719,7 +722,10 @@ async function loadMassnahmen() {
         })
       );
 
-      actionsWrap.append(editBtn, deleteBtn);
+      actionsWrap.append(editBtn);
+      if (canDeleteMassnahmenOderTeilnehmer()) {
+        actionsWrap.append(deleteBtn);
+      }
       actionsCell.appendChild(actionsWrap);
 
       row.append(bezeichnungCell, vtCell, gruppeCell, zertCell, startCell, endeCell, actionsCell);
@@ -1233,7 +1239,10 @@ async function loadTeilnehmer() {
         })
       );
 
-      actionsWrap.append(historyBtnWrap, editBtn, deleteBtn);
+      actionsWrap.append(historyBtnWrap, editBtn);
+      if (canDeleteMassnahmenOderTeilnehmer()) {
+        actionsWrap.append(deleteBtn);
+      }
       actionsCell.appendChild(actionsWrap);
 
       row.append(vornameCell, nachnameCell, geburtsdatumCell, massnahmeCell, startCell, endeCell, emailCell, telefonCell, actionsCell);
@@ -2871,6 +2880,26 @@ function initializeApp() {
   }
 
   handleRouteChange();
+}
+
+const UNRESTRICTED_ROLLEN = ["Administrator", "Lehrgangsorganisation", "Bildungsstättenleiter"];
+
+function isRestrictedUser() {
+  return !currentUser || !currentUser.roles.some((r) => UNRESTRICTED_ROLLEN.includes(r));
+}
+
+function canDeleteMassnahmenOderTeilnehmer() {
+  return !isRestrictedUser();
+}
+
+function canDeleteGruppe(gruppe) {
+  if (!isRestrictedUser()) {
+    return true;
+  }
+  if (!currentUser.roles.includes("Fachbereichsleiter")) {
+    return false;
+  }
+  return Number(gruppe.MassnahmenAnzahl) === 0;
 }
 
 function applyRolePermissions(user) {

@@ -117,6 +117,21 @@ umgesetzt über `loadMassnahmeOptionsInto(selectElement, { includeVt: true })`
 den Anwesenheiten-Filter verwendet). Die Maßnahme-Spalte in der
 Teilnehmende-Tabelle zeigt denselben "Bezeichnung VT"-Text.
 
+Die Teilnehmende-Seite hat zusätzlich dieselbe Filterleiste wie die
+Anwesenheiten-Seite (Fachbereich/Gruppe/Maßnahmebezeichnung/VT/Name +
+Reset-Button, kaskadierend: Gruppe nur Gruppen des gewählten Fachbereichs,
+Maßnahmebezeichnung/VT entsprechend weiter eingegrenzt). Umgesetzt als
+1:1-Kopie des Anwesenheiten-Filtermusters unter eigenem `tn`-Präfix
+(`tnFachbereichFilter`/`tnGruppeFilter`/... , `refreshTnGruppeOptions`/
+`refreshTnMassnahmeOptions`/`refreshTnVtOptions`, `tnMatchesFilter`,
+`applyTnFilters` in `js/main.js`): `loadTeilnehmer()` baut wie
+`buildAwTableRows()` alle Zeilen einmalig und merkt sie sich in
+`tnRowEntries`; Filteränderungen schalten nur noch `row.style.display` um,
+ohne die Tabelle neu aufzubauen. Eigene `tnGruppen`/`tnMassnahmen`-Arrays
+(via `loadTnGruppen()`/`loadTnMassnahmen()`) treiben die Kaskade, das
+Fachbereich-Dropdown nutzt den bereits vorhandenen generischen Helper
+`loadFachbereichOptionsInto()`.
+
 API-Routen (alle in `server/server.js`, alle unter `/api/...`):
 
 - `fachbereiche`: GET, POST, PUT `:id`, DELETE `:id`

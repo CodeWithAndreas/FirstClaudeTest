@@ -186,6 +186,43 @@
         <section id="page-teilnehmende" class="page">
           <h2>Teilnehmende</h2>
 
+          <div class="filter-bar">
+            <div class="form-row">
+              <label for="tnFachbereichFilter">Fachbereich</label>
+              <select id="tnFachbereichFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="tnGruppeFilter">Gruppe</label>
+              <select id="tnGruppeFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="tnMassnahmeFilter">Maßnahmebezeichnung</label>
+              <select id="tnMassnahmeFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="tnVtFilter">VT</label>
+              <select id="tnVtFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row filter-name">
+              <label for="tnNameFilter">Name</label>
+              <input type="text" id="tnNameFilter" placeholder="Name suchen…">
+            </div>
+
+            <button type="button" id="tnResetFilterBtn" class="filter-reset-btn">Filter zurücksetzen</button>
+          </div>
+
           <div class="table-scroll">
             <table class="data-table">
               <thead>

@@ -833,6 +833,202 @@ const editTeilnehmerFormMessage = document.getElementById("editTeilnehmerFormMes
 const editTeilnehmerCancelBtn = document.getElementById("editTeilnehmerCancelBtn");
 const editTnMassnahmeSelect = document.getElementById("editTnMassnahmeID");
 
+const tnFachbereichFilter = document.getElementById("tnFachbereichFilter");
+const tnGruppeFilter = document.getElementById("tnGruppeFilter");
+const tnMassnahmeFilter = document.getElementById("tnMassnahmeFilter");
+const tnVtFilter = document.getElementById("tnVtFilter");
+const tnNameFilter = document.getElementById("tnNameFilter");
+const tnResetFilterBtn = document.getElementById("tnResetFilterBtn");
+
+let tnRowEntries = [];
+let tnFilterEmptyRow = null;
+let tnGruppen = [];
+let tnMassnahmen = [];
+
+async function loadTnGruppen() {
+  try {
+    const response = await fetch("/api/gruppen");
+    if (!response.ok) {
+      throw new Error("Gruppen konnten nicht geladen werden.");
+    }
+    tnGruppen = await response.json();
+  } catch (err) {
+    console.error(err);
+    tnGruppen = [];
+  }
+}
+
+async function loadTnMassnahmen() {
+  try {
+    const response = await fetch("/api/massnahmen");
+    if (!response.ok) {
+      throw new Error("Maßnahmen konnten nicht geladen werden.");
+    }
+    tnMassnahmen = await response.json();
+  } catch (err) {
+    console.error(err);
+    tnMassnahmen = [];
+  }
+}
+
+function tnMassnahmenForFachbereichUndGruppe() {
+  const fachbereichId = tnFachbereichFilter.value;
+  const gruppeId = tnGruppeFilter.value;
+
+  return tnMassnahmen.filter((massnahme) => {
+    if (gruppeId) {
+      return String(massnahme.GruppeID || "") === gruppeId;
+    }
+    if (fachbereichId) {
+      const gruppe = tnGruppen.find((g) => g.ID === massnahme.GruppeID);
+      return Boolean(gruppe) && String(gruppe.FachbereichID || "") === fachbereichId;
+    }
+    return true;
+  });
+}
+
+function refreshTnGruppeOptions() {
+  const fachbereichId = tnFachbereichFilter.value;
+  const gruppen = fachbereichId
+    ? tnGruppen.filter((g) => String(g.FachbereichID || "") === fachbereichId)
+    : tnGruppen;
+
+  const currentValue = tnGruppeFilter.value;
+  tnGruppeFilter.querySelectorAll("option[data-gruppe]").forEach((option) => option.remove());
+
+  gruppen
+    .slice()
+    .sort((a, b) => a.Bezeichnung.localeCompare(b.Bezeichnung, "de"))
+    .forEach((gruppe) => {
+      const option = document.createElement("option");
+      option.value = gruppe.ID;
+      option.textContent = gruppe.Bezeichnung;
+      option.dataset.gruppe = "true";
+      tnGruppeFilter.appendChild(option);
+    });
+
+  tnGruppeFilter.value = gruppen.some((g) => String(g.ID) === currentValue) ? currentValue : "";
+}
+
+function refreshTnMassnahmeOptions() {
+  const bezeichnungen = [...new Set(tnMassnahmenForFachbereichUndGruppe().map((m) => m.Bezeichnung).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, "de")
+  );
+
+  const currentValue = tnMassnahmeFilter.value;
+  tnMassnahmeFilter.querySelectorAll("option[data-massnahme]").forEach((option) => option.remove());
+
+  bezeichnungen.forEach((bezeichnung) => {
+    const option = document.createElement("option");
+    option.value = bezeichnung;
+    option.textContent = bezeichnung;
+    option.dataset.massnahme = "true";
+    tnMassnahmeFilter.appendChild(option);
+  });
+
+  tnMassnahmeFilter.value = bezeichnungen.includes(currentValue) ? currentValue : "";
+}
+
+function refreshTnVtOptions() {
+  const massnahmeBezeichnung = tnMassnahmeFilter.value;
+  const relevant = tnMassnahmenForFachbereichUndGruppe().filter(
+    (m) => !massnahmeBezeichnung || m.Bezeichnung === massnahmeBezeichnung
+  );
+  const vtValues = [...new Set(relevant.map((m) => m.VT).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "de", { numeric: true })
+  );
+
+  const currentValue = tnVtFilter.value;
+  tnVtFilter.querySelectorAll("option[data-vt]").forEach((option) => option.remove());
+
+  vtValues.forEach((vt) => {
+    const option = document.createElement("option");
+    option.value = vt;
+    option.textContent = vt;
+    option.dataset.vt = "true";
+    tnVtFilter.appendChild(option);
+  });
+
+  tnVtFilter.value = vtValues.includes(currentValue) ? currentValue : "";
+}
+
+function tnMatchesFilter(person) {
+  const fachbereichId = tnFachbereichFilter.value;
+  const gruppeId = tnGruppeFilter.value;
+  const massnahmeBezeichnung = tnMassnahmeFilter.value;
+  const vt = tnVtFilter.value;
+  const nameQuery = tnNameFilter.value.trim().toLowerCase();
+
+  if (fachbereichId && String(person.FachbereichID || "") !== fachbereichId) {
+    return false;
+  }
+  if (gruppeId && String(person.GruppeID || "") !== gruppeId) {
+    return false;
+  }
+  if (massnahmeBezeichnung && (person.MassnahmeBezeichnung || "") !== massnahmeBezeichnung) {
+    return false;
+  }
+  if (vt && (person.VT || "") !== vt) {
+    return false;
+  }
+  if (nameQuery) {
+    const fullName = `${person.Vorname} ${person.Nachname}`.toLowerCase();
+    if (!fullName.includes(nameQuery)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function applyTnFilters() {
+  let visibleCount = 0;
+
+  tnRowEntries.forEach(({ person, row }) => {
+    const visible = tnMatchesFilter(person);
+    row.style.display = visible ? "" : "none";
+    if (visible) {
+      visibleCount++;
+    }
+  });
+
+  if (tnFilterEmptyRow) {
+    tnFilterEmptyRow.style.display = visibleCount === 0 ? "" : "none";
+  }
+}
+
+tnFachbereichFilter.addEventListener("change", () => {
+  refreshTnGruppeOptions();
+  refreshTnMassnahmeOptions();
+  refreshTnVtOptions();
+  applyTnFilters();
+});
+
+tnGruppeFilter.addEventListener("change", () => {
+  refreshTnMassnahmeOptions();
+  refreshTnVtOptions();
+  applyTnFilters();
+});
+
+tnMassnahmeFilter.addEventListener("change", () => {
+  refreshTnVtOptions();
+  applyTnFilters();
+});
+
+tnVtFilter.addEventListener("change", applyTnFilters);
+tnNameFilter.addEventListener("input", applyTnFilters);
+
+tnResetFilterBtn.addEventListener("click", () => {
+  tnFachbereichFilter.value = "";
+  tnGruppeFilter.value = "";
+  tnMassnahmeFilter.value = "";
+  tnVtFilter.value = "";
+  tnNameFilter.value = "";
+  refreshTnGruppeOptions();
+  refreshTnMassnahmeOptions();
+  refreshTnVtOptions();
+  applyTnFilters();
+});
+
 async function loadMassnahmeOptionsInto(selectElement, { includeVt = false } = {}) {
   try {
     const response = await fetch("/api/massnahmen");
@@ -872,6 +1068,7 @@ async function loadTeilnehmer() {
     const teilnehmer = await response.json();
 
     teilnehmerTableBody.innerHTML = "";
+    tnRowEntries = [];
 
     if (teilnehmer.length === 0) {
       const emptyRow = document.createElement("tr");
@@ -882,6 +1079,14 @@ async function loadTeilnehmer() {
       teilnehmerTableBody.appendChild(emptyRow);
       return;
     }
+
+    tnFilterEmptyRow = document.createElement("tr");
+    const filterEmptyCell = document.createElement("td");
+    filterEmptyCell.colSpan = 9;
+    filterEmptyCell.textContent = "Keine Teilnehmenden gefunden.";
+    tnFilterEmptyRow.appendChild(filterEmptyCell);
+    tnFilterEmptyRow.style.display = "none";
+    teilnehmerTableBody.appendChild(tnFilterEmptyRow);
 
     teilnehmer.forEach((person) => {
       const row = document.createElement("tr");
@@ -953,7 +1158,10 @@ async function loadTeilnehmer() {
 
       row.append(vornameCell, nachnameCell, geburtsdatumCell, massnahmeCell, startCell, endeCell, emailCell, telefonCell, actionsCell);
       teilnehmerTableBody.appendChild(row);
+      tnRowEntries.push({ person, row });
     });
+
+    applyTnFilters();
   } catch (err) {
     console.error(err);
     teilnehmerTableBody.innerHTML = "";
@@ -2182,6 +2390,9 @@ function initializeApp() {
   loadMassnahmen();
   loadMassnahmeOptionsInto(tnMassnahmeSelect, { includeVt: true });
   loadMassnahmeOptionsInto(editTnMassnahmeSelect, { includeVt: true });
+  loadFachbereichOptionsInto(tnFachbereichFilter);
+  loadTnGruppen();
+  loadTnMassnahmen();
   loadTeilnehmer();
 
   if (currentUser.roles.includes("Administrator")) {

@@ -3,14 +3,22 @@
 Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Das Dashboard hat jetzt unter den 4
-Statistikkarten einen zweispaltigen Bereich: links eine persönliche
-**Wiedervorlagen-Liste** (erster Baustein eines künftigen
-Nachrichtensystems, siehe Unterabschnitt "Wiedervorlage-Nachrichtenliste
-auf dem Dashboard" weiter unten), rechts ein Platzhalter für spätere
-"normale Nachrichten". Dafür wurde die Tabelle `aktivitaet` um
-`BearbeiterID` und `WiedervorlageErledigt` erweitert (Migration läuft
-wie bei `benutzer.Aktiv` idempotent über `bootstrapDatabase()`).
+**Wichtig für eine neue Session:** Neue Rolle **Auditor** plus neuer,
+aufklappbarer Sidebar-Menüpunkt **„Audit"** mit 9 Unterseiten
+(Maßnahmen, Teilnehmer, Anwesenheiten, Lernmaterialien,
+Leistungskontrollen, Praktika, Interessentenbetreuung, Teilnehmenden
+Feedback, Vermittlung) – aktuell reine Platzhalterseiten (Überschrift +
+Hinweistext, kein Inhalt). Auditor sieht **ausschließlich**
+diesen Audit-Bereich (alle anderen Seiten inkl. Dashboard sind
+ausgeblendet und auch per direktem Hash-Aufruf blockiert), Administrator
+sieht ihn zusätzlich zu allem anderen. Details siehe Unterabschnitt
+"Audit-Bereich (Rolle Auditor)" weiter unten.
+
+Davor: Das Dashboard hat unter den 4 Statistikkarten einen
+zweispaltigen Bereich: links eine persönliche **Wiedervorlagen-Liste**
+(erster Baustein eines künftigen Nachrichtensystems, siehe
+Unterabschnitt "Wiedervorlage-Nachrichtenliste auf dem Dashboard"),
+rechts ein Platzhalter für spätere "normale Nachrichten".
 
 Davor: Löschrechte für Teilnehmende, Maßnahmen und Gruppen sind
 rollenabhängig differenziert: Ausbilder und Fachbereichsleiter dürfen
@@ -81,10 +89,13 @@ server/
 
 - Top-Navigation: Titel "Standortmanager" + Breadcrumb links, rechts
   Username + Icon "Passwort ändern" + Icon "Abmelden" + Logo
-- Linke Sidebar: ein-/ausklappbar (Chevron-Button), 7 Menüpunkte in dieser
+- Linke Sidebar: ein-/ausklappbar (Chevron-Button), Menüpunkte in dieser
   Reihenfolge: **Dashboard, Anwesenheiten, Teilnehmende, Maßnahmen, Gruppen,
-  Fachbereiche, Benutzer** – die letzten beiden Punkte sind nur für die Rolle
-  Administrator sichtbar (`applyRolePermissions()` in `js/main.js`)
+  Audit (aufklappbar, 9 Unterpunkte), Fachbereiche, Benutzer** – Fachbereiche/
+  Benutzer sind nur für die Rolle Administrator sichtbar, Audit nur für
+  Auditor/Administrator, die fünf Punkte davor sind für Auditor-only-Nutzer
+  ausgeblendet (`applyRolePermissions()` in `js/main.js`, siehe Unterabschnitt
+  "Audit-Bereich (Rolle Auditor)" weiter unten)
 - Routing client-seitig über `location.hash` (`#teilnehmende`, `#massnahmen`, …),
   keine echten Unterseiten/Reloads. Startseite (kein/unbekannter Hash) ist
   `dashboard` (`defaultPage` in `js/main.js`).
@@ -460,18 +471,24 @@ Dateianfang schaltet bei jedem `401` (außer beim initialen `/api/me`-Check)
 automatisch zurück auf den Login-Screen, ohne dass die ~30 bestehenden
 `fetch()`-Aufrufe im Code angepasst werden mussten.
 
-Fünf feste Rollen (Tabelle `rolle`, keine eigene Verwaltungs-UI, nur
+Sechs feste Rollen (Tabelle `rolle`, keine eigene Verwaltungs-UI, nur
 Zuweisung über die Benutzer-Seite): Ausbilder, Fachbereichsleiter,
-Lehrgangsorganisation, Administrator, Bildungsstättenleiter. Ein Benutzer
-kann mehrere Rollen und mehrere Fachbereiche haben. Hat ein Benutzer
-mindestens eine der Rollen Administrator/Lehrgangsorganisation/
-Bildungsstättenleiter, sieht und bearbeitet er alle Fachbereiche
-uneingeschränkt; hat er ausschließlich Ausbilder und/oder
-Fachbereichsleiter, ist er auf seine zugewiesenen Fachbereiche beschränkt
-(`isRestrictedUser()` in `server.js`). Rollen/Fachbereiche eines Nutzers
-werden beim Login einmalig geladen und in der Session gecacht – ändert der
-Admin sie während einer aktiven Sitzung, wirkt sich das erst beim nächsten
-Login der betroffenen Person aus (bewusster Trade-off gegen DB-Abfragen bei
+Lehrgangsorganisation, Administrator, Bildungsstättenleiter, **Auditor**
+(seit dieser Session, `ROLLEN_SEED` in `server.js`, wird beim nächsten
+Serverstart automatisch geseedet). Ein Benutzer kann mehrere Rollen und
+mehrere Fachbereiche haben. Hat ein Benutzer mindestens eine der Rollen
+Administrator/Lehrgangsorganisation/Bildungsstättenleiter, sieht und
+bearbeitet er alle Fachbereiche uneingeschränkt; hat er ausschließlich
+Ausbilder und/oder Fachbereichsleiter, ist er auf seine zugewiesenen
+Fachbereiche beschränkt (`isRestrictedUser()` in `server.js`). Auditor ist
+bewusst **nicht** in `UNRESTRICTED_ROLLEN` aufgenommen (kein Grund dafür,
+solange die Audit-Unterseiten nur Platzhalter sind) und braucht auch keine
+Fachbereichs-Zuweisung, da er ohnehin nur den eigenen, von den fachlichen
+Seiten komplett getrennten Audit-Bereich sieht (siehe Unterabschnitt
+"Audit-Bereich (Rolle Auditor)"). Rollen/Fachbereiche eines Nutzers werden
+beim Login einmalig geladen und in der Session gecacht – ändert der Admin
+sie während einer aktiven Sitzung, wirkt sich das erst beim nächsten Login
+der betroffenen Person aus (bewusster Trade-off gegen DB-Abfragen bei
 jedem Request).
 
 Die neue **Benutzer-Seite** (nur für Administrator sichtbar, Sidebar +
@@ -532,6 +549,103 @@ Passwort-Hashing über `bcryptjs` (reines JS, keine native Kompilierung nötig
 unter Windows), Sessions über `express-session` mit In-Memory-Store und
 httpOnly-Cookie (`SESSION_SECRET` in `.env`) – bei Serverneustart müssen sich
 alle Nutzer neu einloggen, für dieses interne Tool akzeptiert.
+
+### Audit-Bereich (Rolle Auditor)
+
+Auf ausdrücklichen Wunsch als reines Gerüst gebaut: 9 Menüpunkte,
+Platzhalterseiten, keine Datenanbindung. Die eigentlichen Audit-Inhalte
+sind bewusst nicht Teil dieser Session. Ursprünglich mit 6 Punkten
+gestartet (Maßnahmen, Teilnehmer, Anwesenheiten, Lernmaterialien,
+Leistungskontrollen, Praktika), in derselben Session um 3 weitere
+ergänzt (Interessentenbetreuung, Teilnehmenden Feedback, Vermittlung) –
+das Muster ist identisch, neue Punkte einfach nach demselben Schema
+anhängen (siehe unten).
+
+**Sidebar-Gruppe:** Erste aufklappbare Menügruppe im Projekt. Statt neuer
+JS-Toggle-Logik wird dafür ein natives `<details class="sidebar-group">`
+mit `<summary class="sidebar-link">Audit</summary>` verwendet (`index.html`)
+– dasselbe Element, das im Projekt schon für die einklappbaren
+Neuanlage-Formulare eingesetzt wird, hier erstmals für die Navigation.
+Browser übernehmen Öffnen/Schließen nativ, kein zusätzliches JS nötig.
+CSS entfernt den nativen Dreiecks-Marker (`summary::-webkit-details-marker`
++ `summary::marker`) und ersetzt ihn durch ein eigenes Chevron-SVG, das per
+`.sidebar-group[open] summary .icon-chevron-audit { transform: rotate(90deg); }`
+rotiert. Die Unterpunkte liegen in einem verschachtelten
+`<ul class="sidebar-subnav">` mit denselben `.sidebar-link`-Elementen wie
+die Top-Level-Links (`navLinks` in `js/main.js` selektiert generisch über
+`.sidebar-link[data-page]`, erfasst die Unterpunkte also automatisch mit,
+ohne Codeänderung an der Auswahl-/Highlighting-Logik). Bewusst **ohne**
+eigenes Icon je Unterpunkt (anders als bei allen anderen Sidebar-Links),
+um Platz zu sparen. Im eingeklappten Sidebar-Zustand wird
+`.sidebar-subnav` komplett ausgeblendet
+(`.sidebar.collapsed .sidebar-subnav { display: none; }`), die Audit-Gruppe
+zeigt dort nur noch ihr eigenes Icon wie jeder andere Top-Level-Link.
+
+**Lehre zu langen Menüpunkt-Namen (zweimal in dieser Session gefunden,
+jeweils per Playwright-Screenshot):** Erst schnitt „Leistungskontrollen“
+im Sidebar-Text ab, behoben durch schmalere Einrückung/Schriftgröße.
+Beim Ergänzen von „Interessentenbetreuung“/„Teilnehmenden Feedback“ kam
+derselbe Fehler zurück, weil der **aktive** Zustand (`.sidebar-link.active`)
+`font-weight: 700` setzt und Fettschrift breiter ist als Normalschrift –
+der schmalere Fix reichte dann nicht mehr. Endgültig gelöst durch
+Zeilenumbruch statt Nachjustieren von Maßen: `.sidebar-subnav .sidebar-link`
+bekam `white-space: normal`, und `.sidebar-subnav .sidebar-link .label`
+zusätzlich `min-width: 0` + `overflow-wrap: break-word` (nötig, weil
+Flex-Kinder ohne `min-width: 0` nicht unter ihre Inhaltsbreite schrumpfen
+– sonst hätte `overflow-wrap` bei einzelnen langen Wörtern wie
+„Interessentenbetreuung“ ohne Leerzeichen keine Wirkung gehabt). Damit
+brechen beliebig lange künftige Audit-Punkt-Namen automatisch um, auch im
+fett-aktiven Zustand – kein erneutes Nachjustieren bei weiteren Ergänzungen
+nötig.
+
+**Seiten/Routing:** 9 neue `<section class="page" id="page-audit-...">`
+(`audit-massnahmen`, `audit-teilnehmer`, `audit-anwesenheiten`,
+`audit-lernmaterialien`, `audit-leistungskontrollen`, `audit-praktika`,
+`audit-interessentenbetreuung`, `audit-teilnehmendenfeedback`,
+`audit-vermittlung`), jeweils nur `<h2>` (= Auditpunkt-Name) +
+„Platzhalterseite – Inhalt folgt.“. Neues Array `auditPages` in
+`js/main.js` plus `canAccessAudit(user)` (Rolle Auditor **oder**
+Administrator) und `isAuditorOnly(user)` (Rollenliste ist exakt
+`["Auditor"]`, keine Zweitrolle). In `showPage()` zwei zusätzliche Guards
+nach dem bestehenden `adminOnlyPages`-Muster: fehlt einem Nutzer
+`canAccessAudit`, wird eine angeforderte Audit-Seite auf `defaultPage`
+umgeleitet (greift auch bei direkter Hash-Manipulation, nicht nur beim
+Sidebar-Klick); ist ein Nutzer `isAuditorOnly` und die Zielseite liegt
+**nicht** in `auditPages`, wird stattdessen auf `auditPages[0]`
+(Maßnahmen) umgeleitet – so landet ein reiner Auditor nach dem Login
+automatisch dort, obwohl `defaultPage` weiterhin global `"dashboard"`
+bleibt. Beim Rendern einer Audit-Seite wird zusätzlich
+`document.querySelector(".sidebar-group").open = true` gesetzt, damit die
+Gruppe beim direkten Ansprung (Login, Reload) automatisch aufgeklappt
+ist. `pageLabels` bekam entsprechend neue Einträge im Muster
+`"audit-massnahmen": "Audit / Maßnahmen"`, wodurch die Breadcrumb ohne
+Sonderfall-Code (anders als bei `teilnehmende-aktivitaeten`) automatisch
+„Start / Audit / Maßnahmen“ zeigt. **Neue Audit-Punkte ergänzen:** Eintrag
+in `auditPages` + `pageLabels` (`js/main.js`), `<li><a>` in
+`.sidebar-subnav` + `<section class="page" id="page-audit-...">`
+(`index.html`) – kein weiterer Code nötig, alles andere greift generisch.
+
+**Sichtbarkeit:** `applyRolePermissions()` blendet die Audit-Gruppe
+(`.closest("li")` der `.sidebar-group`) ein, wenn `canAccessAudit(user)`
+zutrifft, und blendet zusätzlich die fünf Links Dashboard/Anwesenheiten/
+Teilnehmende/Maßnahmen/Gruppen komplett aus, wenn `isAuditorOnly(user)`
+zutrifft. Fachbereiche/Benutzer waren schon vorher admin-only und bleiben
+unverändert. Ein Nutzer mit z. B. Ausbilder **und** Auditor gleichzeitig
+verliert also nichts – die Ausblendung der operativen Seiten greift nur,
+wenn Auditor die einzige Rolle ist.
+
+Getestet per Playwright (Admin- und Auditor-Login, Screenshots): Admin
+sieht alle Seiten inkl. aufklappbarer Audit-Gruppe mit allen 9
+Unterpunkten; ein Nutzer mit ausschließlich der Rolle Auditor landet
+nach dem Login automatisch auf „Audit / Maßnahmen“, sieht sonst nichts
+in der Sidebar, und ein Versuch, per direkter Hash-Änderung
+(`#teilnehmende`) auf eine fremde Seite zu wechseln, wird von den
+`showPage()`-Guards zurück auf die Audit-Seite geleitet. Mit eigens
+angelegtem und danach wieder gelöschtem Testbenutzer, ohne echte Daten
+zu verändern. Nach der Erweiterung um die 3 zusätzlichen Punkte erneut
+per Screenshot verifiziert, dass alle 9 Einträge (auch im aktiven
+Zustand) vollständig lesbar sind, siehe Lehre zu langen
+Menüpunkt-Namen oben.
 
 ### Anwesenheiten-Seite
 
@@ -650,6 +764,10 @@ Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
   Platzhalter (siehe "Wiedervorlage-Nachrichtenliste auf dem Dashboard")
   – weitere Nachrichtentypen, User-zu-User-Nachrichten und
   Aufgabenzuweisung sind bewusst noch nicht umgesetzt.
+- Die 9 Audit-Unterseiten (siehe "Audit-Bereich (Rolle Auditor)") sind
+  reine Platzhalter ohne Inhalt/Datenanbindung – was dort inhaltlich
+  angezeigt/geprüft werden soll, ist bewusst noch nicht spezifiziert und
+  kommt in einer späteren Session.
 
 ## Lokale Entwicklungsumgebung – wichtige Hinweise
 

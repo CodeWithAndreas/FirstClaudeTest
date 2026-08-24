@@ -26,6 +26,17 @@ const navLinks = document.querySelectorAll(".sidebar-link[data-page]");
 const pages = document.querySelectorAll(".page");
 const defaultPage = "dashboard";
 const adminOnlyPages = ["fachbereiche", "benutzer"];
+const auditPages = [
+  "audit-massnahmen",
+  "audit-teilnehmer",
+  "audit-anwesenheiten",
+  "audit-lernmaterialien",
+  "audit-leistungskontrollen",
+  "audit-praktika",
+  "audit-interessentenbetreuung",
+  "audit-teilnehmendenfeedback",
+  "audit-vermittlung",
+];
 
 const pageLabels = {
   dashboard: "Dashboard",
@@ -35,7 +46,26 @@ const pageLabels = {
   gruppen: "Gruppen",
   fachbereiche: "Fachbereiche",
   benutzer: "Benutzer",
+  "audit-massnahmen": "Audit / Maßnahmen",
+  "audit-teilnehmer": "Audit / Teilnehmer",
+  "audit-anwesenheiten": "Audit / Anwesenheiten",
+  "audit-lernmaterialien": "Audit / Lernmaterialien",
+  "audit-leistungskontrollen": "Audit / Leistungskontrollen",
+  "audit-praktika": "Audit / Praktika",
+  "audit-interessentenbetreuung": "Audit / Interessentenbetreuung",
+  "audit-teilnehmendenfeedback": "Audit / Teilnehmenden Feedback",
+  "audit-vermittlung": "Audit / Vermittlung",
 };
+
+function canAccessAudit(user) {
+  const roles = (user && user.roles) || [];
+  return roles.includes("Auditor") || roles.includes("Administrator");
+}
+
+function isAuditorOnly(user) {
+  const roles = (user && user.roles) || [];
+  return roles.length === 1 && roles[0] === "Auditor";
+}
 
 // Login / Header
 
@@ -70,8 +100,21 @@ function showPage(pageId) {
     targetId = defaultPage;
   }
 
+  if (auditPages.includes(targetId) && !canAccessAudit(currentUser)) {
+    targetId = defaultPage;
+  }
+
+  if (isAuditorOnly(currentUser) && !auditPages.includes(targetId)) {
+    targetId = auditPages[0];
+  }
+
   if (targetId === "teilnehmende-aktivitaeten" && !currentAktivitaetTeilnehmerId) {
     targetId = "teilnehmende";
+  }
+
+  const auditSidebarGroup = document.querySelector(".sidebar-group");
+  if (auditSidebarGroup && auditPages.includes(targetId)) {
+    auditSidebarGroup.open = true;
   }
 
   pages.forEach((page) => {
@@ -3078,6 +3121,7 @@ function canDeleteGruppe(gruppe) {
 
 function applyRolePermissions(user) {
   const isAdmin = (user.roles || []).includes("Administrator");
+  const auditOnly = isAuditorOnly(user);
 
   const fachbereicheLink = document.querySelector('.sidebar-link[data-page="fachbereiche"]');
   if (fachbereicheLink) {
@@ -3088,6 +3132,19 @@ function applyRolePermissions(user) {
   if (benutzerLink) {
     benutzerLink.closest("li").style.display = isAdmin ? "" : "none";
   }
+
+  const auditGroup = document.querySelector(".sidebar-group");
+  if (auditGroup) {
+    auditGroup.closest("li").style.display = canAccessAudit(user) ? "" : "none";
+  }
+
+  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende", "massnahmen", "gruppen"];
+  operativePages.forEach((page) => {
+    const link = document.querySelector(`.sidebar-link[data-page="${page}"]`);
+    if (link) {
+      link.closest("li").style.display = auditOnly ? "none" : "";
+    }
+  });
 }
 
 function showAppShell(user) {

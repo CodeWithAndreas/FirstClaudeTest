@@ -275,6 +275,56 @@ body.logged-out .app-layout {
   display: none;
 }
 
+.sidebar-group summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.sidebar-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-group summary::marker {
+  content: "";
+}
+
+.sidebar-group summary .icon-chevron-audit {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.sidebar-group[open] summary .icon-chevron-audit {
+  transform: rotate(90deg);
+}
+
+.sidebar-subnav {
+  list-style: none;
+}
+
+.sidebar-subnav .sidebar-link {
+  padding-left: 2.25rem;
+  padding-right: 0.5rem;
+  font-size: 0.9rem;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.sidebar-subnav .sidebar-link .label {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.sidebar.collapsed .sidebar-group summary .icon-chevron-audit {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-subnav {
+  display: none;
+}
+
 /* Pages */
 
 .page {

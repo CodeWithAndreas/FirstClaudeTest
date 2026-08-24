@@ -41,7 +41,7 @@ const pool = mysql.createPool({
   dateStrings: true,
 });
 
-const ROLLEN_SEED = ["Ausbilder", "Fachbereichsleiter", "Lehrgangsorganisation", "Administrator", "Bildungsstättenleiter"];
+const ROLLEN_SEED = ["Ausbilder", "Fachbereichsleiter", "Lehrgangsorganisation", "Administrator", "Bildungsstättenleiter", "Auditor"];
 const UNRESTRICTED_ROLLEN = ["Administrator", "Lehrgangsorganisation", "Bildungsstättenleiter"];
 const ADMIN_SEED_USERNAME = "admin";
 const ADMIN_SEED_PASSWORT = "Admin2026!";

@@ -1,31 +1,46 @@
 # Standortmanager – Projektstatus
 
-Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
+Stand: 2026-08-24. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Die Einstellungen-Seite zeigt unter
-"Datenbank" jetzt die echten MySQL-Zugangsdaten (Host/Port/Name/User
-editierbar, Passwort **nie im Klartext**, nur per Popup änderbar).
-Da diese Daten in `server/.env` liegen (nicht in der eigenen DB –
-Henne-Ei-Problem beim Verbindungsaufbau), wird vor jedem Schreiben
-eine echte Testverbindung mit den neuen Werten aufgebaut – schlägt sie
-fehl, bleibt `.env` unangetastet. Automatisches `.env.bak`-Backup vor
-jeder Änderung (jetzt auch in `.gitignore`, war vorher eine Lücke).
-Änderungen wirken erst nach manuellem Server-Neustart (kein
-Live-Reconnect, kein Process-Manager im Projekt). Details siehe
-Unterabschnitt "Datenbank-Zugangsdaten in den Einstellungen".
+**Wichtig für eine neue Session:** In der Dateiablage-Detailansicht öffnet ein
+neuer "Vorschau"-Button jedes Dokument direkt im Browser in einem neuen Tab
+(`dokument-vorschau.html`, bewusst **außerhalb** des SPA-Hash-Routings) statt
+es herunterzuladen: PDF/Bilder über den nativen Browser-Viewer, DOCX über
+[docx-preview](https://github.com/VolodymyrBaydalka/docxjs), XLSX/XLS über
+[SheetJS](https://sheetjs.com) (`js/vendor/xlsx.full.min.js`, bewusst vom
+SheetJS-CDN statt aus npm bezogen, da das npm-Paket ungefixte HIGH-severity-
+Schwachstellen hat – bei künftiger Aktualisierung nicht einfach wieder
+`npm install xlsx`!). Das alte `.doc`-Format zeigt nur einen Hinweistext mit
+Download-Fallback, da keine verlässliche freie Bibliothek dafür existiert.
+Neue Backend-Route `GET /api/dokumente/:id/vorschau` (wie der bestehende
+Download, aber `res.sendFile()` statt `res.download()` für Inline-Anzeige)
+musste – wie jede neue statische Datei – der Static-Allowlist in `server.js`
+hinzugefügt werden. Details siehe Unterabschnitt "Dokumentvorschau im Browser
+(PDF, Bilder, DOCX, XLSX, XLS, DOC-Fallback)".
 
-Davor (gleiche Grund-Session): Neue **Dokumentenverwaltung pro
-Teilnehmendem** (Datei-Icon inkl. Anzahl-Badge in der Teilnehmenden-
-Tabelle → Master-Detail-Unterseite "Dateiablage", Upload-/Bearbeiten-
-Dialog, Löschen ausschließlich für Administrator, Speicherpfad in den
-Einstellungen konfigurierbar) samt kritischem Sicherheits-Fix:
-`express.static` lieferte vorher das **komplette Repo-Root** aus
-(inkl. Server-Quellcode im Klartext über HTTP), jetzt eingeschränkt
-auf eine explizite Allowlist (`index.html`, `css/`, `js/`, `assets/`)
-– bei künftigen neuen statischen Assets diese Allowlist erweitern,
-nicht auf einen pauschalen Root-Mount zurückfallen. Details siehe
-Unterabschnitt "Dokumentenverwaltung pro Teilnehmendem".
+Davor (gleiche Grund-Session): Die Einstellungen-Seite zeigt unter
+"Datenbank" die echten MySQL-Zugangsdaten (Host/Port/Name/User editierbar,
+Passwort **nie im Klartext**, nur per Popup änderbar). Da diese Daten in
+`server/.env` liegen (nicht in der eigenen DB – Henne-Ei-Problem beim
+Verbindungsaufbau), wird vor jedem Schreiben eine echte Testverbindung mit
+den neuen Werten aufgebaut – schlägt sie fehl, bleibt `.env` unangetastet.
+Automatisches `.env.bak`-Backup vor jeder Änderung. Änderungen wirken erst
+nach manuellem Server-Neustart (kein Live-Reconnect, kein Process-Manager im
+Projekt). Details siehe Unterabschnitt "Datenbank-Zugangsdaten in den
+Einstellungen".
+
+Ebenfalls davor: Neue **Dokumentenverwaltung pro Teilnehmendem** (Datei-Icon
+inkl. Anzahl-Badge in der Teilnehmenden-Tabelle → Master-Detail-Unterseite
+"Dateiablage", Upload-/Bearbeiten-Dialog, Löschen ausschließlich für
+Administrator, Speicherpfad in den Einstellungen konfigurierbar) samt
+kritischem Sicherheits-Fix: `express.static` lieferte vorher das **komplette
+Repo-Root** aus (inkl. Server-Quellcode im Klartext über HTTP), jetzt
+eingeschränkt auf eine explizite Allowlist (`index.html`, `css/`, `js/`,
+`assets/`, seit der Dokumentvorschau zusätzlich `dokument-vorschau.html`) –
+bei künftigen neuen statischen Assets diese Allowlist erweitern, nicht auf
+einen pauschalen Root-Mount zurückfallen. Details siehe Unterabschnitt
+"Dokumentenverwaltung pro Teilnehmendem".
 
 **Frühere Sessions** (Details jeweils im passenden Unterabschnitt weiter
 unten): Sidebar-Umbau "Stammdaten" (Maßnahmen/Gruppen/Fachbereiche als
@@ -69,14 +84,33 @@ gegen eine MySQL-Datenbank (`db_fct`) spricht.
 
 ```
 index.html       Einziges HTML-Dokument, enthält alle Seiten als <section class="page">
+dokument-vorschau.html
+                  Eigenständige zweite HTML-Seite (bewusst außerhalb des
+                  SPA-Hash-Routings) für die Dokumentvorschau, per
+                  window.open() aus der Dateiablage geöffnet. Eigenes Script
+                  js/dokument-vorschau.js + eigenes Stylesheet
+                  css/dokument-vorschau.css (zusätzlich zu style.css).
 css/style.css     Design (an bfw.de angelehnt: Primärblau #00adee, Navy #003a4d,
                   Akzentorange #ff7800, Font "Istok Web", stark abgerundete Ecken)
+css/dokument-vorschau.css
+                  Zusatzstyles für dokument-vorschau.html (Layout/Rahmen für
+                  iframe/Bild/DOCX/Tabellen-Vorschau)
 js/main.js        Gesamte Client-Logik: Routing, Sidebar, CRUD pro Entität
+js/dokument-vorschau.js
+                  Logik der Dokumentvorschau-Seite: lädt die Datei über
+                  GET /api/dokumente/:id/vorschau und rendert sie je nach
+                  Dateiendung (iframe/img/docx-preview/SheetJS/Fallback)
 js/vendor/        Vendorte Drittanbieter-Libs als reine Static Files (kein npm/
                   Build-Schritt fürs Frontend): jspdf.umd.min.js (2.5.2) +
                   jspdf.plugin.autotable.min.js (3.8.4) für den PDF-Bericht
-                  auf der Anwesenheiten-Seite. Per <script>-Tag vor main.js
-                  eingebunden, daher hängt sich das Plugin an window.jspdf.jsPDF.
+                  auf der Anwesenheiten-Seite (Plugin hängt sich an
+                  window.jspdf.jsPDF). Für die Dokumentvorschau zusätzlich
+                  jszip.min.js (3.10.1, muss VOR docx-preview.min.js geladen
+                  werden) + docx-preview.min.js (0.4.0) + xlsx.full.min.js
+                  (SheetJS 0.20.3, bewusst vom SheetJS-CDN statt aus npm
+                  bezogen – siehe Unterabschnitt "Dokumentvorschau im
+                  Browser"). Alle per <script>-Tag eingebunden, keine davon
+                  npm-verwaltet im Frontend.
 server/
   server.js       Express-App: liefert die statischen Dateien UND die REST-API,
                   inkl. Session-Auth, Rollen-/Fachbereichs-Scoping und

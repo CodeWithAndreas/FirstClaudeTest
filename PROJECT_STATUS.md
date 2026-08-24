@@ -3,13 +3,21 @@
 Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Neue Rolle **Auditor** plus neuer,
-aufklappbarer Sidebar-Menüpunkt **„Audit"** mit 9 Unterseiten in dieser
-Reihenfolge: Interessenten Betreuung, Maßnahmen, Teilnehmer,
-Anwesenheiten, Lernmaterialien, Leistungskontrollen, Praktika,
-Teilnehmenden Feedback, Vermittlung – aktuell reine Platzhalterseiten (Überschrift +
-Hinweistext, kein Inhalt). Auditor sieht **ausschließlich**
-diesen Audit-Bereich (alle anderen Seiten inkl. Dashboard sind
+**Wichtig für eine neue Session:** Die Sidebar wurde umgebaut: Maßnahmen,
+Gruppen und Fachbereiche sind keine eigenständigen Top-Level-Menüpunkte
+mehr, sondern Unterpunkte einer neuen, aufklappbaren Gruppe
+**„Stammdaten"**. Klick auf „Stammdaten" selbst führt zu einer neuen
+Übersichtsseite mit drei klickbaren Cards (Maßnahmen/Gruppen/
+Fachbereiche, im Look der Dashboard-Stat-Karten mit echten Live-Zahlen).
+Details siehe Unterabschnitt "Stammdaten-Übersicht" weiter unten.
+
+Davor: Neue Rolle **Auditor** plus neuer, aufklappbarer
+Sidebar-Menüpunkt **„Audit"** mit 9 Unterseiten in dieser Reihenfolge:
+Interessenten Betreuung, Maßnahmen, Teilnehmer, Anwesenheiten,
+Lernmaterialien, Leistungskontrollen, Praktika, Teilnehmenden Feedback,
+Vermittlung – aktuell reine Platzhalterseiten (Überschrift +
+Hinweistext, kein Inhalt). Auditor sieht **ausschließlich** diesen
+Audit-Bereich (alle anderen Seiten inkl. Dashboard und Stammdaten sind
 ausgeblendet und auch per direktem Hash-Aufruf blockiert), Administrator
 sieht ihn zusätzlich zu allem anderen. Details siehe Unterabschnitt
 "Audit-Bereich (Rolle Auditor)" weiter unten.
@@ -90,12 +98,14 @@ server/
 - Top-Navigation: Titel "Standortmanager" + Breadcrumb links, rechts
   Username + Icon "Passwort ändern" + Icon "Abmelden" + Logo
 - Linke Sidebar: ein-/ausklappbar (Chevron-Button), Menüpunkte in dieser
-  Reihenfolge: **Dashboard, Anwesenheiten, Teilnehmende, Maßnahmen, Gruppen,
-  Audit (aufklappbar, 9 Unterpunkte), Fachbereiche, Benutzer** – Fachbereiche/
-  Benutzer sind nur für die Rolle Administrator sichtbar, Audit nur für
-  Auditor/Administrator, die fünf Punkte davor sind für Auditor-only-Nutzer
-  ausgeblendet (`applyRolePermissions()` in `js/main.js`, siehe Unterabschnitt
-  "Audit-Bereich (Rolle Auditor)" weiter unten)
+  Reihenfolge: **Dashboard, Anwesenheiten, Teilnehmende, Stammdaten
+  (aufklappbar: Maßnahmen, Gruppen, Fachbereiche), Audit (aufklappbar,
+  9 Unterpunkte), Benutzer** – Fachbereiche (nur als Unterpunkt von
+  Stammdaten) und Benutzer sind nur für die Rolle Administrator sichtbar,
+  Audit nur für Auditor/Administrator, Stammdaten und die drei Punkte
+  davor sind für Auditor-only-Nutzer komplett ausgeblendet
+  (`applyRolePermissions()` in `js/main.js`, siehe Unterabschnitte
+  "Stammdaten-Übersicht" und "Audit-Bereich (Rolle Auditor)" weiter unten)
 - Routing client-seitig über `location.hash` (`#teilnehmende`, `#massnahmen`, …),
   keine echten Unterseiten/Reloads. Startseite (kein/unbekannter Hash) ist
   `dashboard` (`defaultPage` in `js/main.js`).
@@ -659,6 +669,100 @@ Einträge (auch im aktiven Zustand) vollständig lesbar sind, siehe Lehre
 zu langen Menüpunkt-Namen oben; nach Umbenennung/Umsortierung von
 „Interessenten Betreuung“ ebenfalls erneut per Screenshot verifiziert
 (erster Listenplatz, korrekte Breadcrumb, korrekter Umbruch).
+
+### Stammdaten-Übersicht
+
+Sidebar-Umbau: Maßnahmen, Gruppen und Fachbereiche waren bisher drei
+eigenständige Top-Level-Sidebar-Punkte, sind jetzt als Unterpunkte einer
+neuen aufklappbaren Gruppe **„Stammdaten"** zusammengefasst (zwischen
+Teilnehmende und Audit). Die eigentlichen CRUD-Seiten dieser drei
+Entitäten (Tabelle, Formulare, Dialoge) sind dabei **unverändert** –
+nur die Navigation dorthin wurde umgehängt, keine Änderungen an
+`server.js` oder den bestehenden `/api/massnahmen`, `/api/gruppen`,
+`/api/fachbereiche`-Routen.
+
+**Doppelrolle des „Stammdaten"-Menüpunkts:** Anders als „Audit" (dessen
+`<summary>` rein ein Aufklapp-Toggle ohne eigene Seite ist) ist
+„Stammdaten" gleichzeitig Aufklapp-Gruppe **und** eigener navigierbarer
+Menüpunkt mit eigener Seite. Umgesetzt über ein zusätzliches
+`data-page="stammdaten"`-Attribut auf dem `<summary class="sidebar-link">`
+(`index.html`) plus einem generischen Klick-Listener in `js/main.js`:
+```js
+document.querySelectorAll(".sidebar-group summary[data-page]").forEach((summary) => {
+  summary.addEventListener("click", () => {
+    window.location.hash = summary.dataset.page;
+  });
+});
+```
+Das native Aufklappen/Zuklappen von `<details>` bei jedem Klick auf
+`<summary>` bleibt dabei unangetastet (kein `preventDefault()`) – es
+läuft einfach parallel zur Navigation. Da `showPage()` die Gruppe beim
+Rendern jeder ihrer Seiten ohnehin zwangsweise wieder öffnet (siehe
+unten), ist ein eventuelles Zuklappen durch den nativen Toggle nie
+sichtbar. Audits `<summary>` hat bewusst **kein** `data-page`-Attribut
+und bekommt dadurch keinen Klick-Listener – funktioniert weiterhin rein
+als Toggle ohne eigene Seite.
+
+**Generische Aufklapp-Logik statt hartkodiertem Element:** Mit einer
+zweiten Sidebar-Gruppe reichte die alte, Audit-spezifische
+`document.querySelector(".sidebar-group")`-Logik nicht mehr (hätte
+immer nur die erste Gruppe im DOM gefunden). Ersetzt durch eine
+generische Variante in `showPage()`, die für **jede** `.sidebar-group`
+im DOM prüft, ob die aktuelle Zielseite zu ihr gehört (Summary- **und**
+alle Subnav-`data-page`-Werte), und nur dann öffnet:
+```js
+document.querySelectorAll(".sidebar-group").forEach((group) => {
+  const pagesInGroup = [...group.querySelectorAll("[data-page]")].map((el) => el.dataset.page);
+  if (pagesInGroup.includes(targetId)) {
+    group.open = true;
+  }
+});
+```
+Damit funktionieren beliebig viele weitere Sidebar-Gruppen in Zukunft
+ohne Codeänderung an dieser Stelle. Aus demselben Grund wurde in
+`applyRolePermissions()` die bisherige Audit-Selektion auf
+`data-group="audit"` präzisiert (neues `data-group`-Attribut auf beiden
+`<details>`-Elementen, `index.html`) – vorher ebenfalls über den
+mittlerweile mehrdeutigen `.sidebar-group`-Selektor gelöst.
+
+**Stammdaten-Seite (`#page-stammdaten`):** Drei klickbare Cards im
+optischen Muster der Dashboard-Statistikkarten (`.stat-grid`/`.stat-card`
+wiederverwendet, neue Modifier-Klasse `.stammdaten-card` nur für
+Link-Reset + Hover-Schatten), aber als `<a href="#massnahmen">` (bzw.
+`#gruppen`/`#fachbereiche`) statt `<div>` – ein Klick navigiert direkt
+zur jeweiligen Seite. Zahlen kommen aus einer neuen `loadStammdatenStats()`
+in `js/main.js`, die dieselben `/api/massnahmen`/`/api/gruppen`/
+`/api/fachbereiche`-Endpunkte wie das Dashboard aufruft und dadurch
+automatisch dasselbe Fachbereichs-Scoping erbt (für Ausbilder/
+Fachbereichsleiter zeigt die Karte also automatisch nur ihre eigenen
+Zahlen, ohne eigenen Code dafür). Die Lade-Schleife wurde aus
+`loadDashboardStats()` in eine gemeinsame Hilfsfunktion `ladeKennzahlen(endpoints)`
+extrahiert, die jetzt von beiden Funktionen genutzt wird (Duplikation
+vermieden). `pageLabels` für `massnahmen`/`gruppen`/`fachbereiche` zeigen
+jetzt `"Stammdaten / …"` in der Breadcrumb statt nur des Seitennamens.
+
+**Sichtbarkeit:** Die „Fachbereiche"-Card auf der Stammdaten-Seite
+(`id="stammdatenFachbereicheCard"`) wird in `applyRolePermissions()`
+genau wie der zugehörige Sidebar-Unterpunkt nur für Administrator
+eingeblendet (unverändertes Verhalten, nur an die neue Position
+angepasst). Für Nutzer mit ausschließlich der Rolle Auditor wird die
+komplette Stammdaten-Gruppe (`.closest("li")` von
+`.sidebar-group[data-group="stammdaten"]`) ausgeblendet, ersetzt die
+vorherige Einzelausblendung von `massnahmen`/`gruppen` als Top-Level-
+Links (nicht mehr nötig, da beide jetzt Teil der als Ganzes
+ausgeblendeten Gruppe sind).
+
+Getestet per Playwright (Admin-, Ausbilder/Fachbereichsleiter- und
+Auditor-Login, Screenshots): Admin sieht die neue Sidebar-Struktur und
+alle drei Cards mit korrekten Zahlen, Klick auf eine Card navigiert
+korrekt zur jeweiligen Seite mit korrekter Breadcrumb; ein Nutzer mit
+Ausbilder/Fachbereichsleiter sieht auf der Stammdaten-Seite nur die
+Maßnahmen-/Gruppen-Card (keine Fachbereiche-Card) mit bereits
+Fachbereichs-gescopten Zahlen; ein reiner Auditor sieht „Stammdaten"
+weder in der Sidebar noch erreichbar per direkter Hash-Änderung
+(`#stammdaten`, wird auf die aktive Audit-Seite zurückgeleitet). Mit
+eigens angelegtem und danach wieder gelöschtem Testbenutzer, ohne echte
+Daten zu verändern.
 
 ### Anwesenheiten-Seite
 

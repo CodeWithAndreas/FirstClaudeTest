@@ -42,9 +42,10 @@ const pageLabels = {
   dashboard: "Dashboard",
   teilnehmende: "Teilnehmende",
   anwesenheiten: "Anwesenheiten",
-  massnahmen: "Maßnahmen",
-  gruppen: "Gruppen",
-  fachbereiche: "Fachbereiche",
+  stammdaten: "Stammdaten",
+  massnahmen: "Stammdaten / Maßnahmen",
+  gruppen: "Stammdaten / Gruppen",
+  fachbereiche: "Stammdaten / Fachbereiche",
   benutzer: "Benutzer",
   "audit-massnahmen": "Audit / Maßnahmen",
   "audit-teilnehmer": "Audit / Teilnehmer",
@@ -80,6 +81,9 @@ const dashTeilnehmerCount = document.getElementById("dashTeilnehmerCount");
 const dashMassnahmenCount = document.getElementById("dashMassnahmenCount");
 const dashGruppenCount = document.getElementById("dashGruppenCount");
 const dashFachbereicheCount = document.getElementById("dashFachbereicheCount");
+const stammdatenMassnahmenCount = document.getElementById("stammdatenMassnahmenCount");
+const stammdatenGruppenCount = document.getElementById("stammdatenGruppenCount");
+const stammdatenFachbereicheCount = document.getElementById("stammdatenFachbereicheCount");
 const dashWiedervorlagenListe = document.getElementById("dashWiedervorlagenListe");
 const wiedervorlageTerminDialog = document.getElementById("wiedervorlageTerminDialog");
 const wiedervorlageTerminForm = document.getElementById("wiedervorlageTerminForm");
@@ -91,6 +95,12 @@ sidebarToggle.addEventListener("click", () => {
   const collapsed = sidebar.classList.toggle("collapsed");
   sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
   sidebarToggle.setAttribute("aria-label", collapsed ? "Menü ausklappen" : "Menü einklappen");
+});
+
+document.querySelectorAll(".sidebar-group summary[data-page]").forEach((summary) => {
+  summary.addEventListener("click", () => {
+    window.location.hash = summary.dataset.page;
+  });
 });
 
 function showPage(pageId) {
@@ -112,10 +122,12 @@ function showPage(pageId) {
     targetId = "teilnehmende";
   }
 
-  const auditSidebarGroup = document.querySelector(".sidebar-group");
-  if (auditSidebarGroup && auditPages.includes(targetId)) {
-    auditSidebarGroup.open = true;
-  }
+  document.querySelectorAll(".sidebar-group").forEach((group) => {
+    const pagesInGroup = [...group.querySelectorAll("[data-page]")].map((el) => el.dataset.page);
+    if (pagesInGroup.includes(targetId)) {
+      group.open = true;
+    }
+  });
 
   pages.forEach((page) => {
     page.classList.toggle("active", page.id === `page-${targetId}`);
@@ -134,6 +146,9 @@ function showPage(pageId) {
   if (targetId === "dashboard") {
     loadDashboardStats();
     loadDashboardWiedervorlagen();
+  }
+  if (targetId === "stammdaten") {
+    loadStammdatenStats();
   }
   if (targetId === "anwesenheiten") {
     ensureAwInitialized();
@@ -155,14 +170,7 @@ window.addEventListener("hashchange", handleRouteChange);
 
 // Dashboard
 
-async function loadDashboardStats() {
-  const endpoints = [
-    ["/api/teilnehmer", dashTeilnehmerCount],
-    ["/api/massnahmen", dashMassnahmenCount],
-    ["/api/gruppen", dashGruppenCount],
-    ["/api/fachbereiche", dashFachbereicheCount],
-  ];
-
+async function ladeKennzahlen(endpoints) {
   await Promise.all(
     endpoints.map(async ([url, element]) => {
       try {
@@ -178,6 +186,23 @@ async function loadDashboardStats() {
       }
     })
   );
+}
+
+async function loadDashboardStats() {
+  await ladeKennzahlen([
+    ["/api/teilnehmer", dashTeilnehmerCount],
+    ["/api/massnahmen", dashMassnahmenCount],
+    ["/api/gruppen", dashGruppenCount],
+    ["/api/fachbereiche", dashFachbereicheCount],
+  ]);
+}
+
+async function loadStammdatenStats() {
+  await ladeKennzahlen([
+    ["/api/massnahmen", stammdatenMassnahmenCount],
+    ["/api/gruppen", stammdatenGruppenCount],
+    ["/api/fachbereiche", stammdatenFachbereicheCount],
+  ]);
 }
 
 function istWiedervorlageUeberfaellig(datum) {
@@ -3128,17 +3153,27 @@ function applyRolePermissions(user) {
     fachbereicheLink.closest("li").style.display = isAdmin ? "" : "none";
   }
 
+  const stammdatenFachbereicheCard = document.getElementById("stammdatenFachbereicheCard");
+  if (stammdatenFachbereicheCard) {
+    stammdatenFachbereicheCard.style.display = isAdmin ? "" : "none";
+  }
+
   const benutzerLink = document.querySelector('.sidebar-link[data-page="benutzer"]');
   if (benutzerLink) {
     benutzerLink.closest("li").style.display = isAdmin ? "" : "none";
   }
 
-  const auditGroup = document.querySelector(".sidebar-group");
+  const auditGroup = document.querySelector('.sidebar-group[data-group="audit"]');
   if (auditGroup) {
     auditGroup.closest("li").style.display = canAccessAudit(user) ? "" : "none";
   }
 
-  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende", "massnahmen", "gruppen"];
+  const stammdatenGroup = document.querySelector('.sidebar-group[data-group="stammdaten"]');
+  if (stammdatenGroup) {
+    stammdatenGroup.closest("li").style.display = auditOnly ? "none" : "";
+  }
+
+  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende"];
   operativePages.forEach((page) => {
     const link = document.querySelector(`.sidebar-link[data-page="${page}"]`);
     if (link) {

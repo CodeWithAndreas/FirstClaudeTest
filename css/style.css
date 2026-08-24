@@ -377,6 +377,17 @@ body.logged-out .app-layout {
   font-size: 0.9rem;
 }
 
+.stammdaten-card {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.stammdaten-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+
 .dashboard-messages {
   margin-top: 2rem;
 }

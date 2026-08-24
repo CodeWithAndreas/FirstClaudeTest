@@ -881,6 +881,17 @@ Löschdatum-Vorauswahl im Upload-Dialog – so bekommen alle Rollen den
 für sie relevanten Wert, ohne dass Nicht-Admins den Dateisystempfad zu
 sehen bekommen.
 
+Die Seite ist nachträglich (gleiche Session) in drei Kategorien
+unterteilt worden (`.settings-section`-Divs mit `<h3>`-Überschrift +
+`border-bottom`-Trenner, rein visuelle Gliederung innerhalb desselben
+`#einstellungenForm`): **Datenbank**, **Dateiverwaltung** (enthält die
+beiden bestehenden Felder Dokumentenpfad/Löschfrist-Offset),
+**Benutzerkonten**. Die letzten beiden Kategorien sind noch reine
+Platzhalter ("Noch keine Einstellungen in dieser Kategorie.") ohne
+Formularfelder – Feld-IDs/-Namen und die Backend-Routen blieben dabei
+unverändert, es war eine reine HTML/CSS-Umstrukturierung ohne
+JS-/Server-Änderung.
+
 **Zwei CSS-Bugs beim Testen gefunden und behoben** (per
 Playwright-Screenshot, wie schon öfter in dieser Session): (1) Die
 generische Regel `.form-row input { padding; border; background }`

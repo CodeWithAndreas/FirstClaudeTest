@@ -25,7 +25,7 @@ const breadcrumb = document.getElementById("breadcrumb");
 const navLinks = document.querySelectorAll(".sidebar-link[data-page]");
 const pages = document.querySelectorAll(".page");
 const defaultPage = "dashboard";
-const adminOnlyPages = ["fachbereiche", "benutzer", "einstellungen"];
+const adminOnlyPages = ["fachbereiche", "benutzer", "einstellungen", "systemlogs-dateioperationen"];
 const auditPages = [
   "audit-interessentenbetreuung",
   "audit-massnahmen",
@@ -57,6 +57,7 @@ const pageLabels = {
   "audit-interessentenbetreuung": "Audit / Interessenten Betreuung",
   "audit-teilnehmendenfeedback": "Audit / Teilnehmenden Feedback",
   "audit-vermittlung": "Audit / Vermittlung",
+  "systemlogs-dateioperationen": "Systemlogs / Dateioperationen",
 };
 
 function canAccessAudit(user) {
@@ -174,6 +175,10 @@ function showPage(pageId) {
   if (targetId === "einstellungen") {
     loadEinstellungen();
     loadDatenbankEinstellungen();
+    loadLoggingEinstellungen();
+  }
+  if (targetId === "systemlogs-dateioperationen") {
+    loadSystemlogsDateioperationen();
   }
 }
 
@@ -2395,6 +2400,171 @@ einstDbPasswortForm.addEventListener("submit", async (event) => {
   }
 });
 
+const einstLoggingForm = document.getElementById("einstLoggingForm");
+const einstLoggingFormMessage = document.getElementById("einstLoggingFormMessage");
+const einstLogMaxDateigroesse = document.getElementById("einstLogMaxDateigroesse");
+
+async function loadLoggingEinstellungen() {
+  try {
+    const response = await fetch("/api/einstellungen/logging");
+    if (!response.ok) {
+      throw new Error("Logging-Einstellung konnte nicht geladen werden.");
+    }
+    const data = await response.json();
+    einstLogMaxDateigroesse.value = data.log_max_dateigroesse_mb || "";
+  } catch (err) {
+    console.error(err);
+    einstLoggingFormMessage.textContent = err.message;
+    einstLoggingFormMessage.className = "form-message error";
+  }
+}
+
+einstLoggingForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  einstLoggingFormMessage.textContent = "";
+  einstLoggingFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/einstellungen/logging", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        log_max_dateigroesse_mb: einstLogMaxDateigroesse.value.trim(),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Einstellung konnte nicht gespeichert werden.");
+    }
+    einstLogMaxDateigroesse.value = body.log_max_dateigroesse_mb || "";
+    einstLoggingFormMessage.textContent = "Gespeichert.";
+    einstLoggingFormMessage.className = "form-message";
+  } catch (err) {
+    einstLoggingFormMessage.textContent = err.message;
+    einstLoggingFormMessage.className = "form-message error";
+  }
+});
+
+// Systemlogs / Dateioperationen
+
+const sysLogTableBody = document.getElementById("sysLogTableBody");
+const sysLogArtFilter = document.getElementById("sysLogArtFilter");
+const sysLogBenutzerFilter = document.getElementById("sysLogBenutzerFilter");
+const sysLogDateinameFilter = document.getElementById("sysLogDateinameFilter");
+const sysLogResetFilterBtn = document.getElementById("sysLogResetFilterBtn");
+
+let sysLogEintraege = [];
+
+function formatZeitstempelDE(isoZeitstempel) {
+  const datum = new Date(isoZeitstempel);
+  if (Number.isNaN(datum.getTime())) {
+    return isoZeitstempel;
+  }
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(datum.getDate())}.${pad(datum.getMonth() + 1)}.${datum.getFullYear()} ${pad(datum.getHours())}:${pad(
+    datum.getMinutes()
+  )}:${pad(datum.getSeconds())}`;
+}
+
+function sysLogMatchesFilter(eintrag) {
+  const art = sysLogArtFilter.value;
+  const benutzerQuery = sysLogBenutzerFilter.value.trim().toLowerCase();
+  const suchQuery = sysLogDateinameFilter.value.trim().toLowerCase();
+
+  if (art && eintrag.Art !== art) {
+    return false;
+  }
+  if (benutzerQuery && !eintrag.Benutzer.toLowerCase().includes(benutzerQuery)) {
+    return false;
+  }
+  if (
+    suchQuery &&
+    !eintrag.Dateiname.toLowerCase().includes(suchQuery) &&
+    !eintrag.Teilnehmer.toLowerCase().includes(suchQuery)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function renderSystemlogsTabelle() {
+  sysLogTableBody.innerHTML = "";
+
+  const gefiltert = sysLogEintraege.filter(sysLogMatchesFilter);
+
+  if (gefiltert.length === 0) {
+    const emptyRow = document.createElement("tr");
+    const emptyCell = document.createElement("td");
+    emptyCell.colSpan = 5;
+    emptyCell.textContent = sysLogEintraege.length === 0 ? "Noch keine Einträge vorhanden." : "Keine Einträge für diesen Filter.";
+    emptyRow.appendChild(emptyCell);
+    sysLogTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  gefiltert.forEach((eintrag) => {
+    const row = document.createElement("tr");
+
+    const zeitstempelCell = document.createElement("td");
+    zeitstempelCell.textContent = formatZeitstempelDE(eintrag.Zeitstempel);
+
+    const artCell = document.createElement("td");
+    artCell.textContent = eintrag.Art;
+
+    const dateinameCell = document.createElement("td");
+    dateinameCell.textContent = eintrag.Dateiname;
+
+    const teilnehmerCell = document.createElement("td");
+    teilnehmerCell.textContent = eintrag.Teilnehmer;
+
+    const benutzerCell = document.createElement("td");
+    benutzerCell.textContent = eintrag.Benutzer;
+
+    row.append(zeitstempelCell, artCell, dateinameCell, teilnehmerCell, benutzerCell);
+    sysLogTableBody.appendChild(row);
+  });
+}
+
+async function loadSystemlogsDateioperationen() {
+  sysLogTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 5;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  sysLogTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch("/api/systemlogs/dateioperationen");
+    if (!response.ok) {
+      throw new Error("Logs konnten nicht geladen werden.");
+    }
+    sysLogEintraege = await response.json();
+    renderSystemlogsTabelle();
+  } catch (err) {
+    console.error(err);
+    sysLogTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 5;
+    errorCell.textContent = err.message;
+    errorRow.appendChild(errorCell);
+    sysLogTableBody.appendChild(errorRow);
+  }
+}
+
+sysLogArtFilter.addEventListener("change", renderSystemlogsTabelle);
+sysLogBenutzerFilter.addEventListener("input", renderSystemlogsTabelle);
+sysLogDateinameFilter.addEventListener("input", renderSystemlogsTabelle);
+
+sysLogResetFilterBtn.addEventListener("click", () => {
+  sysLogArtFilter.value = "";
+  sysLogBenutzerFilter.value = "";
+  sysLogDateinameFilter.value = "";
+  renderSystemlogsTabelle();
+});
+
 // Anwesenheiten
 
 const awFachbereichFilter = document.getElementById("awFachbereichFilter");
@@ -3735,6 +3905,11 @@ function applyRolePermissions(user) {
   const auditGroup = document.querySelector('.sidebar-group[data-group="audit"]');
   if (auditGroup) {
     auditGroup.closest("li").style.display = canAccessAudit(user) ? "" : "none";
+  }
+
+  const systemlogsGroup = document.querySelector('.sidebar-group[data-group="systemlogs"]');
+  if (systemlogsGroup) {
+    systemlogsGroup.closest("li").style.display = isAdmin ? "" : "none";
   }
 
   const stammdatenGroup = document.querySelector('.sidebar-group[data-group="stammdaten"]');

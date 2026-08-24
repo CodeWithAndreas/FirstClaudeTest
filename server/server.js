@@ -120,6 +120,7 @@ async function bootstrapDatabase() {
   `);
   await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('loeschfrist_offset_jahre', '3')");
   await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('dokumentenpfad', '')");
+  await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('log_max_dateigroesse_mb', '')");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS rolle (
@@ -242,6 +243,81 @@ async function resolveUploadVerzeichnis() {
   const zielpfad = konfiguriert && konfiguriert.trim() ? konfiguriert.trim() : path.join(__dirname, "uploads");
   fs.mkdirSync(zielpfad, { recursive: true });
   return zielpfad;
+}
+
+// --- Systemlogs: Dateioperationen ---
+
+const LOGS_VERZEICHNIS = path.join(__dirname, "logs");
+const DATEIOPERATIONEN_LOG_DATEI = path.join(LOGS_VERZEICHNIS, "dateioperationen.log");
+const STANDARD_LOG_MAX_MB = 50;
+
+async function resolveLogMaxBytes() {
+  const wert = await getEinstellung("log_max_dateigroesse_mb", "");
+  const mb = Number(wert);
+  return (Number.isFinite(mb) && mb > 0 ? mb : STANDARD_LOG_MAX_MB) * 1024 * 1024;
+}
+
+function rotiereDateioperationenLogFallsNoetig(maxBytes) {
+  try {
+    const stat = fs.statSync(DATEIOPERATIONEN_LOG_DATEI);
+    if (stat.size >= maxBytes) {
+      const suffix = new Date().toISOString().replace(/[:.]/g, "-");
+      fs.renameSync(DATEIOPERATIONEN_LOG_DATEI, path.join(LOGS_VERZEICHNIS, `dateioperationen.${suffix}.log`));
+    }
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+  }
+}
+
+async function resolveTeilnehmerName(teilnehmerId) {
+  if (!teilnehmerId) {
+    return "";
+  }
+  const [rows] = await pool.query("SELECT Vorname, Nachname FROM teilnehmer WHERE ID = ?", [teilnehmerId]);
+  return rows[0] ? `${rows[0].Nachname}, ${rows[0].Vorname}` : "";
+}
+
+async function logDateioperation(art, { dateiname, teilnehmer, username }) {
+  try {
+    fs.mkdirSync(LOGS_VERZEICHNIS, { recursive: true });
+    const maxBytes = await resolveLogMaxBytes();
+    rotiereDateioperationenLogFallsNoetig(maxBytes);
+    const zeile = [new Date().toISOString(), art, dateiname || "-", teilnehmer || "-", username || "-"].join(" | ");
+    fs.appendFileSync(DATEIOPERATIONEN_LOG_DATEI, `${zeile}\n`, "utf8");
+  } catch (err) {
+    console.error("Dateioperation konnte nicht protokolliert werden:", err);
+  }
+}
+
+function leseDateioperationenLog() {
+  fs.mkdirSync(LOGS_VERZEICHNIS, { recursive: true });
+  const dateien = fs
+    .readdirSync(LOGS_VERZEICHNIS)
+    .filter((name) => /^dateioperationen(\..+)?\.log$/.test(name))
+    .sort()
+    .reverse();
+
+  const eintraege = [];
+  for (const datei of dateien) {
+    const inhalt = fs.readFileSync(path.join(LOGS_VERZEICHNIS, datei), "utf8");
+    inhalt
+      .split("\n")
+      .map((zeile) => zeile.trim())
+      .filter(Boolean)
+      .forEach((zeile) => {
+        const teile = zeile.split(" | ");
+        if (teile.length < 5) {
+          return;
+        }
+        const [Zeitstempel, Art, Dateiname, Teilnehmer, Benutzer] = teile;
+        eintraege.push({ Zeitstempel, Art, Dateiname, Teilnehmer, Benutzer });
+      });
+  }
+
+  eintraege.sort((a, b) => (a.Zeitstempel < b.Zeitstempel ? 1 : a.Zeitstempel > b.Zeitstempel ? -1 : 0));
+  return eintraege;
 }
 
 const ENV_PFAD = path.join(__dirname, ".env");
@@ -1556,6 +1632,11 @@ app.post("/api/dokumente", upload.single("Datei"), async (req, res) => {
               Dateiname, Dateigroesse, MimeType, HochgeladenAm FROM dokument WHERE ID = ?`,
       [result.insertId]
     );
+    await logDateioperation("Upload", {
+      dateiname: req.file.originalname,
+      teilnehmer: await resolveTeilnehmerName(teilnehmerId),
+      username: req.session.username,
+    });
     res.status(201).json({ ...rows[0], Vertraulich: Boolean(rows[0].Vertraulich) });
   } catch (err) {
     cleanupUploadedFile();
@@ -1590,6 +1671,11 @@ app.put("/api/dokumente/:id", async (req, res) => {
       "UPDATE dokument SET Titel = ?, Schlagworte = ?, Dokumentart = ?, Vertraulich = ?, Loeschdatum = ? WHERE ID = ?",
       [titel, schlagworte, Dokumentart, Boolean(Vertraulich) ? 1 : 0, Loeschdatum, id]
     );
+    await logDateioperation("Änderung", {
+      dateiname: dokument.Dateiname,
+      teilnehmer: await resolveTeilnehmerName(dokument.TeilnehmerID),
+      username: req.session.username,
+    });
     res.json({ ID: id, Titel: titel, Schlagworte: schlagworte, Dokumentart, Vertraulich: Boolean(Vertraulich), Loeschdatum });
   } catch (err) {
     console.error(err);
@@ -1603,7 +1689,10 @@ app.delete("/api/dokumente/:id", requireRole("Administrator"), async (req, res) 
     return res.status(400).json({ error: "Ungültige ID." });
   }
   try {
-    const [rows] = await pool.query("SELECT GespeicherterDateiname FROM dokument WHERE ID = ?", [id]);
+    const [rows] = await pool.query(
+      "SELECT GespeicherterDateiname, Dateiname, TeilnehmerID FROM dokument WHERE ID = ?",
+      [id]
+    );
     if (!rows[0]) {
       return res.status(404).json({ error: "Dokument wurde nicht gefunden." });
     }
@@ -1613,6 +1702,11 @@ app.delete("/api/dokumente/:id", requireRole("Administrator"), async (req, res) 
       if (err && err.code !== "ENOENT") {
         console.error("Datei konnte nicht gelöscht werden:", err);
       }
+    });
+    await logDateioperation("Löschung", {
+      dateiname: rows[0].Dateiname,
+      teilnehmer: await resolveTeilnehmerName(rows[0].TeilnehmerID),
+      username: req.session.username,
     });
     res.status(204).end();
   } catch (err) {
@@ -1638,13 +1732,19 @@ app.get("/api/dokumente/:id/datei", async (req, res) => {
       }
     }
     const verzeichnis = await resolveUploadVerzeichnis();
-    res.download(path.join(verzeichnis, dokument.GespeicherterDateiname), dokument.Dateiname, (err) => {
+    res.download(path.join(verzeichnis, dokument.GespeicherterDateiname), dokument.Dateiname, async (err) => {
       if (err) {
         console.error(err);
         if (!res.headersSent) {
           res.status(404).json({ error: "Datei nicht gefunden." });
         }
+        return;
       }
+      await logDateioperation("Download", {
+        dateiname: dokument.Dateiname,
+        teilnehmer: await resolveTeilnehmerName(dokument.TeilnehmerID),
+        username: req.session.username,
+      });
     });
   } catch (err) {
     console.error(err);
@@ -1737,6 +1837,46 @@ app.put("/api/einstellungen", requireRole("Administrator"), async (req, res) => 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Einstellungen konnten nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/einstellungen/logging", requireRole("Administrator"), async (req, res) => {
+  try {
+    const wert = await getEinstellung("log_max_dateigroesse_mb", "");
+    res.json({ log_max_dateigroesse_mb: wert ? Number(wert) : null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellung konnte nicht geladen werden." });
+  }
+});
+
+app.put("/api/einstellungen/logging", requireRole("Administrator"), async (req, res) => {
+  const { log_max_dateigroesse_mb: maxMb } = req.body;
+  const trimmed = maxMb === "" || maxMb === null || maxMb === undefined ? "" : String(maxMb).trim();
+  if (trimmed) {
+    const zahl = Number(trimmed);
+    if (!Number.isFinite(zahl) || zahl < 1) {
+      return res.status(400).json({ error: "Die maximale Logdateigröße muss eine positive Zahl (MB) sein." });
+    }
+  }
+  try {
+    await pool.query(
+      "INSERT INTO einstellung (Schluessel, Wert) VALUES ('log_max_dateigroesse_mb', ?) ON DUPLICATE KEY UPDATE Wert = VALUES(Wert)",
+      [trimmed]
+    );
+    res.json({ log_max_dateigroesse_mb: trimmed ? Number(trimmed) : null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellung konnte nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/systemlogs/dateioperationen", requireRole("Administrator"), (req, res) => {
+  try {
+    res.json(leseDateioperationenLog());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Logs konnten nicht geladen werden." });
   }
 });
 

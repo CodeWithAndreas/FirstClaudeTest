@@ -3,7 +3,30 @@
 Stand: 2026-08-24. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** In der Dateiablage-Detailansicht öffnet ein
+**Wichtig für eine neue Session:** Neuer Sidebar-Punkt **Systemlogs** (ganz
+unten, nur Administrator, aufklappbare Gruppe wie Stammdaten/Audit) mit
+Unterpunkt **Dateioperationen**, der Upload/Download/Änderung/Löschung von
+Dokumenten in der Dateiablage protokolliert. Das Protokoll ist bewusst eine
+reine Textdatei `server/logs/dateioperationen.log` (pipe-getrennt: Zeitstempel
+ISO 8601 | Art | Dateiname | Teilnehmer "Nachname, Vorname" | Username) und
+**kein** Datenbank-Log – analog zu `server/uploads/` liegt `server/logs/`
+außerhalb der `express.static`-Allowlist und ist nicht per HTTP erreichbar,
+Zugriff nur über `GET /api/systemlogs/dateioperationen` (Administrator-only,
+liest und parst alle `dateioperationen*.log`-Dateien serverseitig). Vor jedem
+Log-Eintrag prüft `logDateioperation()` in `server/server.js`, ob die aktuelle
+Logdatei die in den Einstellungen (neuer Bereich "Logging",
+`log_max_dateigroesse_mb` in `einstellung`, leer → Standardwert 50 MB)
+konfigurierte Maximalgröße erreicht hat, und benennt sie in diesem Fall mit
+Zeitstempel-Suffix um (`dateioperationen.<ISO-Zeitstempel>.log`) – rotierte
+Dateien werden aktuell **nicht** automatisch gelöscht (unbegrenzte
+Aufbewahrung, wie ein klassischer Audit-Trail). Logging-Fehler werden
+abgefangen (try/catch + `console.error`) und dürfen die eigentliche
+Datei-Operation nie zum Scheitern bringen. Bewusst **nicht** mitgeloggt wird
+das Öffnen der Dokumentvorschau (`GET /api/dokumente/:id/vorschau`), da das
+technisch kein Download ist – nur `GET /api/dokumente/:id/datei` zählt als
+Download. `server/logs/` ist wie `server/uploads/` in `.gitignore`.
+
+Davor (gleiche Grund-Session): In der Dateiablage-Detailansicht öffnet ein
 neuer "Vorschau"-Button jedes Dokument direkt im Browser in einem neuen Tab
 (`dokument-vorschau.html`, bewusst **außerhalb** des SPA-Hash-Routings) statt
 es herunterzuladen: PDF/Bilder über den nativen Browser-Viewer, DOCX über

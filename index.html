@@ -225,6 +225,32 @@
               <span class="label">Einstellungen</span>
             </a>
           </li>
+          <li>
+            <details class="sidebar-group" data-group="systemlogs">
+              <summary class="sidebar-link">
+                <span class="icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                  </svg>
+                </span>
+                <span class="label">Systemlogs</span>
+                <svg class="icon-chevron-audit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </summary>
+              <ul class="sidebar-subnav">
+                <li>
+                  <a href="#systemlogs-dateioperationen" class="sidebar-link" data-page="systemlogs-dateioperationen">
+                    <span class="label">Dateioperationen</span>
+                  </a>
+                </li>
+              </ul>
+            </details>
+          </li>
         </ul>
       </nav>
     </aside>
@@ -1335,8 +1361,71 @@
           </div>
 
           <div class="settings-section">
+            <h3>Logging</h3>
+            <form id="einstLoggingForm" class="data-form">
+              <div class="form-row">
+                <label for="einstLogMaxDateigroesse">Maximale Logdateigröße (MB)</label>
+                <input type="number" id="einstLogMaxDateigroesse" name="log_max_dateigroesse_mb" min="1" step="1" placeholder="Leer lassen für Standardwert (50 MB)">
+              </div>
+              <p class="form-message" id="einstLoggingFormMessage" role="status"></p>
+              <div class="dialog-actions">
+                <button type="submit" class="btn-primary">Speichern</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="settings-section">
             <h3>Benutzerkonten</h3>
             <p class="detail-placeholder">Noch keine Einstellungen in dieser Kategorie.</p>
+          </div>
+        </section>
+
+        <section id="page-systemlogs-dateioperationen" class="page">
+          <h2>Systemlogs / Dateioperationen</h2>
+          <p>Protokoll aller Uploads, Downloads, Änderungen und Löschungen von Dokumenten in der Dateiablage.</p>
+
+          <div class="filter-bar">
+            <div class="form-row">
+              <label for="sysLogArtFilter">Art der Operation</label>
+              <select id="sysLogArtFilter">
+                <option value="">– alle –</option>
+                <option value="Upload">Upload</option>
+                <option value="Download">Download</option>
+                <option value="Änderung">Änderung</option>
+                <option value="Löschung">Löschung</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="sysLogBenutzerFilter">Benutzer</label>
+              <input type="text" id="sysLogBenutzerFilter" placeholder="Benutzer suchen…">
+            </div>
+
+            <div class="form-row filter-name">
+              <label for="sysLogDateinameFilter">Dateiname / Teilnehmer</label>
+              <input type="text" id="sysLogDateinameFilter" placeholder="Suchen…">
+            </div>
+
+            <button type="button" id="sysLogResetFilterBtn" class="filter-reset-btn">Filter zurücksetzen</button>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Zeitstempel</th>
+                  <th>Art</th>
+                  <th>Dateiname</th>
+                  <th>Teilnehmer</th>
+                  <th>Benutzer</th>
+                </tr>
+              </thead>
+              <tbody id="sysLogTableBody">
+                <tr>
+                  <td colspan="5">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 

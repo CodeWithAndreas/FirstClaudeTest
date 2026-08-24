@@ -243,6 +243,58 @@ async function resolveUploadVerzeichnis() {
   return zielpfad;
 }
 
+const ENV_PFAD = path.join(__dirname, ".env");
+
+function quoteEnvWert(wert) {
+  return `"${String(wert).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function writeEnvUpdates(updates) {
+  let inhalt = "";
+  try {
+    inhalt = fs.readFileSync(ENV_PFAD, "utf8");
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+  }
+
+  fs.writeFileSync(`${ENV_PFAD}.bak`, inhalt);
+
+  const zeilen = inhalt.split(/\r?\n/);
+  const gesehen = new Set();
+
+  const neueZeilen = zeilen.map((zeile) => {
+    const treffer = zeile.match(/^([A-Z_]+)=/);
+    if (treffer && Object.prototype.hasOwnProperty.call(updates, treffer[1])) {
+      gesehen.add(treffer[1]);
+      return `${treffer[1]}=${quoteEnvWert(updates[treffer[1]])}`;
+    }
+    return zeile;
+  });
+
+  for (const [schluessel, wert] of Object.entries(updates)) {
+    if (!gesehen.has(schluessel)) {
+      neueZeilen.push(`${schluessel}=${quoteEnvWert(wert)}`);
+    }
+  }
+
+  fs.writeFileSync(ENV_PFAD, neueZeilen.join("\n"));
+}
+
+async function testDatenbankVerbindung({ host, port, user, password, database }) {
+  const testVerbindung = await mysql.createConnection({
+    host,
+    port: Number(port),
+    user,
+    password,
+    database,
+    ssl: { rejectUnauthorized: false },
+    connectTimeout: 5000,
+  });
+  await testVerbindung.end();
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: async (req, file, cb) => {
@@ -1653,6 +1705,85 @@ app.put("/api/einstellungen", requireRole("Administrator"), async (req, res) => 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Einstellungen konnten nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/einstellungen/datenbank", requireRole("Administrator"), (req, res) => {
+  res.json({
+    host: process.env.DB_HOST || "",
+    port: process.env.DB_PORT || "",
+    name: process.env.DB_NAME || "",
+    user: process.env.DB_USER || "",
+  });
+});
+
+app.put("/api/einstellungen/datenbank", requireRole("Administrator"), async (req, res) => {
+  const { host, port, name, user } = req.body;
+  const trimmedHost = (host || "").trim();
+  const trimmedName = (name || "").trim();
+  const trimmedUser = (user || "").trim();
+  const portNumber = Number(port);
+
+  if (!trimmedHost || !trimmedName || !trimmedUser || !Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65535) {
+    return res.status(400).json({ error: "Host, Port, Datenbankname und Datenbankuser sind erforderlich." });
+  }
+
+  try {
+    await testDatenbankVerbindung({
+      host: trimmedHost,
+      port: portNumber,
+      user: trimmedUser,
+      password: process.env.DB_PASSWORD || "",
+      database: trimmedName,
+    });
+  } catch (err) {
+    return res.status(400).json({ error: `Verbindung mit diesen Zugangsdaten fehlgeschlagen: ${err.message}` });
+  }
+
+  try {
+    writeEnvUpdates({
+      DB_HOST: trimmedHost,
+      DB_PORT: String(portNumber),
+      DB_NAME: trimmedName,
+      DB_USER: trimmedUser,
+    });
+    res.json({
+      success: true,
+      message: "Gespeichert. Bitte den Server neu starten, damit die neuen Zugangsdaten wirksam werden.",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Zugangsdaten konnten nicht gespeichert werden." });
+  }
+});
+
+app.put("/api/einstellungen/datenbank/passwort", requireRole("Administrator"), async (req, res) => {
+  const { passwort } = req.body;
+  if (!passwort) {
+    return res.status(400).json({ error: "Ein neues Passwort ist erforderlich." });
+  }
+
+  try {
+    await testDatenbankVerbindung({
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT),
+      user: process.env.DB_USER,
+      password: passwort,
+      database: process.env.DB_NAME,
+    });
+  } catch (err) {
+    return res.status(400).json({ error: `Verbindung mit diesem Passwort fehlgeschlagen: ${err.message}` });
+  }
+
+  try {
+    writeEnvUpdates({ DB_PASSWORD: passwort });
+    res.json({
+      success: true,
+      message: "Gespeichert. Bitte den Server neu starten, damit das neue Passwort wirksam wird.",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Passwort konnte nicht gespeichert werden." });
   }
 });
 

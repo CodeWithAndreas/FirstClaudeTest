@@ -774,6 +774,30 @@ body.logged-out .app-layout {
   color: var(--color-primary-dark);
 }
 
+.settings-password-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.settings-password-row input {
+  flex: 1;
+  color: var(--color-text-muted);
+  background: var(--color-bg-light);
+}
+
+.settings-password-row button {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
 .aktivitaet-detail-view h3 {
   color: var(--color-primary-dark);
   margin-bottom: 0.75rem;

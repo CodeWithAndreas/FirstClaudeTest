@@ -173,6 +173,7 @@ function showPage(pageId) {
   }
   if (targetId === "einstellungen") {
     loadEinstellungen();
+    loadDatenbankEinstellungen();
   }
 }
 
@@ -2282,6 +2283,110 @@ einstellungenForm.addEventListener("submit", async (event) => {
   } catch (err) {
     einstellungenFormMessage.textContent = err.message;
     einstellungenFormMessage.className = "form-message error";
+  }
+});
+
+const einstDatenbankForm = document.getElementById("einstDatenbankForm");
+const einstDatenbankFormMessage = document.getElementById("einstDatenbankFormMessage");
+const einstDbHost = document.getElementById("einstDbHost");
+const einstDbPort = document.getElementById("einstDbPort");
+const einstDbName = document.getElementById("einstDbName");
+const einstDbUser = document.getElementById("einstDbUser");
+const einstDbPasswortBtn = document.getElementById("einstDbPasswortBtn");
+
+const einstDbPasswortDialog = document.getElementById("einstDbPasswortDialog");
+const einstDbPasswortForm = document.getElementById("einstDbPasswortForm");
+const einstDbPasswortFormMessage = document.getElementById("einstDbPasswortFormMessage");
+const einstDbNeuesPasswort = document.getElementById("einstDbNeuesPasswort");
+const einstDbNeuesPasswortWiederholung = document.getElementById("einstDbNeuesPasswortWiederholung");
+const einstDbPasswortCancelBtn = document.getElementById("einstDbPasswortCancelBtn");
+
+async function loadDatenbankEinstellungen() {
+  try {
+    const response = await fetch("/api/einstellungen/datenbank");
+    if (!response.ok) {
+      throw new Error("Datenbank-Einstellungen konnten nicht geladen werden.");
+    }
+    const data = await response.json();
+    einstDbHost.value = data.host || "";
+    einstDbPort.value = data.port || "";
+    einstDbName.value = data.name || "";
+    einstDbUser.value = data.user || "";
+  } catch (err) {
+    console.error(err);
+    einstDatenbankFormMessage.textContent = err.message;
+    einstDatenbankFormMessage.className = "form-message error";
+  }
+}
+
+einstDatenbankForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  einstDatenbankFormMessage.textContent = "";
+  einstDatenbankFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/einstellungen/datenbank", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        host: einstDbHost.value.trim(),
+        port: Number(einstDbPort.value),
+        name: einstDbName.value.trim(),
+        user: einstDbUser.value.trim(),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Datenbank-Einstellungen konnten nicht gespeichert werden.");
+    }
+    einstDatenbankFormMessage.textContent = body.message;
+    einstDatenbankFormMessage.className = "form-message";
+  } catch (err) {
+    einstDatenbankFormMessage.textContent = err.message;
+    einstDatenbankFormMessage.className = "form-message error";
+  }
+});
+
+einstDbPasswortBtn.addEventListener("click", () => {
+  einstDbPasswortForm.reset();
+  einstDbPasswortFormMessage.textContent = "";
+  einstDbPasswortFormMessage.className = "form-message";
+  einstDbPasswortDialog.showModal();
+});
+
+einstDbPasswortCancelBtn.addEventListener("click", () => {
+  einstDbPasswortDialog.close();
+});
+
+einstDbPasswortForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  einstDbPasswortFormMessage.textContent = "";
+  einstDbPasswortFormMessage.className = "form-message";
+
+  if (einstDbNeuesPasswort.value !== einstDbNeuesPasswortWiederholung.value) {
+    einstDbPasswortFormMessage.textContent = "Die Passwort-Wiederholung stimmt nicht überein.";
+    einstDbPasswortFormMessage.className = "form-message error";
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/einstellungen/datenbank/passwort", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ passwort: einstDbNeuesPasswort.value }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Passwort konnte nicht gespeichert werden.");
+    }
+    einstDbPasswortDialog.close();
+    einstDatenbankFormMessage.textContent = body.message;
+    einstDatenbankFormMessage.className = "form-message";
+  } catch (err) {
+    einstDbPasswortFormMessage.textContent = err.message;
+    einstDbPasswortFormMessage.className = "form-message error";
   }
 });
 

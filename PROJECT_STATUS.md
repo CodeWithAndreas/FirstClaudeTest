@@ -3,26 +3,29 @@
 Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Neue **Dokumentenverwaltung pro
-Teilnehmendem**: neues Datei-Icon in der Teilnehmenden-Tabelle (inkl.
-Anzahl-Badge in derselben Farblogik wie das bestehende
-Aktivitäten-Badge) öffnet eine Master-Detail-Unterseite "Dateiablage"
-(Upload-Dialog mit Titel/Schlagworten/Dokumentart/Vertraulich/Pflicht-
-Löschdatum, Bearbeiten-Dialog für Metadaten, Löschen **ausschließlich
-für Administrator**). Dateien liegen auf der Festplatte, Speicherpfad
-in neuer admin-only **Einstellungen**-Seite konfigurierbar (Default:
-`server/uploads/`). Details siehe Unterabschnitt "Dokumentenverwaltung
-pro Teilnehmendem" weiter unten.
+**Wichtig für eine neue Session:** Die Einstellungen-Seite zeigt unter
+"Datenbank" jetzt die echten MySQL-Zugangsdaten (Host/Port/Name/User
+editierbar, Passwort **nie im Klartext**, nur per Popup änderbar).
+Da diese Daten in `server/.env` liegen (nicht in der eigenen DB –
+Henne-Ei-Problem beim Verbindungsaufbau), wird vor jedem Schreiben
+eine echte Testverbindung mit den neuen Werten aufgebaut – schlägt sie
+fehl, bleibt `.env` unangetastet. Automatisches `.env.bak`-Backup vor
+jeder Änderung (jetzt auch in `.gitignore`, war vorher eine Lücke).
+Änderungen wirken erst nach manuellem Server-Neustart (kein
+Live-Reconnect, kein Process-Manager im Projekt). Details siehe
+Unterabschnitt "Datenbank-Zugangsdaten in den Einstellungen".
 
-**Sicherheits-Fix als Teil derselben Änderung (wichtig für zukünftige
-Static-Serving-Änderungen):** `express.static` lieferte bis dahin das
-**komplette Repo-Root** aus (inkl. `server/server.js`, `schema.sql`,
-`package.json` im Klartext über HTTP). Jetzt eingeschränkt auf explizit
-`index.html`, `css/`, `js/`, `assets/` – siehe Unterabschnitt
-"Dokumentenverwaltung pro Teilnehmendem" für Details und den
-Verifikationsweg. Bitte bei künftigen neuen statischen Assets diese
-Allowlist erweitern, nicht wieder auf einen pauschalen Root-Mount
-zurückfallen.
+Davor (gleiche Grund-Session): Neue **Dokumentenverwaltung pro
+Teilnehmendem** (Datei-Icon inkl. Anzahl-Badge in der Teilnehmenden-
+Tabelle → Master-Detail-Unterseite "Dateiablage", Upload-/Bearbeiten-
+Dialog, Löschen ausschließlich für Administrator, Speicherpfad in den
+Einstellungen konfigurierbar) samt kritischem Sicherheits-Fix:
+`express.static` lieferte vorher das **komplette Repo-Root** aus
+(inkl. Server-Quellcode im Klartext über HTTP), jetzt eingeschränkt
+auf eine explizite Allowlist (`index.html`, `css/`, `js/`, `assets/`)
+– bei künftigen neuen statischen Assets diese Allowlist erweitern,
+nicht auf einen pauschalen Root-Mount zurückfallen. Details siehe
+Unterabschnitt "Dokumentenverwaltung pro Teilnehmendem".
 
 **Frühere Sessions** (Details jeweils im passenden Unterabschnitt weiter
 unten): Sidebar-Umbau "Stammdaten" (Maßnahmen/Gruppen/Fachbereiche als
@@ -89,6 +92,8 @@ server/
                   NICHT öffentlich per HTTP erreichbar (siehe Sicherheits-Fix
                   im Abschnitt "Dokumentenverwaltung pro Teilnehmendem")
   .env            Echte DB-Zugangsdaten + SESSION_SECRET (NICHT committed, in .gitignore)
+  .env.bak        Automatische Sicherung vor jeder Änderung der DB-Zugangsdaten über
+                  die Einstellungen-Seite (server.js writeEnvUpdates()), NICHT im Git
   .env.example    Vorlage für .env
 ```
 
@@ -946,6 +951,88 @@ bestehenden Aktivitäten-Badge verglichen. Alle selbst angelegten
 Testdaten (Dokumente, Dateien) danach wieder entfernt – ein vom Nutzer
 selbst während der Session angelegtes echtes Testdokument wurde bewusst
 nicht angetastet.
+
+### Datenbank-Zugangsdaten in den Einstellungen
+
+Die zuvor als reiner Platzhalter angelegte Kategorie „Datenbank" auf
+der Einstellungen-Seite (siehe "Dokumentenverwaltung pro
+Teilnehmendem") zeigt jetzt die MySQL-Zugangsdaten (Host/IP, Port,
+Datenbankname, Datenbankuser) direkt editierbar an, mit eigenem
+`#einstDatenbankForm` und eigenem "Speichern"-Button (die Seite hat
+dadurch pro Kategorie mit tatsächlichen Feldern ein eigenständiges
+`<form>` statt eines einzigen großen Formulars – nötig, weil
+Datenbank-Einstellungen fundamental anders funktionieren als
+`dokumentenpfad`/`loeschfrist_offset_jahre`, siehe unten).
+
+**Grundproblem, das das gesamte Design bestimmt:** Die DB-Zugangsdaten
+liegen in `server/.env` und werden von `dotenv` einmalig beim
+Serverstart geladen, bevor der `mysql2`-Pool erstellt wird – sie
+können nicht wie die übrigen Einstellungen in der eigenen
+`einstellung`-Tabelle liegen, weil ohne gültige Zugangsdaten gar keine
+Verbindung zu dieser Tabelle zustande käme (Henne-Ei-Problem). Deshalb:
+
+- **`GET /api/einstellungen/datenbank`** (`requireRole("Administrator")`)
+  liest die aktuellen Werte direkt aus `process.env.DB_HOST` etc. und
+  gibt **niemals** `DB_PASSWORD` zurück – auch nicht maskiert, das
+  Feld fehlt im Response komplett. Das Passwort-Feld im Formular zeigt
+  serverseitig unbefüllt nur eine statische Platzhalter-Anzeige
+  (`········`, `disabled`), niemals einen echten Wert – erfüllt die
+  Vorgabe "Passwort darf nicht im Klartext dargestellt werden" auf
+  Backend- und Frontend-Ebene gleichzeitig.
+- **Ändern des Passworts läuft ausschließlich über ein separates
+  Popup** (`#einstDbPasswortDialog`, Vorbild: das bestehende
+  `resetBenutzerPasswortDialog`-Muster – Neues Passwort + Wiederholung,
+  Übereinstimmung wird clientseitig geprüft) und einen eigenen
+  Endpunkt `PUT /api/einstellungen/datenbank/passwort` (Body nur
+  `{passwort}`), getrennt vom Formular für Host/Port/Name/User
+  (`PUT /api/einstellungen/datenbank`).
+- **Validierung vor dem Schreiben (kritischer Sicherheitsmechanismus,
+  ohne Rückfrage beim Nutzer als offensichtlich richtige Vorgehensweise
+  umgesetzt):** Beide PUT-Routen bauen über `testDatenbankVerbindung()`
+  eine echte, kurzlebige `mysql2`-Testverbindung mit den **neuen**
+  Werten auf (bei der Host/Port/Name/User-Route mit dem unveränderten,
+  aktuell aktiven `process.env.DB_PASSWORD` kombiniert; bei der
+  Passwort-Route mit dem unveränderten aktuellen Host/Port/Name/User
+  kombiniert). Schlägt die Testverbindung fehl, wird **nichts**
+  geschrieben, der Endpunkt antwortet mit 400 und einer Fehlermeldung
+  aus der zugrundeliegenden MySQL-Fehlermeldung. Verhindert, dass ein
+  Tippfehler den Server beim nächsten Neustart komplett lahmlegt.
+- **`writeEnvUpdates(updates)`** (neue Hilfsfunktion in `server.js`)
+  liest `server/.env`, legt vor jeder Änderung automatisch eine
+  Sicherung `server/.env.bak` an (überschrieben bei jedem weiteren
+  Schreibvorgang), ersetzt nur die betroffenen `KEY=`-Zeilen (alle
+  anderen Zeilen wie `PORT`/`SESSION_SECRET` bleiben unangetastet) und
+  schreibt neue Werte grundsätzlich in doppelten Anführungszeichen
+  (`quoteEnvWert()`, escaped `\`/`"`) – wichtig, weil ein
+  DB-Passwort z. B. ein `#` enthalten könnte, das in `.env`-Dateien
+  sonst als Kommentar-Start interpretiert würde. `server/.env.bak`
+  wurde ergänzend in `.gitignore` aufgenommen (vorher eine Lücke –
+  `server/.env` selbst war zwar schon ausgeschlossen, eine
+  `.bak`-Kopie mit Klartext-Zugangsdaten aber nicht automatisch).
+- **Kein Live-Reconnect:** Da eine bereits laufende `mysql2`-Pool-
+  Verbindung nicht sicher mitten im Betrieb umgeschaltet werden kann
+  (insbesondere nicht während der Admin gerade selbst die Anfrage zum
+  Ändern stellt) und es in diesem Projekt keinen Process-Manager
+  (pm2/nodemon) gibt, der automatisch neu starten würde, bleibt es bei
+  der bereits etablierten Konvention dieser Session: Erfolgsmeldung
+  weist explizit auf einen nötigen manuellen Server-Neustart hin,
+  bevor neue Zugangsdaten wirksam werden.
+
+Getestet (auf der echten, lokalen Entwicklungsdatenbank, mit größter
+Vorsicht wegen des Risikos, die eigene laufende Verbindung zu
+zerstören): vorherige Sicherheitskopie der `.env` außerhalb des Repos
+angelegt; falscher Host/falsches Passwort jeweils korrekt mit 400
+abgelehnt, `.env` dabei per MD5-Hash-Vergleich als unverändert
+bestätigt, keine `.env.bak` angelegt; erfolgreicher Rundlauf mit den
+tatsächlich aktuellen Zugangsdaten (Host/Port/Name/User sowie das
+echte Passwort, per Shell-Variable durchgereicht, ohne dass der Wert
+je im sichtbaren Kontext auftauchte) inkl. zweimaligem echtem
+Server-Neustart zur Bestätigung, dass das neue, angeführungszeichnete
+`.env`-Format von `dotenv` korrekt geparst wird und die Verbindung
+danach weiterhin funktioniert; Nicht-Admin-Zugriff auf beide Routen
+mit 403 bestätigt; Playwright-Screenshot bestätigt, dass das
+Passwort-Feld im DOM nur `········` enthält und der Popup-Dialog
+korrekt im bestehenden Stil öffnet.
 
 ### Anwesenheiten-Seite
 

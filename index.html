@@ -1279,14 +1279,43 @@
 
         <section id="page-einstellungen" class="page">
           <h2>Einstellungen</h2>
-          <form id="einstellungenForm" class="data-form">
-            <div class="settings-section">
-              <h3>Datenbank</h3>
-              <p class="detail-placeholder">Noch keine Einstellungen in dieser Kategorie.</p>
-            </div>
 
-            <div class="settings-section">
-              <h3>Dateiverwaltung</h3>
+          <div class="settings-section">
+            <h3>Datenbank</h3>
+            <form id="einstDatenbankForm" class="data-form">
+              <div class="form-row">
+                <label for="einstDbHost">IP-Adresse / Hostname</label>
+                <input type="text" id="einstDbHost" name="host" required>
+              </div>
+              <div class="form-row">
+                <label for="einstDbPort">Port</label>
+                <input type="number" id="einstDbPort" name="port" min="1" max="65535" required>
+              </div>
+              <div class="form-row">
+                <label for="einstDbName">Datenbankname</label>
+                <input type="text" id="einstDbName" name="name" required>
+              </div>
+              <div class="form-row">
+                <label for="einstDbUser">Datenbankuser</label>
+                <input type="text" id="einstDbUser" name="user" required>
+              </div>
+              <div class="form-row">
+                <label for="einstDbPasswortAnzeige">Passwort</label>
+                <div class="settings-password-row">
+                  <input type="password" id="einstDbPasswortAnzeige" value="········" disabled>
+                  <button type="button" id="einstDbPasswortBtn" class="btn-secondary">Passwort ändern</button>
+                </div>
+              </div>
+              <p class="form-message" id="einstDatenbankFormMessage" role="status"></p>
+              <div class="dialog-actions">
+                <button type="submit" class="btn-primary">Speichern</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="settings-section">
+            <h3>Dateiverwaltung</h3>
+            <form id="einstellungenForm" class="data-form">
               <div class="form-row">
                 <label for="einstDokumentenpfad">Dokumentenpfad</label>
                 <input type="text" id="einstDokumentenpfad" name="dokumentenpfad" placeholder="Leer lassen für Standard-Unterordner der Anwendung">
@@ -1295,19 +1324,37 @@
                 <label for="einstLoeschfristOffset">Löschfrist-Offset (Jahre)</label>
                 <input type="number" id="einstLoeschfristOffset" name="loeschfrist_offset_jahre" min="0" step="1" required>
               </div>
-            </div>
+              <p class="form-message" id="einstellungenFormMessage" role="status"></p>
+              <div class="dialog-actions">
+                <button type="submit" class="btn-primary">Speichern</button>
+              </div>
+            </form>
+          </div>
 
-            <div class="settings-section">
-              <h3>Benutzerkonten</h3>
-              <p class="detail-placeholder">Noch keine Einstellungen in dieser Kategorie.</p>
-            </div>
+          <div class="settings-section">
+            <h3>Benutzerkonten</h3>
+            <p class="detail-placeholder">Noch keine Einstellungen in dieser Kategorie.</p>
+          </div>
+        </section>
 
-            <p class="form-message" id="einstellungenFormMessage" role="status"></p>
+        <dialog id="einstDbPasswortDialog" class="confirm-dialog">
+          <form id="einstDbPasswortForm">
+            <h3>Datenbank-Passwort ändern</h3>
+            <div class="form-row">
+              <label for="einstDbNeuesPasswort">Neues Passwort</label>
+              <input type="password" id="einstDbNeuesPasswort" name="NeuesPasswort" autocomplete="new-password" required>
+            </div>
+            <div class="form-row">
+              <label for="einstDbNeuesPasswortWiederholung">Neues Passwort wiederholen</label>
+              <input type="password" id="einstDbNeuesPasswortWiederholung" name="NeuesPasswortWiederholung" autocomplete="new-password" required>
+            </div>
+            <p class="form-message" id="einstDbPasswortFormMessage" role="status"></p>
             <div class="dialog-actions">
+              <button type="button" id="einstDbPasswortCancelBtn" class="btn-secondary">Abbrechen</button>
               <button type="submit" class="btn-primary">Speichern</button>
             </div>
           </form>
-        </section>
+        </dialog>
 
         <dialog id="deleteDialog" class="confirm-dialog">
           <form id="deleteForm">

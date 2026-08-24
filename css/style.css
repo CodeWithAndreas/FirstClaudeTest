@@ -405,7 +405,8 @@ body.logged-out .app-layout {
   max-height: none;
 }
 
-.aktivitaet-list-item.wiedervorlage-item {
+.aktivitaet-list-item.wiedervorlage-item,
+.aktivitaet-list-item.dokument-list-item {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -436,6 +437,25 @@ body.logged-out .app-layout {
 .wiedervorlage-item.overdue .aktivitaet-list-datum {
   color: var(--color-accent);
   font-weight: 700;
+}
+
+.vertraulich-badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  margin-bottom: 0.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-accent);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.form-row-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
 }
 
 /* Data table */
@@ -484,7 +504,8 @@ body.logged-out .app-layout {
 .row-reset-passwort-btn,
 .row-toggle-aktiv-btn,
 .row-erledigt-btn,
-.row-termin-btn {
+.row-termin-btn,
+.row-files-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -506,7 +527,8 @@ body.logged-out .app-layout {
 .row-reset-passwort-btn:hover,
 .row-toggle-aktiv-btn:hover,
 .row-erledigt-btn:hover,
-.row-termin-btn:hover {
+.row-termin-btn:hover,
+.row-files-btn:hover {
   background: var(--color-bg-light);
   color: var(--color-primary);
 }
@@ -517,7 +539,8 @@ body.logged-out .app-layout {
 .row-reset-passwort-btn svg,
 .row-toggle-aktiv-btn svg,
 .row-erledigt-btn svg,
-.row-termin-btn svg {
+.row-termin-btn svg,
+.row-files-btn svg {
   width: 18px;
   height: 18px;
 }
@@ -786,7 +809,7 @@ body.logged-out .app-layout {
   color: var(--color-text-muted);
 }
 
-.form-row input,
+.form-row input:not([type="checkbox"]),
 .form-row select,
 .form-row textarea {
   padding: 0.5rem 0.75rem;
@@ -797,6 +820,11 @@ body.logged-out .app-layout {
   background: #ffffff;
   color: var(--color-text);
   resize: vertical;
+}
+
+.form-row input[type="checkbox"] {
+  width: auto;
+  margin: 0;
 }
 
 .form-row input:focus,
@@ -935,6 +963,16 @@ body.logged-out .app-layout {
 
 .btn-primary:hover {
   background: var(--color-primary-mid);
+}
+
+a.btn-primary {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-lg);
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-decoration: none;
 }
 
 .edit-dialog {

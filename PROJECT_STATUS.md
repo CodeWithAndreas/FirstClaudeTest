@@ -3,40 +3,34 @@
 Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Die Sidebar wurde umgebaut: Maßnahmen,
-Gruppen und Fachbereiche sind keine eigenständigen Top-Level-Menüpunkte
-mehr, sondern Unterpunkte einer neuen, aufklappbaren Gruppe
-**„Stammdaten"**. Klick auf „Stammdaten" selbst führt zu einer neuen
-Übersichtsseite mit drei klickbaren Cards (Maßnahmen/Gruppen/
-Fachbereiche, im Look der Dashboard-Stat-Karten mit echten Live-Zahlen).
-Details siehe Unterabschnitt "Stammdaten-Übersicht" weiter unten.
+**Wichtig für eine neue Session:** Neue **Dokumentenverwaltung pro
+Teilnehmendem**: neues Datei-Icon in der Teilnehmenden-Tabelle öffnet
+eine Master-Detail-Unterseite "Dateiablage" (Upload-Dialog mit Titel/
+Schlagworten/Dokumentart/Vertraulich/Pflicht-Löschdatum, Bearbeiten-
+Dialog für Metadaten, Löschen **ausschließlich für Administrator**).
+Dateien liegen auf der Festplatte, Speicherpfad in neuer admin-only
+**Einstellungen**-Seite konfigurierbar (Default: `server/uploads/`).
+Details siehe Unterabschnitt "Dokumentenverwaltung pro Teilnehmendem"
+weiter unten.
 
-Davor: Neue Rolle **Auditor** plus neuer, aufklappbarer
-Sidebar-Menüpunkt **„Audit"** mit 9 Unterseiten in dieser Reihenfolge:
-Interessenten Betreuung, Maßnahmen, Teilnehmer, Anwesenheiten,
-Lernmaterialien, Leistungskontrollen, Praktika, Teilnehmenden Feedback,
-Vermittlung – aktuell reine Platzhalterseiten (Überschrift +
-Hinweistext, kein Inhalt). Auditor sieht **ausschließlich** diesen
-Audit-Bereich (alle anderen Seiten inkl. Dashboard und Stammdaten sind
-ausgeblendet und auch per direktem Hash-Aufruf blockiert), Administrator
-sieht ihn zusätzlich zu allem anderen. Details siehe Unterabschnitt
-"Audit-Bereich (Rolle Auditor)" weiter unten.
+**Sicherheits-Fix als Teil derselben Änderung (wichtig für zukünftige
+Static-Serving-Änderungen):** `express.static` lieferte bis dahin das
+**komplette Repo-Root** aus (inkl. `server/server.js`, `schema.sql`,
+`package.json` im Klartext über HTTP). Jetzt eingeschränkt auf explizit
+`index.html`, `css/`, `js/`, `assets/` – siehe Unterabschnitt
+"Dokumentenverwaltung pro Teilnehmendem" für Details und den
+Verifikationsweg. Bitte bei künftigen neuen statischen Assets diese
+Allowlist erweitern, nicht wieder auf einen pauschalen Root-Mount
+zurückfallen.
 
-Davor: Das Dashboard hat unter den 4 Statistikkarten einen
-zweispaltigen Bereich: links eine persönliche **Wiedervorlagen-Liste**
-(erster Baustein eines künftigen Nachrichtensystems, siehe
-Unterabschnitt "Wiedervorlage-Nachrichtenliste auf dem Dashboard"),
-rechts ein Platzhalter für spätere "normale Nachrichten".
+**Frühere Sessions** (Details jeweils im passenden Unterabschnitt weiter
+unten): Sidebar-Umbau "Stammdaten" (Maßnahmen/Gruppen/Fachbereiche als
+Unterpunkte + eigene Card-Übersichtsseite) · Rolle Auditor mit
+aufklappbarem "Audit"-Bereich (9 Platzhalterseiten) · Wiedervorlage-
+Nachrichtenliste auf dem Dashboard · rollenabhängig differenzierte
+Löschrechte für Teilnehmende/Maßnahmen/Gruppen.
 
-Davor: Löschrechte für Teilnehmende, Maßnahmen und Gruppen sind
-rollenabhängig differenziert: Ausbilder und Fachbereichsleiter dürfen
-keine Teilnehmenden/Maßnahmen mehr löschen, Ausbilder zusätzlich keine
-Gruppen; Fachbereichsleiter dürfen eine Gruppe nur löschen, wenn ihr
-keine Maßnahme mehr zugeordnet ist. Details siehe Unterabschnitt
-"Differenzierte Löschrechte" unter "Login, Rollen und
-Benutzerverwaltung" weiter unten.
-
-**Historische Randnotiz zu diesem Thema (bewusst dokumentiert als
+**Historische Randnotiz zu den Löschrechten (bewusst dokumentiert als
 Warnung für zukünftige Änderungen an dieser Stelle):** In einer
 früheren Session wurde ein ganz ähnliches Feature bereits einmal
 eingebaut, dabei aber zusätzlich die FK `fk_Massnahme_Gruppe1` auf
@@ -88,7 +82,11 @@ server/
                   neuen/leeren MySQL-Instanz, siehe README.md "Setup auf einem
                   neuen PC". Die benutzer*-Tabellen sind bewusst NICHT
                   enthalten, die legt server.js selbst an.
-  package.json    Abhängigkeiten: express, mysql2, dotenv, bcryptjs, express-session
+  package.json    Abhängigkeiten: express, mysql2, dotenv, bcryptjs, express-session, multer
+  uploads/        Default-Speicherort für hochgeladene Dokumente (konfigurierbar
+                  über die Einstellungen-Seite), NICHT im Git (siehe .gitignore),
+                  NICHT öffentlich per HTTP erreichbar (siehe Sicherheits-Fix
+                  im Abschnitt "Dokumentenverwaltung pro Teilnehmendem")
   .env            Echte DB-Zugangsdaten + SESSION_SECRET (NICHT committed, in .gitignore)
   .env.example    Vorlage für .env
 ```
@@ -100,12 +98,13 @@ server/
 - Linke Sidebar: ein-/ausklappbar (Chevron-Button), Menüpunkte in dieser
   Reihenfolge: **Dashboard, Anwesenheiten, Teilnehmende, Stammdaten
   (aufklappbar: Maßnahmen, Gruppen, Fachbereiche), Audit (aufklappbar,
-  9 Unterpunkte), Benutzer** – Fachbereiche (nur als Unterpunkt von
-  Stammdaten) und Benutzer sind nur für die Rolle Administrator sichtbar,
-  Audit nur für Auditor/Administrator, Stammdaten und die drei Punkte
-  davor sind für Auditor-only-Nutzer komplett ausgeblendet
-  (`applyRolePermissions()` in `js/main.js`, siehe Unterabschnitte
-  "Stammdaten-Übersicht" und "Audit-Bereich (Rolle Auditor)" weiter unten)
+  9 Unterpunkte), Benutzer, Einstellungen** – Fachbereiche (nur als
+  Unterpunkt von Stammdaten), Benutzer und Einstellungen sind nur für die
+  Rolle Administrator sichtbar, Audit nur für Auditor/Administrator,
+  Stammdaten und die drei Punkte davor sind für Auditor-only-Nutzer
+  komplett ausgeblendet (`applyRolePermissions()` in `js/main.js`, siehe
+  Unterabschnitte "Stammdaten-Übersicht", "Audit-Bereich (Rolle Auditor)"
+  und "Dokumentenverwaltung pro Teilnehmendem" weiter unten)
 - Routing client-seitig über `location.hash` (`#teilnehmende`, `#massnahmen`, …),
   keine echten Unterseiten/Reloads. Startseite (kein/unbekannter Hash) ist
   `dashboard` (`defaultPage` in `js/main.js`).
@@ -137,32 +136,43 @@ Verbindung: Host `127.0.0.1`, Port `3306`, User `root`, SSL aktiviert
 | `anwesenheitsstatus` | ID, Bezeichnung, Kurzzeichen                                                        | – |
 | `anwesenheit` | ID, TeilnehmerID, Datum, StatusID                                                         | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE), StatusID → anwesenheitsstatus.ID; UNIQUE(TeilnehmerID, Datum) |
 | `aktivitaet`  | ID, TeilnehmerID, Art, Thema, Bearbeiter, BearbeiterID, Bemerkung, Wiedervorlage, WiedervorlageErledigt, ErstelltAm | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE); BearbeiterID **ohne** FK (siehe unten) |
+| `dokument`    | ID, TeilnehmerID, Titel, Schlagworte, Dokumentart, Vertraulich, Loeschdatum, Dateiname, GespeicherterDateiname, Dateigroesse, MimeType, HochgeladenAm | TeilnehmerID → teilnehmer.ID (ON DELETE CASCADE) |
 | `benutzer`    | ID, Username (UNIQUE), PasswortHash, Vorname, Nachname, Email, Telefon, Aktiv, ErstelltAm  | – |
 | `rolle`       | ID, Bezeichnung (UNIQUE)                                                                   | – |
 | `benutzer_rolle` | BenutzerID, RolleID (Composite-PK)                                                       | BenutzerID → benutzer.ID (ON DELETE CASCADE), RolleID → rolle.ID (ON DELETE CASCADE) |
 | `benutzer_fachbereich` | BenutzerID, FachbereichID (Composite-PK)                                           | BenutzerID → benutzer.ID (ON DELETE CASCADE), FachbereichID → fachbereich.ID (ON DELETE CASCADE) |
+| `einstellung` | Schluessel (PK), Wert                                                                     | – (App-Infrastruktur, Key-Value-Store, siehe unten) |
 
 Die vier `benutzer*`-Tabellen existieren in keiner separaten `.sql`-Datei,
 sondern werden von `bootstrapDatabase()` in `server/server.js` bei jedem
 Serverstart per `CREATE TABLE IF NOT EXISTS` idempotent sichergestellt
 (kein Migrationstool im Projekt). Dieselbe Funktion seedet `rolle` mit den
-5 festen Rollen (`INSERT IGNORE`) und legt bei leerer `benutzer`-Tabelle
+6 festen Rollen (`INSERT IGNORE`) und legt bei leerer `benutzer`-Tabelle
 einmalig das Admin-Konto an (Username `admin`, Startpasswort `Admin2026!`,
 Rolle Administrator – Konsolenmeldung nur beim erstmaligen Anlegen). Für
 nachträglich ergänzte Spalten auf Bestandstabellen (`benutzer.Aktiv`, sowie
-seit dieser Session `aktivitaet.BearbeiterID` und
-`aktivitaet.WiedervorlageErledigt`) prüft `bootstrapDatabase()` jeweils per
-`INFORMATION_SCHEMA.COLUMNS`, ob die Spalte schon existiert, und holt sie
-sonst per `ALTER TABLE` nach – damit funktioniert sowohl eine frische als
-auch eine bereits bestehende Tabelle ohne manuellen Eingriff. Wichtiger
-Unterschied bei `aktivitaet`: Diese Tabelle existiert (anders als
+`aktivitaet.BearbeiterID` und `aktivitaet.WiedervorlageErledigt`) prüft
+`bootstrapDatabase()` jeweils per `INFORMATION_SCHEMA.COLUMNS`, ob die
+Spalte schon existiert, und holt sie sonst per `ALTER TABLE` nach – damit
+funktioniert sowohl eine frische als auch eine bereits bestehende Tabelle
+ohne manuellen Eingriff. Wichtiger Unterschied bei `aktivitaet` (und seit
+dieser Session `dokument`): Diese Tabellen existieren (anders als
 `benutzer`) bereits vor dem ersten Serverstart, da sie Teil des
-`schema.sql`-Grundschemas ist – die neuen Spalten sind deshalb sowohl in
-`schema.sql` (für Neuinstallationen) als auch im `bootstrapDatabase()`-
-Migrationspfad (für Bestandsinstallationen) ergänzt. `BearbeiterID` hat
-dabei bewusst **keine FK-Constraint** auf `benutzer(ID)`, weil `benutzer`
-zum Zeitpunkt des `schema.sql`-Einspielens (vor dem allerersten
-Serverstart) noch gar nicht existiert.
+`schema.sql`-Grundschemas sind – neue Spalten (bei `aktivitaet`) bzw. die
+komplette neue Tabelle (`dokument`, `CREATE TABLE IF NOT EXISTS` **sowohl**
+in `schema.sql` **als auch** in `bootstrapDatabase()`) sind deshalb an
+beiden Stellen ergänzt: einmal für Neuinstallationen (`schema.sql`) und
+einmal, damit die bereits laufende Datenbank dieser Session sie automatisch
+beim nächsten Serverstart bekommt, ohne manuellen SQL-Schritt
+(`bootstrapDatabase()`). `aktivitaet.BearbeiterID` hat dabei bewusst
+**keine FK-Constraint** auf `benutzer(ID)`, weil `benutzer` zum Zeitpunkt
+des `schema.sql`-Einspielens (vor dem allerersten Serverstart) noch gar
+nicht existiert; `dokument` hat dieses Problem nicht (referenziert nur
+`teilnehmer`, das an beiden Stellen bereits existiert), daher dort
+`ON DELETE CASCADE` ganz regulär. `einstellung` ist reine
+App-Infrastruktur wie `benutzer`/`rolle` und existiert **nur** in
+`bootstrapDatabase()` (nicht in `schema.sql`), mit geseedeten
+Default-Werten (`loeschfrist_offset_jahre` = `3`, `dokumentenpfad` = leer).
 
 ## Fertiggestellte Features (pro Seite gleiches Muster)
 
@@ -764,6 +774,145 @@ weder in der Sidebar noch erreichbar per direkter Hash-Änderung
 eigens angelegtem und danach wieder gelöschtem Testbenutzer, ohne echte
 Daten zu verändern.
 
+### Dokumentenverwaltung pro Teilnehmendem
+
+Neues Uhr-Icon-ähnliches Datei-Icon (`.row-files-btn`) in der
+Teilnehmenden-Tabelle führt zu einer weiteren Master-Detail-Unterseite
+`#page-teilnehmende-dateien` ("Dateiablage") – strukturell nach dem
+Vorbild der Aktivitätenverlauf-Unterseite (gleicher State-Machine-Ansatz:
+`currentDokumentTeilnehmerId`/`currentDokumentTeilnehmer`,
+`openTeilnehmerDateien(person)` mit demselben Hash-Sonderfall wie
+`openTeilnehmerAktivitaeten`), aber bewusst nur **2 Panel-Zustände**
+(Platzhalter/Detail) statt 3 – der Upload läuft über ein separates
+`<dialog>` statt über ein drittes Inline-Formular, weil ein
+Datei-Upload sich schlecht in ein Inline-Panel einfügt.
+
+**Datenmodell:** neue Tabelle `dokument` (siehe Datenbank-Abschnitt
+oben) – `Loeschdatum DATE NOT NULL` ist für **jedes** Dokument Pflicht
+(nicht nur vertrauliche), `GespeicherterDateiname` (UUID-basiert, siehe
+unten) ist rein intern und wird **nie** an den Client zurückgegeben.
+
+**Upload-Dialog** (`#dokUploadDialog`): natives `<input type="file">`
+für die Dateiauswahl (Dateibaum-Navigation kommt automatisch vom
+Betriebssystem, kein Custom-UI gebaut), Titel/Schlagworte (Freitext,
+analog zum bestehenden "Thema"-Feld bei Aktivitäten)/Dokumentart
+(Dropdown, feste Liste: „Eigennachweis Fehlzeit“, „Arbeitsunfähigkeit“,
+„Praktikumsvertrag“, „Anwesenheitsnachweis Praktikum“, analog zum
+bestehenden `AKTIVITAET_ARTEN`-Array-Muster, hier `DOKUMENT_ARTEN` in
+`server.js`)/Vertraulich (Checkbox)/Löschdatum (Date, Pflicht).
+**Löschdatum-Vorauswahl:** `teilnehmer.Endedatum` + konfigurierbarer
+Jahres-Offset (Default 3, in Einstellungen änderbar), berechnet
+clientseitig in `berechneLoeschdatumVorschlag()` bewusst über
+`new Date(y, m-1, d)` mit einzeln geparsten Ganzzahlen statt
+`new Date(dateString)` – vermeidet die UTC/Local-Zeitzonenfalle bei
+direktem ISO-String-Parsing. Der Offset-Wert wird einmalig beim
+App-Start für **alle** Rollen geladen (`GET
+/api/einstellungen/loeschfrist-offset`, absichtlich ohne
+Admin-Beschränkung, siehe Berechtigungen unten). Upload läuft über
+`FormData` + `fetch(..., {method:"POST", body: formData})` **ohne**
+manuellen `Content-Type`-Header (der Browser setzt die
+multipart-Boundary selbst).
+
+**Bearbeiten-Dialog** (`#dokEditDialog`): identische Felder minus
+Datei-Input, ändert nur Metadaten (`PUT /api/dokumente/:id`), niemals
+die Datei selbst.
+
+**Löschen ist bewusst rollenmäßig anders als bei allen anderen
+Entitäten im Projekt:** Nur Administrator darf ein Dokument löschen
+(Datei + DB-Zeile) – alle anderen berechtigten Nutzer (Fachbereichs-
+Scope) dürfen nur Eigenschaften bearbeiten. Clientseitig
+`canDeleteDokument()` (schlichte Admin-Rollenprüfung, kein
+Fachbereichs-Anteil wie bei `canDeleteGruppe()`), serverseitig
+`requireRole("Administrator")` auf `DELETE /api/dokumente/:id`. Alle
+anderen `dokumente`-Routen (GET/POST/PUT sowie der Datei-Download)
+folgen dagegen dem normalen Fachbereichs-Scope-Muster
+(`isRestrictedUser()`/`fachbereichInScope()`/
+`resolveFachbereichForMassnahme()`, über `resolveDokumentFuerScope()`
+analog zu `resolveAktivitaetFuerScope()`).
+
+**Datei-Handling:** `multer` (neue Dependency, `diskStorage`,
+20 MB Limit, keine Typ-Einschränkung). Zieldateiname auf der Platte =
+`crypto.randomUUID() + Dateiendung` (kollisionsfrei, unabhängig vom
+Original-Dateinamen), Zielverzeichnis dynamisch aus der neuen
+`einstellung`-Tabelle aufgelöst (`resolveUploadVerzeichnis()`, legt das
+Verzeichnis bei Bedarf per `fs.mkdirSync(..., {recursive:true})` an).
+Ein eigener `MulterError`-Handler (Express-Error-Middleware am
+Dateiende, vor `app.listen`) liefert bei zu großen Uploads eine saubere
+400-JSON-Antwort statt der Express-Standardfehlerseite.
+
+**Kritischer Sicherheits-Fix als Teil dieser Änderung:**
+`app.use(express.static(path.join(__dirname, "..")))` lieferte bisher
+das **komplette Repo-Root** aus, inkl. `server/server.js`,
+`server/schema.sql`, `server/package.json` im Klartext über HTTP
+(`server/.env` war durch Express' Default `dotfiles:"ignore"`
+geschützt). Ein neuer Upload-Ordner als "Unterordner der Anwendung"
+(`server/uploads/`, wie explizit gefordert) hätte ohne Änderung
+ebenfalls in diesem öffentlich abrufbaren Baum gelegen – bei teils
+vertraulichen, personenbezogenen Dokumenten inakzeptabel. Behoben durch
+Ersatz des pauschalen Static-Mounts durch eine explizite Allowlist:
+```js
+const publicRoot = path.join(__dirname, "..");
+app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(publicRoot, "index.html")));
+app.use("/css", express.static(path.join(publicRoot, "css")));
+app.use("/js", express.static(path.join(publicRoot, "js")));
+app.use("/assets", express.static(path.join(publicRoot, "assets")));
+```
+Der Upload-Ordner liegt außerhalb dieser Liste und ist damit nicht mehr
+öffentlich erreichbar; Zugriff nur noch über die authentifizierte,
+Fachbereichs-gescopte Route `GET /api/dokumente/:id/datei`
+(`res.download()`). Per curl verifiziert: `GET /server/server.js` und
+`GET /server/uploads/<datei>` liefern jetzt 404 (vorher 200 bzw. wäre
+es gewesen), `index.html`/`css/`/`js/` weiterhin 200. `server/uploads/`
+zusätzlich in `.gitignore` aufgenommen. **Lehre für künftige
+Änderungen:** Neue statische Assets müssen der Allowlist explizit
+hinzugefügt werden, kein Rückfall auf einen pauschalen Root-Mount.
+
+**Einstellungen-Seite** (`#page-einstellungen`, admin-only wie
+Fachbereiche/Benutzer, neuer Top-Level-Sidebar-Link mit Zahnrad-Icon):
+einfaches Formular mit zwei Feldern (Dokumentenpfad, leer = Standard-
+Unterordner `server/uploads/`; Löschfrist-Offset in Jahren). `GET/PUT
+/api/einstellungen` beide `requireRole("Administrator")` (bewusst
+restriktiver als ursprünglich im Plan vorgesehen, da der volle
+Dateisystempfad nicht jedem eingeloggten Nutzer offenliegen soll);
+separat `GET /api/einstellungen/loeschfrist-offset` **ohne**
+Rollen-Einschränkung, liefert nur die reine Offset-Zahl für die
+Löschdatum-Vorauswahl im Upload-Dialog – so bekommen alle Rollen den
+für sie relevanten Wert, ohne dass Nicht-Admins den Dateisystempfad zu
+sehen bekommen.
+
+**Zwei CSS-Bugs beim Testen gefunden und behoben** (per
+Playwright-Screenshot, wie schon öfter in dieser Session): (1) Die
+generische Regel `.form-row input { padding; border; background }`
+(gedacht für Text-/Date-/Select-Felder) griff auch für das neue
+`Vertraulich`-Checkbox-Feld und blähte es optisch auf, wodurch Checkbox
+und Label-Text weit auseinanderrutschten – behoben durch
+`.form-row input:not([type="checkbox"])` plus eigene, schlanke Regel
+für `input[type="checkbox"]`. (2) Der "Herunterladen"-Link
+(`<a class="btn-primary">`) sah wie reiner blauer Linktext statt wie
+ein Button aus, da `.btn-primary` nur `background`/`color` setzt und
+das Button-Boxmodell (Padding, Radius, `text-decoration`) bisher nur
+über `.dialog-actions button` (Element-Selektor, trifft auf `<a>`
+nicht) kam – behoben durch eine eigene `a.btn-primary`-Regel, analog
+zum bereits früher gelösten `.stammdaten-card`-Link-Problem.
+
+**Bekannter, akzeptierter Trade-off:** Löscht man einen Teilnehmenden,
+entfernt die FK `ON DELETE CASCADE` nur die `dokument`-Zeilen aus der
+DB, nicht die zugehörigen Dateien auf der Platte (verwaiste Dateien
+bleiben liegen). Unkritisch, da der Ordner ohnehin nicht öffentlich
+erreichbar ist; nicht behoben, um den Rahmen zu wahren. Ebenfalls
+bewusst nicht gebaut: automatische Löschung bei Erreichen des
+Löschdatums (nur Datenfeld, kein Cron-Job), Tag-Autocomplete,
+Dokumentanzahl-Badge am neuen Icon (im Gegensatz zum bestehenden
+Aktivitäten-Badge).
+
+Getestet per curl (Upload, Metadaten-Update, Download, Löschen als
+Nicht-Admin → 403/als Admin → 204, inkl. Datei-Bereinigung auf der
+Platte) und Playwright (Admin- und Nicht-Admin-Login, Screenshots):
+kompletter Durchlauf Icon → Upload → Liste → Detail → Bearbeiten →
+Einstellungen-Seite; als Nicht-Admin Bearbeiten-Icon sichtbar,
+Lösch-Icon nicht. Alle Testdaten (Dokumente, Dateien) danach wieder
+entfernt.
+
 ### Anwesenheiten-Seite
 
 Kalenderansicht: links Teilnehmer (Vorname, Nachname, VT, Gruppe – die
@@ -885,6 +1034,13 @@ Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
   reine Platzhalter ohne Inhalt/Datenanbindung – was dort inhaltlich
   angezeigt/geprüft werden soll, ist bewusst noch nicht spezifiziert und
   kommt in einer späteren Session.
+- Keine automatische Löschung von Dokumenten bei Erreichen des
+  Löschdatums (siehe "Dokumentenverwaltung pro Teilnehmendem") – nur ein
+  Datenfeld, kein Cron-Job/Scheduler im Projekt vorhanden.
+- Löscht man einen Teilnehmenden, werden zugehörige Dokument-Dateien auf
+  der Platte nicht automatisch mitgelöscht (nur die DB-Zeilen per FK
+  `ON DELETE CASCADE`) – verwaiste Dateien bleiben liegen, unkritisch
+  aber nicht bereinigt.
 
 ## Lokale Entwicklungsumgebung – wichtige Hinweise
 

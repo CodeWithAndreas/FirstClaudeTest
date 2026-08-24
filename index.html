@@ -214,6 +214,17 @@
               <span class="label">Benutzer</span>
             </a>
           </li>
+          <li>
+            <a href="#einstellungen" class="sidebar-link" data-page="einstellungen">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+              </span>
+              <span class="label">Einstellungen</span>
+            </a>
+          </li>
         </ul>
       </nav>
     </aside>
@@ -454,6 +465,128 @@
             </div>
           </div>
         </section>
+
+        <section id="page-teilnehmende-dateien" class="page">
+          <div class="subpage-header">
+            <button type="button" id="dokZurueckBtn" class="btn-secondary">← Zurück zu Teilnehmende</button>
+          </div>
+
+          <h2>Dateiablage</h2>
+          <p class="aktivitaet-teilnehmer-info">
+            <strong id="dokTnName"></strong> · VT <span id="dokTnVt"></span>
+          </p>
+
+          <div class="master-detail">
+            <div class="master-list-panel">
+              <button type="button" id="dokNeueBtn" class="btn-primary aktivitaet-neue-btn">+ Datei hochladen</button>
+              <ul class="aktivitaet-list dokument-list" id="dokumentListe">
+                <li class="aktivitaet-list-empty">Lädt…</li>
+              </ul>
+            </div>
+
+            <div class="detail-panel">
+              <p class="detail-placeholder" id="dokumentDetailPlaceholder">
+                Wähle ein Dokument aus der Liste aus.
+              </p>
+
+              <div id="dokumentDetailView" class="aktivitaet-detail-view" hidden>
+                <h3 id="dokDetailTitel"></h3>
+                <span class="vertraulich-badge" id="dokDetailVertraulichBadge" hidden>Vertraulich</span>
+                <dl class="aktivitaet-detail-fields">
+                  <dt>Dokumentart</dt>
+                  <dd id="dokDetailArt"></dd>
+                  <dt>Schlagworte</dt>
+                  <dd id="dokDetailSchlagworte"></dd>
+                  <dt>Löschdatum</dt>
+                  <dd id="dokDetailLoeschdatum"></dd>
+                  <dt>Hochgeladen am</dt>
+                  <dd id="dokDetailHochgeladenAm"></dd>
+                  <dt>Datei</dt>
+                  <dd id="dokDetailDatei"></dd>
+                </dl>
+                <a id="dokDetailDownload" class="btn-primary" href="#">Herunterladen</a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <dialog id="dokUploadDialog" class="confirm-dialog edit-dialog">
+          <form id="dokUploadForm" enctype="multipart/form-data">
+            <h3>Datei hochladen</h3>
+
+            <div class="form-row">
+              <label for="dokUploadDatei">Datei</label>
+              <input type="file" id="dokUploadDatei" name="Datei" required>
+            </div>
+            <div class="form-row">
+              <label for="dokUploadTitel">Titel</label>
+              <input type="text" id="dokUploadTitel" name="Titel" maxlength="255" required>
+            </div>
+            <div class="form-row">
+              <label for="dokUploadSchlagworte">Schlagworte</label>
+              <input type="text" id="dokUploadSchlagworte" name="Schlagworte" maxlength="500" placeholder="z. B. Attest, Krankheit">
+            </div>
+            <div class="form-row">
+              <label for="dokUploadArt">Dokumentart</label>
+              <select id="dokUploadArt" name="Dokumentart" required>
+                <option value="Eigennachweis Fehlzeit">Eigennachweis Fehlzeit</option>
+                <option value="Arbeitsunfähigkeit">Arbeitsunfähigkeit</option>
+                <option value="Praktikumsvertrag">Praktikumsvertrag</option>
+                <option value="Anwesenheitsnachweis Praktikum">Anwesenheitsnachweis Praktikum</option>
+              </select>
+            </div>
+            <div class="form-row form-row-checkbox">
+              <label for="dokUploadVertraulich"><input type="checkbox" id="dokUploadVertraulich" name="Vertraulich"> Vertraulich</label>
+            </div>
+            <div class="form-row">
+              <label for="dokUploadLoeschdatum">Löschdatum</label>
+              <input type="date" id="dokUploadLoeschdatum" name="Loeschdatum" required>
+            </div>
+
+            <p class="form-message" id="dokUploadFormMessage" role="status"></p>
+            <div class="dialog-actions">
+              <button type="button" id="dokUploadCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Hochladen</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog id="dokEditDialog" class="confirm-dialog edit-dialog">
+          <form id="dokEditForm">
+            <h3>Dokumenteigenschaften bearbeiten</h3>
+
+            <div class="form-row">
+              <label for="dokEditTitel">Titel</label>
+              <input type="text" id="dokEditTitel" name="Titel" maxlength="255" required>
+            </div>
+            <div class="form-row">
+              <label for="dokEditSchlagworte">Schlagworte</label>
+              <input type="text" id="dokEditSchlagworte" name="Schlagworte" maxlength="500">
+            </div>
+            <div class="form-row">
+              <label for="dokEditArt">Dokumentart</label>
+              <select id="dokEditArt" name="Dokumentart" required>
+                <option value="Eigennachweis Fehlzeit">Eigennachweis Fehlzeit</option>
+                <option value="Arbeitsunfähigkeit">Arbeitsunfähigkeit</option>
+                <option value="Praktikumsvertrag">Praktikumsvertrag</option>
+                <option value="Anwesenheitsnachweis Praktikum">Anwesenheitsnachweis Praktikum</option>
+              </select>
+            </div>
+            <div class="form-row form-row-checkbox">
+              <label for="dokEditVertraulich"><input type="checkbox" id="dokEditVertraulich" name="Vertraulich"> Vertraulich</label>
+            </div>
+            <div class="form-row">
+              <label for="dokEditLoeschdatum">Löschdatum</label>
+              <input type="date" id="dokEditLoeschdatum" name="Loeschdatum" required>
+            </div>
+
+            <p class="form-message" id="dokEditFormMessage" role="status"></p>
+            <div class="dialog-actions">
+              <button type="button" id="dokEditCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
 
         <dialog id="editTeilnehmerDialog" class="confirm-dialog edit-dialog">
           <form id="editTeilnehmerForm">
@@ -1143,6 +1276,24 @@
             </div>
           </form>
         </dialog>
+
+        <section id="page-einstellungen" class="page">
+          <h2>Einstellungen</h2>
+          <form id="einstellungenForm" class="data-form">
+            <div class="form-row">
+              <label for="einstDokumentenpfad">Dokumentenpfad</label>
+              <input type="text" id="einstDokumentenpfad" name="dokumentenpfad" placeholder="Leer lassen für Standard-Unterordner der Anwendung">
+            </div>
+            <div class="form-row">
+              <label for="einstLoeschfristOffset">Löschfrist-Offset (Jahre)</label>
+              <input type="number" id="einstLoeschfristOffset" name="loeschfrist_offset_jahre" min="0" step="1" required>
+            </div>
+            <p class="form-message" id="einstellungenFormMessage" role="status"></p>
+            <div class="dialog-actions">
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </section>
 
         <dialog id="deleteDialog" class="confirm-dialog">
           <form id="deleteForm">

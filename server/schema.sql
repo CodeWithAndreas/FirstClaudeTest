@@ -96,3 +96,21 @@ CREATE TABLE IF NOT EXISTS aktivitaet (
   KEY idx_Aktivitaet_BearbeiterID (BearbeiterID),
   CONSTRAINT fk_Aktivitaet_Teilnehmer FOREIGN KEY (TeilnehmerID) REFERENCES teilnehmer (ID) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+
+CREATE TABLE IF NOT EXISTS dokument (
+  ID INT NOT NULL AUTO_INCREMENT,
+  TeilnehmerID INT NOT NULL,
+  Titel VARCHAR(255) NOT NULL,
+  Schlagworte VARCHAR(500) DEFAULT NULL,
+  Dokumentart VARCHAR(60) NOT NULL,
+  Vertraulich TINYINT(1) NOT NULL DEFAULT 0,
+  Loeschdatum DATE NOT NULL,
+  Dateiname VARCHAR(255) NOT NULL,
+  GespeicherterDateiname VARCHAR(255) NOT NULL,
+  Dateigroesse INT NOT NULL,
+  MimeType VARCHAR(150) DEFAULT NULL,
+  HochgeladenAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (ID),
+  KEY fk_Dokument_Teilnehmer_idx (TeilnehmerID),
+  CONSTRAINT fk_Dokument_Teilnehmer FOREIGN KEY (TeilnehmerID) REFERENCES teilnehmer (ID) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;

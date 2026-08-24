@@ -25,7 +25,7 @@ const breadcrumb = document.getElementById("breadcrumb");
 const navLinks = document.querySelectorAll(".sidebar-link[data-page]");
 const pages = document.querySelectorAll(".page");
 const defaultPage = "dashboard";
-const adminOnlyPages = ["fachbereiche", "benutzer"];
+const adminOnlyPages = ["fachbereiche", "benutzer", "einstellungen"];
 const auditPages = [
   "audit-interessentenbetreuung",
   "audit-massnahmen",
@@ -47,6 +47,7 @@ const pageLabels = {
   gruppen: "Stammdaten / Gruppen",
   fachbereiche: "Stammdaten / Fachbereiche",
   benutzer: "Benutzer",
+  einstellungen: "Einstellungen",
   "audit-massnahmen": "Audit / Maßnahmen",
   "audit-teilnehmer": "Audit / Teilnehmer",
   "audit-anwesenheiten": "Audit / Anwesenheiten",
@@ -122,6 +123,10 @@ function showPage(pageId) {
     targetId = "teilnehmende";
   }
 
+  if (targetId === "teilnehmende-dateien" && !currentDokumentTeilnehmerId) {
+    targetId = "teilnehmende";
+  }
+
   document.querySelectorAll(".sidebar-group").forEach((group) => {
     const pagesInGroup = [...group.querySelectorAll("[data-page]")].map((el) => el.dataset.page);
     if (pagesInGroup.includes(targetId)) {
@@ -133,7 +138,8 @@ function showPage(pageId) {
     page.classList.toggle("active", page.id === `page-${targetId}`);
   });
 
-  const activeNavPage = targetId === "teilnehmende-aktivitaeten" ? "teilnehmende" : targetId;
+  const activeNavPage =
+    targetId === "teilnehmende-aktivitaeten" || targetId === "teilnehmende-dateien" ? "teilnehmende" : targetId;
   navLinks.forEach((link) => {
     link.classList.toggle("active", link.dataset.page === activeNavPage);
   });
@@ -141,6 +147,8 @@ function showPage(pageId) {
   breadcrumb.textContent =
     targetId === "teilnehmende-aktivitaeten"
       ? "Start / Teilnehmende / Aktivitätenverlauf"
+      : targetId === "teilnehmende-dateien"
+      ? "Start / Teilnehmende / Dateiablage"
       : `Start / ${pageLabels[targetId]}`;
 
   if (targetId === "dashboard") {
@@ -158,6 +166,12 @@ function showPage(pageId) {
   }
   if (targetId === "teilnehmende-aktivitaeten") {
     loadTeilnehmerAktivitaetenPage(currentAktivitaetTeilnehmerId);
+  }
+  if (targetId === "teilnehmende-dateien") {
+    loadTeilnehmerDateienPage(currentDokumentTeilnehmerId);
+  }
+  if (targetId === "einstellungen") {
+    loadEinstellungen();
   }
 }
 
@@ -1437,6 +1451,17 @@ async function loadTeilnehmer() {
 
       historyBtnWrap.append(historyBtn, aktivitaetBadge);
 
+      const filesBtn = document.createElement("button");
+      filesBtn.type = "button";
+      filesBtn.className = "row-files-btn";
+      filesBtn.setAttribute("aria-label", `Dateien von ${fullName} anzeigen`);
+      filesBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+      `;
+      filesBtn.addEventListener("click", () => openTeilnehmerDateien(person));
+
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "row-edit-btn";
@@ -1470,7 +1495,7 @@ async function loadTeilnehmer() {
         })
       );
 
-      actionsWrap.append(historyBtnWrap, editBtn);
+      actionsWrap.append(historyBtnWrap, filesBtn, editBtn);
       if (canDeleteMassnahmenOderTeilnehmer()) {
         actionsWrap.append(deleteBtn);
       }
@@ -1833,6 +1858,378 @@ aktivitaetForm.addEventListener("submit", async (event) => {
   } catch (err) {
     aktivitaetFormMessage.textContent = err.message;
     aktivitaetFormMessage.classList.add("error");
+  }
+});
+
+// Dateiablage (Unterseite von Teilnehmende, Master-Detail)
+
+const dokZurueckBtn = document.getElementById("dokZurueckBtn");
+const dokTnName = document.getElementById("dokTnName");
+const dokTnVt = document.getElementById("dokTnVt");
+const dokumentListe = document.getElementById("dokumentListe");
+const dokumentDetailPlaceholder = document.getElementById("dokumentDetailPlaceholder");
+const dokumentDetailView = document.getElementById("dokumentDetailView");
+const dokDetailTitel = document.getElementById("dokDetailTitel");
+const dokDetailVertraulichBadge = document.getElementById("dokDetailVertraulichBadge");
+const dokDetailArt = document.getElementById("dokDetailArt");
+const dokDetailSchlagworte = document.getElementById("dokDetailSchlagworte");
+const dokDetailLoeschdatum = document.getElementById("dokDetailLoeschdatum");
+const dokDetailHochgeladenAm = document.getElementById("dokDetailHochgeladenAm");
+const dokDetailDatei = document.getElementById("dokDetailDatei");
+const dokDetailDownload = document.getElementById("dokDetailDownload");
+const dokNeueBtn = document.getElementById("dokNeueBtn");
+
+const dokUploadDialog = document.getElementById("dokUploadDialog");
+const dokUploadForm = document.getElementById("dokUploadForm");
+const dokUploadFormMessage = document.getElementById("dokUploadFormMessage");
+const dokUploadLoeschdatum = document.getElementById("dokUploadLoeschdatum");
+const dokUploadCancelBtn = document.getElementById("dokUploadCancelBtn");
+
+const dokEditDialog = document.getElementById("dokEditDialog");
+const dokEditForm = document.getElementById("dokEditForm");
+const dokEditFormMessage = document.getElementById("dokEditFormMessage");
+const dokEditTitel = document.getElementById("dokEditTitel");
+const dokEditSchlagworte = document.getElementById("dokEditSchlagworte");
+const dokEditArt = document.getElementById("dokEditArt");
+const dokEditVertraulich = document.getElementById("dokEditVertraulich");
+const dokEditLoeschdatum = document.getElementById("dokEditLoeschdatum");
+const dokEditCancelBtn = document.getElementById("dokEditCancelBtn");
+
+let currentDokumentTeilnehmerId = null;
+let currentDokumentTeilnehmer = null;
+let loeschfristOffsetJahre = 3;
+let editingDokumentId = null;
+
+function openTeilnehmerDateien(person) {
+  currentDokumentTeilnehmerId = person.ID;
+  currentDokumentTeilnehmer = person;
+
+  if (window.location.hash === "#teilnehmende-dateien") {
+    showPage("teilnehmende-dateien");
+  } else {
+    window.location.hash = "teilnehmende-dateien";
+  }
+}
+
+dokZurueckBtn.addEventListener("click", () => {
+  window.location.hash = "teilnehmende";
+});
+
+async function loadLoeschfristOffset() {
+  try {
+    const response = await fetch("/api/einstellungen/loeschfrist-offset");
+    if (!response.ok) {
+      throw new Error("Einstellung konnte nicht geladen werden.");
+    }
+    const data = await response.json();
+    loeschfristOffsetJahre = Number(data.loeschfristOffsetJahre) || 3;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function berechneLoeschdatumVorschlag(endedatum, offsetJahre) {
+  if (!endedatum) {
+    return "";
+  }
+  const [y, m, d] = endedatum.split("-").map(Number);
+  const datum = new Date(y + offsetJahre, m - 1, d);
+  return `${datum.getFullYear()}-${String(datum.getMonth() + 1).padStart(2, "0")}-${String(datum.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateigroesse(bytes) {
+  if (!bytes && bytes !== 0) {
+    return "";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function clearDokumentListSelection() {
+  dokumentListe.querySelectorAll(".aktivitaet-list-item.active").forEach((item) => item.classList.remove("active"));
+}
+
+function showDokumentPlaceholder() {
+  dokumentDetailPlaceholder.hidden = false;
+  dokumentDetailView.hidden = true;
+  clearDokumentListSelection();
+}
+
+function showDokumentDetail(dokument) {
+  dokumentDetailPlaceholder.hidden = true;
+  dokumentDetailView.hidden = false;
+
+  dokDetailTitel.textContent = dokument.Titel;
+  dokDetailVertraulichBadge.hidden = !dokument.Vertraulich;
+  dokDetailArt.textContent = dokument.Dokumentart;
+  dokDetailSchlagworte.textContent = dokument.Schlagworte || "–";
+  dokDetailLoeschdatum.textContent = formatDateDE(dokument.Loeschdatum);
+  dokDetailHochgeladenAm.textContent = formatDateTimeDE(dokument.HochgeladenAm);
+  dokDetailDatei.textContent = `${dokument.Dateiname} (${formatDateigroesse(dokument.Dateigroesse)})`;
+  dokDetailDownload.href = `/api/dokumente/${dokument.ID}/datei`;
+
+  dokumentListe.querySelectorAll(".aktivitaet-list-item").forEach((item) => {
+    item.classList.toggle("active", Number(item.dataset.id) === dokument.ID);
+  });
+}
+
+function openEditDokumentDialog(dokument) {
+  editingDokumentId = dokument.ID;
+  dokEditTitel.value = dokument.Titel;
+  dokEditSchlagworte.value = dokument.Schlagworte || "";
+  dokEditArt.value = dokument.Dokumentart;
+  dokEditVertraulich.checked = Boolean(dokument.Vertraulich);
+  dokEditLoeschdatum.value = dokument.Loeschdatum;
+  dokEditFormMessage.textContent = "";
+  dokEditFormMessage.className = "form-message";
+  dokEditDialog.showModal();
+}
+
+function renderDokumentListe(dokumente) {
+  dokumentListe.innerHTML = "";
+
+  if (dokumente.length === 0) {
+    const emptyItem = document.createElement("li");
+    emptyItem.className = "aktivitaet-list-empty";
+    emptyItem.textContent = "Noch keine Dokumente vorhanden.";
+    dokumentListe.appendChild(emptyItem);
+    return;
+  }
+
+  dokumente.forEach((dokument) => {
+    const item = document.createElement("li");
+    item.className = "aktivitaet-list-item dokument-list-item";
+    item.dataset.id = dokument.ID;
+
+    const main = document.createElement("div");
+    main.className = "wiedervorlage-item-main";
+
+    const titelSpan = document.createElement("span");
+    titelSpan.className = "aktivitaet-list-thema";
+    titelSpan.textContent = dokument.Titel;
+
+    const artSpan = document.createElement("span");
+    artSpan.className = "aktivitaet-list-art";
+    artSpan.textContent = dokument.Dokumentart;
+
+    main.append(titelSpan, artSpan);
+    main.addEventListener("click", () => showDokumentDetail(dokument));
+
+    const actions = document.createElement("div");
+    actions.className = "wiedervorlage-item-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "row-edit-btn";
+    editBtn.setAttribute("aria-label", `${dokument.Titel} bearbeiten`);
+    editBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+      </svg>
+    `;
+    editBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEditDokumentDialog(dokument);
+    });
+    actions.append(editBtn);
+
+    if (canDeleteDokument()) {
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "row-delete-btn";
+      deleteBtn.setAttribute("aria-label", `${dokument.Titel} löschen`);
+      deleteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+          <path d="M10 11v6"></path>
+          <path d="M14 11v6"></path>
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      deleteBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openDeleteDialog({
+          name: dokument.Titel,
+          endpoint: `/api/dokumente/${dokument.ID}`,
+          reload: () => loadTeilnehmerDateienPage(currentDokumentTeilnehmerId),
+        });
+      });
+      actions.append(deleteBtn);
+    }
+
+    item.append(main, actions);
+    dokumentListe.appendChild(item);
+  });
+}
+
+async function loadTeilnehmerDateienPage(teilnehmerId) {
+  const person = currentDokumentTeilnehmer;
+  dokTnName.textContent = person ? `${person.Vorname} ${person.Nachname}` : "";
+  dokTnVt.textContent = (person && person.VT) || "";
+
+  showDokumentPlaceholder();
+
+  dokumentListe.innerHTML = "";
+  const loadingItem = document.createElement("li");
+  loadingItem.className = "aktivitaet-list-empty";
+  loadingItem.textContent = "Lädt…";
+  dokumentListe.appendChild(loadingItem);
+
+  try {
+    const response = await fetch(`/api/dokumente?teilnehmerId=${teilnehmerId}`);
+    if (!response.ok) {
+      throw new Error("Dokumente konnten nicht geladen werden.");
+    }
+    renderDokumentListe(await response.json());
+  } catch (err) {
+    console.error(err);
+    dokumentListe.innerHTML = "";
+    const errorItem = document.createElement("li");
+    errorItem.className = "aktivitaet-list-empty";
+    errorItem.textContent = "Fehler beim Laden der Dokumente.";
+    dokumentListe.appendChild(errorItem);
+  }
+}
+
+dokNeueBtn.addEventListener("click", () => {
+  dokUploadForm.reset();
+  dokUploadFormMessage.textContent = "";
+  dokUploadFormMessage.className = "form-message";
+  dokUploadLoeschdatum.value = berechneLoeschdatumVorschlag(
+    currentDokumentTeilnehmer && currentDokumentTeilnehmer.Endedatum,
+    loeschfristOffsetJahre
+  );
+  dokUploadDialog.showModal();
+});
+
+dokUploadCancelBtn.addEventListener("click", () => {
+  dokUploadDialog.close();
+});
+
+dokUploadForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!currentDokumentTeilnehmerId) {
+    return;
+  }
+
+  const formData = new FormData(dokUploadForm);
+  formData.set("TeilnehmerID", currentDokumentTeilnehmerId);
+
+  dokUploadFormMessage.textContent = "";
+  dokUploadFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/dokumente", { method: "POST", body: formData });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Dokument konnte nicht hochgeladen werden.");
+    }
+    dokUploadDialog.close();
+    await loadTeilnehmerDateienPage(currentDokumentTeilnehmerId);
+  } catch (err) {
+    dokUploadFormMessage.textContent = err.message;
+    dokUploadFormMessage.classList.add("error");
+  }
+});
+
+dokEditCancelBtn.addEventListener("click", () => {
+  dokEditDialog.close();
+});
+
+dokEditForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!editingDokumentId) {
+    return;
+  }
+
+  const payload = {
+    Titel: dokEditTitel.value.trim(),
+    Schlagworte: dokEditSchlagworte.value.trim(),
+    Dokumentart: dokEditArt.value,
+    Vertraulich: dokEditVertraulich.checked,
+    Loeschdatum: dokEditLoeschdatum.value,
+  };
+
+  dokEditFormMessage.textContent = "";
+  dokEditFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/dokumente/${editingDokumentId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Dokument konnte nicht aktualisiert werden.");
+    }
+    dokEditDialog.close();
+    editingDokumentId = null;
+    await loadTeilnehmerDateienPage(currentDokumentTeilnehmerId);
+  } catch (err) {
+    dokEditFormMessage.textContent = err.message;
+    dokEditFormMessage.classList.add("error");
+  }
+});
+
+// Einstellungen
+
+const einstellungenForm = document.getElementById("einstellungenForm");
+const einstellungenFormMessage = document.getElementById("einstellungenFormMessage");
+const einstDokumentenpfad = document.getElementById("einstDokumentenpfad");
+const einstLoeschfristOffset = document.getElementById("einstLoeschfristOffset");
+
+async function loadEinstellungen() {
+  try {
+    const response = await fetch("/api/einstellungen");
+    if (!response.ok) {
+      throw new Error("Einstellungen konnten nicht geladen werden.");
+    }
+    const data = await response.json();
+    einstDokumentenpfad.value = data.dokumentenpfad || "";
+    einstLoeschfristOffset.value = Number(data.loeschfrist_offset_jahre) || 3;
+  } catch (err) {
+    console.error(err);
+    einstellungenFormMessage.textContent = err.message;
+    einstellungenFormMessage.className = "form-message error";
+  }
+}
+
+einstellungenForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  einstellungenFormMessage.textContent = "";
+  einstellungenFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/einstellungen", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dokumentenpfad: einstDokumentenpfad.value.trim(),
+        loeschfrist_offset_jahre: Number(einstLoeschfristOffset.value),
+      }),
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Einstellungen konnten nicht gespeichert werden.");
+    }
+    const saved = await response.json();
+    loeschfristOffsetJahre = Number(saved.loeschfrist_offset_jahre) || 3;
+    einstellungenFormMessage.textContent = "Gespeichert.";
+    einstellungenFormMessage.className = "form-message";
+  } catch (err) {
+    einstellungenFormMessage.textContent = err.message;
+    einstellungenFormMessage.className = "form-message error";
   }
 });
 
@@ -3115,6 +3512,7 @@ function initializeApp() {
   loadFachbereichOptionsInto(tnFachbereichFilter);
   initTnFilterOptions();
   loadTeilnehmer();
+  loadLoeschfristOffset();
 
   if (currentUser.roles.includes("Administrator")) {
     loadBenutzerFormOptions();
@@ -3144,6 +3542,10 @@ function canDeleteGruppe(gruppe) {
   return Number(gruppe.MassnahmenAnzahl) === 0;
 }
 
+function canDeleteDokument() {
+  return currentUser && currentUser.roles.includes("Administrator");
+}
+
 function applyRolePermissions(user) {
   const isAdmin = (user.roles || []).includes("Administrator");
   const auditOnly = isAuditorOnly(user);
@@ -3161,6 +3563,11 @@ function applyRolePermissions(user) {
   const benutzerLink = document.querySelector('.sidebar-link[data-page="benutzer"]');
   if (benutzerLink) {
     benutzerLink.closest("li").style.display = isAdmin ? "" : "none";
+  }
+
+  const einstellungenLink = document.querySelector('.sidebar-link[data-page="einstellungen"]');
+  if (einstellungenLink) {
+    einstellungenLink.closest("li").style.display = isAdmin ? "" : "none";
   }
 
   const auditGroup = document.querySelector('.sidebar-group[data-group="audit"]');

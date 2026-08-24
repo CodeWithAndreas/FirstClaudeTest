@@ -1,9 +1,12 @@
 require("dotenv").config();
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
+const multer = require("multer");
 
 const app = express();
 app.use(express.json());
@@ -27,7 +30,11 @@ app.use(
   })
 );
 
-app.use(express.static(path.join(__dirname, "..")));
+const publicRoot = path.join(__dirname, "..");
+app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(publicRoot, "index.html")));
+app.use("/css", express.static(path.join(publicRoot, "css")));
+app.use("/js", express.static(path.join(publicRoot, "js")));
+app.use("/assets", express.static(path.join(publicRoot, "assets")));
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -82,6 +89,36 @@ async function bootstrapDatabase() {
   if (!vorhandeneAktivitaetSpalten.includes("WiedervorlageErledigt")) {
     await pool.query("ALTER TABLE aktivitaet ADD COLUMN WiedervorlageErledigt TINYINT(1) NOT NULL DEFAULT 0");
   }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS dokument (
+      ID INT NOT NULL AUTO_INCREMENT,
+      TeilnehmerID INT NOT NULL,
+      Titel VARCHAR(255) NOT NULL,
+      Schlagworte VARCHAR(500) DEFAULT NULL,
+      Dokumentart VARCHAR(60) NOT NULL,
+      Vertraulich TINYINT(1) NOT NULL DEFAULT 0,
+      Loeschdatum DATE NOT NULL,
+      Dateiname VARCHAR(255) NOT NULL,
+      GespeicherterDateiname VARCHAR(255) NOT NULL,
+      Dateigroesse INT NOT NULL,
+      MimeType VARCHAR(150) DEFAULT NULL,
+      HochgeladenAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (ID),
+      KEY fk_Dokument_Teilnehmer_idx (TeilnehmerID),
+      CONSTRAINT fk_Dokument_Teilnehmer FOREIGN KEY (TeilnehmerID) REFERENCES teilnehmer (ID) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS einstellung (
+      Schluessel VARCHAR(100) NOT NULL,
+      Wert VARCHAR(500) DEFAULT NULL,
+      PRIMARY KEY (Schluessel)
+    ) ENGINE=InnoDB
+  `);
+  await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('loeschfrist_offset_jahre', '3')");
+  await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('dokumentenpfad', '')");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS rolle (
@@ -193,6 +230,34 @@ async function resolveFachbereichForMassnahme(massnahmeId) {
   );
   return rows[0] ? rows[0].FachbereichID : null;
 }
+
+async function getEinstellung(schluessel, fallback = null) {
+  const [rows] = await pool.query("SELECT Wert FROM einstellung WHERE Schluessel = ?", [schluessel]);
+  return rows[0] ? rows[0].Wert : fallback;
+}
+
+async function resolveUploadVerzeichnis() {
+  const konfiguriert = await getEinstellung("dokumentenpfad", "");
+  const zielpfad = konfiguriert && konfiguriert.trim() ? konfiguriert.trim() : path.join(__dirname, "uploads");
+  fs.mkdirSync(zielpfad, { recursive: true });
+  return zielpfad;
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: async (req, file, cb) => {
+      try {
+        cb(null, await resolveUploadVerzeichnis());
+      } catch (err) {
+        cb(err);
+      }
+    },
+    filename: (req, file, cb) => {
+      cb(null, `${crypto.randomUUID()}${path.extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
 
 function requireAuth(req, res, next) {
   if (!req.session.userId) {
@@ -1301,6 +1366,267 @@ app.put("/api/aktivitaeten/:id/wiedervorlage", async (req, res) => {
   }
 });
 
+// --- Dokumente ---
+
+const DOKUMENT_ARTEN = [
+  "Eigennachweis Fehlzeit",
+  "Arbeitsunfähigkeit",
+  "Praktikumsvertrag",
+  "Anwesenheitsnachweis Praktikum",
+];
+
+async function resolveDokumentFuerScope(id) {
+  const [rows] = await pool.query(
+    `SELECT d.*, t.MassnahmeID FROM dokument d JOIN teilnehmer t ON t.ID = d.TeilnehmerID WHERE d.ID = ?`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+app.get("/api/dokumente", async (req, res) => {
+  const teilnehmerId = Number(req.query.teilnehmerId);
+  if (!Number.isInteger(teilnehmerId)) {
+    return res.status(400).json({ error: "Teilnehmer ist erforderlich." });
+  }
+  try {
+    const [teilnehmerRows] = await pool.query("SELECT MassnahmeID FROM teilnehmer WHERE ID = ?", [teilnehmerId]);
+    const teilnehmer = teilnehmerRows[0];
+    if (!teilnehmer) {
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(teilnehmer.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diesen Teilnehmer." });
+      }
+    }
+    const [rows] = await pool.query(
+      `SELECT ID, TeilnehmerID, Titel, Schlagworte, Dokumentart, Vertraulich, Loeschdatum,
+              Dateiname, Dateigroesse, MimeType, HochgeladenAm
+         FROM dokument WHERE TeilnehmerID = ? ORDER BY HochgeladenAm DESC`,
+      [teilnehmerId]
+    );
+    res.json(rows.map((r) => ({ ...r, Vertraulich: Boolean(r.Vertraulich) })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Dokumente konnten nicht geladen werden." });
+  }
+});
+
+app.post("/api/dokumente", upload.single("Datei"), async (req, res) => {
+  const { TeilnehmerID, Titel, Schlagworte, Dokumentart, Vertraulich, Loeschdatum } = req.body;
+  const teilnehmerId = Number(TeilnehmerID);
+  const titel = typeof Titel === "string" ? Titel.trim() : "";
+
+  const cleanupUploadedFile = () => {
+    if (req.file) fs.unlink(req.file.path, () => {});
+  };
+
+  if (!req.file) {
+    return res.status(400).json({ error: "Eine Datei ist erforderlich." });
+  }
+  if (
+    !Number.isInteger(teilnehmerId) ||
+    !titel ||
+    !DOKUMENT_ARTEN.includes(Dokumentart) ||
+    !Loeschdatum ||
+    Number.isNaN(Date.parse(Loeschdatum))
+  ) {
+    cleanupUploadedFile();
+    return res.status(400).json({ error: "Teilnehmer, Titel, Dokumentart und Löschdatum sind erforderlich." });
+  }
+
+  try {
+    const [teilnehmerRows] = await pool.query("SELECT MassnahmeID FROM teilnehmer WHERE ID = ?", [teilnehmerId]);
+    const teilnehmer = teilnehmerRows[0];
+    if (!teilnehmer) {
+      cleanupUploadedFile();
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(teilnehmer.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        cleanupUploadedFile();
+        return res.status(403).json({ error: "Keine Berechtigung für diesen Teilnehmer." });
+      }
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO dokument (TeilnehmerID, Titel, Schlagworte, Dokumentart, Vertraulich, Loeschdatum,
+                              Dateiname, GespeicherterDateiname, Dateigroesse, MimeType)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        teilnehmerId,
+        titel,
+        (Schlagworte || "").trim() || null,
+        Dokumentart,
+        Boolean(Vertraulich) ? 1 : 0,
+        Loeschdatum,
+        req.file.originalname,
+        req.file.filename,
+        req.file.size,
+        req.file.mimetype,
+      ]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT ID, TeilnehmerID, Titel, Schlagworte, Dokumentart, Vertraulich, Loeschdatum,
+              Dateiname, Dateigroesse, MimeType, HochgeladenAm FROM dokument WHERE ID = ?`,
+      [result.insertId]
+    );
+    res.status(201).json({ ...rows[0], Vertraulich: Boolean(rows[0].Vertraulich) });
+  } catch (err) {
+    cleanupUploadedFile();
+    console.error(err);
+    res.status(500).json({ error: "Dokument konnte nicht gespeichert werden." });
+  }
+});
+
+app.put("/api/dokumente/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  const { Titel, Schlagworte, Dokumentart, Vertraulich, Loeschdatum } = req.body;
+  const titel = typeof Titel === "string" ? Titel.trim() : "";
+  if (!titel || !DOKUMENT_ARTEN.includes(Dokumentart) || !Loeschdatum || Number.isNaN(Date.parse(Loeschdatum))) {
+    return res.status(400).json({ error: "Titel, Dokumentart und Löschdatum sind erforderlich." });
+  }
+  try {
+    const dokument = await resolveDokumentFuerScope(id);
+    if (!dokument) {
+      return res.status(404).json({ error: "Dokument wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(dokument.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für dieses Dokument." });
+      }
+    }
+    const schlagworte = (Schlagworte || "").trim() || null;
+    await pool.query(
+      "UPDATE dokument SET Titel = ?, Schlagworte = ?, Dokumentart = ?, Vertraulich = ?, Loeschdatum = ? WHERE ID = ?",
+      [titel, schlagworte, Dokumentart, Boolean(Vertraulich) ? 1 : 0, Loeschdatum, id]
+    );
+    res.json({ ID: id, Titel: titel, Schlagworte: schlagworte, Dokumentart, Vertraulich: Boolean(Vertraulich), Loeschdatum });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Dokument konnte nicht aktualisiert werden." });
+  }
+});
+
+app.delete("/api/dokumente/:id", requireRole("Administrator"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [rows] = await pool.query("SELECT GespeicherterDateiname FROM dokument WHERE ID = ?", [id]);
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Dokument wurde nicht gefunden." });
+    }
+    const verzeichnis = await resolveUploadVerzeichnis();
+    await pool.query("DELETE FROM dokument WHERE ID = ?", [id]);
+    fs.unlink(path.join(verzeichnis, rows[0].GespeicherterDateiname), (err) => {
+      if (err && err.code !== "ENOENT") {
+        console.error("Datei konnte nicht gelöscht werden:", err);
+      }
+    });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Dokument konnte nicht gelöscht werden." });
+  }
+});
+
+app.get("/api/dokumente/:id/datei", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const dokument = await resolveDokumentFuerScope(id);
+    if (!dokument) {
+      return res.status(404).json({ error: "Dokument wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(dokument.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für dieses Dokument." });
+      }
+    }
+    const verzeichnis = await resolveUploadVerzeichnis();
+    res.download(path.join(verzeichnis, dokument.GespeicherterDateiname), dokument.Dateiname, (err) => {
+      if (err) {
+        console.error(err);
+        if (!res.headersSent) {
+          res.status(404).json({ error: "Datei nicht gefunden." });
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Datei konnte nicht heruntergeladen werden." });
+  }
+});
+
+// --- Einstellungen ---
+
+app.get("/api/einstellungen/loeschfrist-offset", async (req, res) => {
+  try {
+    const wert = await getEinstellung("loeschfrist_offset_jahre", "3");
+    res.json({ loeschfristOffsetJahre: Number(wert) || 3 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellung konnte nicht geladen werden." });
+  }
+});
+
+app.get("/api/einstellungen", requireRole("Administrator"), async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT Schluessel, Wert FROM einstellung");
+    const map = {};
+    rows.forEach((r) => {
+      map[r.Schluessel] = r.Wert;
+    });
+    res.json(map);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellungen konnten nicht geladen werden." });
+  }
+});
+
+app.put("/api/einstellungen", requireRole("Administrator"), async (req, res) => {
+  const { dokumentenpfad, loeschfrist_offset_jahre: loeschfristOffsetJahre } = req.body;
+  const offset = Number(loeschfristOffsetJahre);
+  if (!Number.isInteger(offset) || offset < 0) {
+    return res.status(400).json({ error: "Löschfrist-Offset muss eine positive ganze Zahl sein." });
+  }
+  const pfad = (dokumentenpfad || "").trim();
+  if (pfad) {
+    try {
+      fs.mkdirSync(pfad, { recursive: true });
+      fs.accessSync(pfad, fs.constants.W_OK);
+    } catch (err) {
+      return res.status(400).json({ error: `Dokumentenpfad ist nicht beschreibbar: ${err.message}` });
+    }
+  }
+  try {
+    await pool.query(
+      "INSERT INTO einstellung (Schluessel, Wert) VALUES ('dokumentenpfad', ?) ON DUPLICATE KEY UPDATE Wert = VALUES(Wert)",
+      [pfad]
+    );
+    await pool.query(
+      "INSERT INTO einstellung (Schluessel, Wert) VALUES ('loeschfrist_offset_jahre', ?) ON DUPLICATE KEY UPDATE Wert = VALUES(Wert)",
+      [String(offset)]
+    );
+    res.json({ dokumentenpfad: pfad, loeschfrist_offset_jahre: offset });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellungen konnten nicht gespeichert werden." });
+  }
+});
+
 // --- Anwesenheiten ---
 
 app.get("/api/anwesenheitsstatus", async (req, res) => {
@@ -1395,6 +1721,15 @@ app.put("/api/anwesenheiten", async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Anwesenheit konnte nicht gespeichert werden." });
   }
+});
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({
+      error: err.code === "LIMIT_FILE_SIZE" ? "Datei ist zu groß (max. 20 MB)." : "Datei-Upload fehlgeschlagen.",
+    });
+  }
+  next(err);
 });
 
 const port = process.env.PORT || 3000;

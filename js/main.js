@@ -27,13 +27,13 @@ const pages = document.querySelectorAll(".page");
 const defaultPage = "dashboard";
 const adminOnlyPages = ["fachbereiche", "benutzer"];
 const auditPages = [
+  "audit-interessentenbetreuung",
   "audit-massnahmen",
   "audit-teilnehmer",
   "audit-anwesenheiten",
   "audit-lernmaterialien",
   "audit-leistungskontrollen",
   "audit-praktika",
-  "audit-interessentenbetreuung",
   "audit-teilnehmendenfeedback",
   "audit-vermittlung",
 ];
@@ -52,7 +52,7 @@ const pageLabels = {
   "audit-lernmaterialien": "Audit / Lernmaterialien",
   "audit-leistungskontrollen": "Audit / Leistungskontrollen",
   "audit-praktika": "Audit / Praktika",
-  "audit-interessentenbetreuung": "Audit / Interessentenbetreuung",
+  "audit-interessentenbetreuung": "Audit / Interessenten Betreuung",
   "audit-teilnehmendenfeedback": "Audit / Teilnehmenden Feedback",
   "audit-vermittlung": "Audit / Vermittlung",
 };

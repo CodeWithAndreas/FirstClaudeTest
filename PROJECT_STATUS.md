@@ -4,10 +4,10 @@ Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
 **Wichtig für eine neue Session:** Neue Rolle **Auditor** plus neuer,
-aufklappbarer Sidebar-Menüpunkt **„Audit"** mit 9 Unterseiten
-(Maßnahmen, Teilnehmer, Anwesenheiten, Lernmaterialien,
-Leistungskontrollen, Praktika, Interessentenbetreuung, Teilnehmenden
-Feedback, Vermittlung) – aktuell reine Platzhalterseiten (Überschrift +
+aufklappbarer Sidebar-Menüpunkt **„Audit"** mit 9 Unterseiten in dieser
+Reihenfolge: Interessenten Betreuung, Maßnahmen, Teilnehmer,
+Anwesenheiten, Lernmaterialien, Leistungskontrollen, Praktika,
+Teilnehmenden Feedback, Vermittlung – aktuell reine Platzhalterseiten (Überschrift +
 Hinweistext, kein Inhalt). Auditor sieht **ausschließlich**
 diesen Audit-Bereich (alle anderen Seiten inkl. Dashboard sind
 ausgeblendet und auch per direktem Hash-Aufruf blockiert), Administrator
@@ -557,9 +557,19 @@ Platzhalterseiten, keine Datenanbindung. Die eigentlichen Audit-Inhalte
 sind bewusst nicht Teil dieser Session. Ursprünglich mit 6 Punkten
 gestartet (Maßnahmen, Teilnehmer, Anwesenheiten, Lernmaterialien,
 Leistungskontrollen, Praktika), in derselben Session um 3 weitere
-ergänzt (Interessentenbetreuung, Teilnehmenden Feedback, Vermittlung) –
-das Muster ist identisch, neue Punkte einfach nach demselben Schema
-anhängen (siehe unten).
+ergänzt (zunächst als „Interessentenbetreuung“, Teilnehmenden Feedback,
+Vermittlung angehängt) – das Muster ist identisch, neue Punkte einfach
+nach demselben Schema anhängen (siehe unten). „Interessentenbetreuung“
+wurde kurz danach in **„Interessenten Betreuung“** umbenannt (mit
+Leerzeichen) und an die **erste Stelle** der Liste verschoben (vor
+Maßnahmen) – sowohl im `<ul class="sidebar-subnav">` in `index.html`
+als auch im `auditPages`-Array in `js/main.js`, da dessen Reihenfolge
+direkt bestimmt, welche Seite `isAuditorOnly()`-Nutzer nach dem Login
+automatisch sehen (`auditPages[0]`, siehe unten) – ein reiner Auditor
+landet seitdem also auf „Interessenten Betreuung“ statt „Maßnahmen“.
+Die interne Seiten-ID (`audit-interessentenbetreuung`, Hash/`<section
+id>`) blieb bewusst unverändert, nur der sichtbare Label-/Überschriften-
+Text wurde angepasst.
 
 **Sidebar-Gruppe:** Erste aufklappbare Menügruppe im Projekt. Statt neuer
 JS-Toggle-Logik wird dafür ein natives `<details class="sidebar-group">`
@@ -612,9 +622,9 @@ nach dem bestehenden `adminOnlyPages`-Muster: fehlt einem Nutzer
 umgeleitet (greift auch bei direkter Hash-Manipulation, nicht nur beim
 Sidebar-Klick); ist ein Nutzer `isAuditorOnly` und die Zielseite liegt
 **nicht** in `auditPages`, wird stattdessen auf `auditPages[0]`
-(Maßnahmen) umgeleitet – so landet ein reiner Auditor nach dem Login
-automatisch dort, obwohl `defaultPage` weiterhin global `"dashboard"`
-bleibt. Beim Rendern einer Audit-Seite wird zusätzlich
+umgeleitet – so landet ein reiner Auditor nach dem Login automatisch auf
+dem ersten Eintrag der Liste (aktuell „Interessenten Betreuung“, siehe
+oben), obwohl `defaultPage` weiterhin global `"dashboard"` bleibt. Beim Rendern einer Audit-Seite wird zusätzlich
 `document.querySelector(".sidebar-group").open = true` gesetzt, damit die
 Gruppe beim direkten Ansprung (Login, Reload) automatisch aufgeklappt
 ist. `pageLabels` bekam entsprechend neue Einträge im Muster
@@ -637,15 +647,18 @@ wenn Auditor die einzige Rolle ist.
 Getestet per Playwright (Admin- und Auditor-Login, Screenshots): Admin
 sieht alle Seiten inkl. aufklappbarer Audit-Gruppe mit allen 9
 Unterpunkten; ein Nutzer mit ausschließlich der Rolle Auditor landet
-nach dem Login automatisch auf „Audit / Maßnahmen“, sieht sonst nichts
-in der Sidebar, und ein Versuch, per direkter Hash-Änderung
-(`#teilnehmende`) auf eine fremde Seite zu wechseln, wird von den
-`showPage()`-Guards zurück auf die Audit-Seite geleitet. Mit eigens
-angelegtem und danach wieder gelöschtem Testbenutzer, ohne echte Daten
-zu verändern. Nach der Erweiterung um die 3 zusätzlichen Punkte erneut
-per Screenshot verifiziert, dass alle 9 Einträge (auch im aktiven
-Zustand) vollständig lesbar sind, siehe Lehre zu langen
-Menüpunkt-Namen oben.
+nach dem Login automatisch auf der jeweils ersten Seite der Liste
+(ursprünglich „Audit / Maßnahmen“, nach der Umsortierung „Audit /
+Interessenten Betreuung“), sieht sonst nichts in der Sidebar, und ein
+Versuch, per direkter Hash-Änderung (`#teilnehmende`) auf eine fremde
+Seite zu wechseln, wird von den `showPage()`-Guards zurück auf die
+Audit-Seite geleitet. Mit eigens angelegtem und danach wieder gelöschtem
+Testbenutzer, ohne echte Daten zu verändern. Nach der Erweiterung um die
+3 zusätzlichen Punkte erneut per Screenshot verifiziert, dass alle 9
+Einträge (auch im aktiven Zustand) vollständig lesbar sind, siehe Lehre
+zu langen Menüpunkt-Namen oben; nach Umbenennung/Umsortierung von
+„Interessenten Betreuung“ ebenfalls erneut per Screenshot verifiziert
+(erster Listenplatz, korrekte Breadcrumb, korrekter Umbruch).
 
 ### Anwesenheiten-Seite
 

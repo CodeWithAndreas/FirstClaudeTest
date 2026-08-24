@@ -1,0 +1,89 @@
+.vorschau-body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  margin: 0;
+  background: var(--color-bg-light);
+}
+
+.vorschau-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  flex: 0 0 auto;
+}
+
+.vorschau-dateiname {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vorschau-inhalt {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 20px;
+  margin: 0;
+  max-width: none;
+  width: 100%;
+}
+
+.vorschau-status {
+  color: var(--color-text-muted);
+}
+
+.vorschau-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--color-bg);
+}
+
+.vorschau-bild {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.vorschau-docx {
+  background: var(--color-bg);
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.vorschau-tabelle-wrap {
+  background: var(--color-bg);
+  overflow: auto;
+}
+
+.vorschau-tabelle-blattauswahl {
+  margin-bottom: 12px;
+}
+
+table.vorschau-tabelle {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+}
+
+table.vorschau-tabelle th,
+table.vorschau-tabelle td {
+  border: 1px solid var(--color-border);
+  padding: 4px 8px;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+table.vorschau-tabelle th {
+  background: var(--color-bg-light);
+  position: sticky;
+  top: 0;
+}

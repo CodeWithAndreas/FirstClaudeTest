@@ -1131,6 +1131,111 @@ Teilnehmenden). Ein Pfeil-Indikator (`.sort-indicator`, CSS-Klassen
 (`awSortKey`/`awSortDirection`) bleibt über Monatswechsel hinweg erhalten, da
 `applyAwSort()` am Ende von `buildAwTableRows()` erneut aufgerufen wird.
 
+### Dokumentvorschau im Browser (PDF, Bilder, DOCX, XLSX, XLS, DOC-Fallback)
+
+Auf Wunsch des Nutzers ergänzt: In der Dateiablage-Detailansicht öffnet ein
+neuer "Vorschau"-Button (`#dokDetailVorschau`, neben "Herunterladen" in einem
+gemeinsamen `.detail-actions`-Wrapper) das jeweilige Dokument in einem neuen
+Browser-Tab (`window.open(...)`), statt es sofort herunterzuladen.
+
+**Neue eigenständige Seite** `dokument-vorschau.html` (bewusst **außerhalb**
+des SPA-Hash-Routings von `index.html`/`js/main.js` – ein `window.open()` auf
+eine eigene HTML-Datei ist einfacher als ein weiterer Zustand im bestehenden
+Router) mit eigenem Script `js/dokument-vorschau.js` und eigenem Stylesheet
+`css/dokument-vorschau.css` (zusätzlich zum bestehenden `css/style.css`, für
+konsistente Farben/Schrift). Dokument-ID und Original-Dateiname kommen als
+Query-Parameter (`?id=...&name=...`) aus dem bereits im Speicher geladenen
+`dokument`-Objekt – kein zusätzlicher Metadaten-Endpunkt nötig. Die neue Seite
+musste der Static-Allowlist explizit hinzugefügt werden (`app.get(
+"/dokument-vorschau.html", ...)` in `server.js`), sonst hätte sie wie jede
+neue Datei außerhalb der Allowlist 404 geliefert (siehe Lehre aus dem
+Static-Serving-Sicherheitsfix oben).
+
+**Neue Backend-Route** `GET /api/dokumente/:id/vorschau`: 1:1 dieselbe
+Auth-/Fachbereichs-Scope-Prüfung wie die bestehende Download-Route
+(`resolveDokumentFuerScope`, `isRestrictedUser`/`fachbereichInScope`/
+`resolveFachbereichForMassnahme`), aber `res.sendFile()` statt
+`res.download()` – liefert die Datei ohne `Content-Disposition: attachment`,
+damit sie sich in `<iframe>`/`<img>` einbetten statt zwangsweise
+herunterladen lässt. Per curl verifiziert: korrekte `Content-Type`-Header
+(`application/pdf`, `image/png`, `application/vnd.openxmlformats-...`, etc.)
+ohne Attachment-Disposition, 401 ohne Session-Cookie, 404 bei unbekannter ID.
+
+**Rendering pro Dateityp** (`js/dokument-vorschau.js`, ein `fetch()` auf die
+neue Vorschau-Route, dann je nach Dateiendung ausgewertet):
+
+- **PDF**: `Blob` aus der Antwort, `URL.createObjectURL()` als `<iframe>`-Src
+  – nutzt den nativen PDF-Betrachter des Browsers.
+- **Bilder** (jpg/jpeg/png/gif/webp/svg/bmp): ebenso als Blob-URL in ein
+  `<img>`.
+- **DOCX**: [docx-preview](https://github.com/VolodymyrBaydalka/docxjs)
+  (`docx.renderAsync(buffer, container, undefined, {inWrapper:false,
+  ignoreWidth:true})`) rendert die Datei clientseitig zu HTML/CSS.
+- **XLSX/XLS**: [SheetJS](https://sheetjs.com) (`XLSX.read` +
+  `XLSX.utils.sheet_to_html`), mit Blattauswahl-Dropdown, falls die
+  Arbeitsmappe mehr als ein Tabellenblatt enthält.
+- **DOC** (altes Binärformat): bewusst **kein** Renderversuch – keine
+  verlässliche freie Bibliothek dafür verfügbar. Stattdessen sofortiger
+  Hinweistext „Für dieses ältere Word-Format (.doc) ist keine Vorschau
+  möglich. Bitte herunterladen.", der Download-Button bleibt trotzdem
+  funktionsfähig.
+- Alle sonstigen Dateiendungen: generischer Hinweis „Für diesen Dateityp ist
+  keine Vorschau verfügbar."
+
+**Neue Vendor-Bibliotheken** in `js/vendor/` (UMD-Bundles wie die
+bestehenden `jspdf`/`jspdf-autotable`, kein Build-Tooling im Projekt):
+`jszip.min.js`, `docx-preview.min.js`, `xlsx.full.min.js`. Ladereihenfolge in
+`dokument-vorschau.html` ist wichtig: `jszip.min.js` **vor**
+`docx-preview.min.js`, da dessen UMD-Wrapper intern ein bereits vorhandenes
+globales `JSZip` erwartet (`e.JSZip`), sonst schlägt das DOCX-Rendering mit
+einem Laufzeitfehler fehl.
+
+**Sicherheitsrelevante Entscheidung bei der Bibliothekswahl:** Das
+npm-Paket `xlsx` (SheetJS) enthält zum Zeitpunkt dieser Änderung zwei
+HIGH-severity-Schwachstellen ohne verfügbaren npm-Fix (Prototype Pollution
+GHSA-4r6h-8v6p-xvw6, ReDoS GHSA-5pgg-2g8v-p4x9). SheetJS veröffentlicht
+gepatchte Versionen ausschließlich über das eigene CDN
+(`cdn.sheetjs.com`), nicht über npm. `js/vendor/xlsx.full.min.js` stammt
+daher direkt von dort (Version 0.20.3), **nicht** aus einer
+`npm install xlsx`-Kopie. **Lehre für künftige Änderungen:** Bei erneuter
+Installation/Aktualisierung von `xlsx` nicht einfach `npm install xlsx`
+verwenden, sondern zuerst `npm audit` prüfen und im Zweifel wieder die
+gepatchte Version direkt vom SheetJS-CDN beziehen. Aus Gründen der bewusst
+gewählten Konsistenz (Original-Herkunft nachvollziehbar) wurde außerdem
+bewusst die "full"-Variante (statt "mini") gewählt, da sie Codepage-/CFB-
+Unterstützung für das alte Binärformat `.xls` mitbringt – ohne sie hätte nur
+`.xlsx` funktioniert.
+
+**Layout-Bug beim Testen gefunden und behoben:** Die bestehende, für das
+SPA gedachte globale Regel `main, footer { max-width: 1680px; margin: 0
+auto; }` in `css/style.css` griff auch auf das `<main id="vorschauInhalt">`
+der neuen eigenständigen Seite und ließ es (wegen `margin: auto` als
+Flex-Item) auf Inhaltsbreite schrumpfen statt den Flex-Container
+auszufüllen – das PDF/Bild/DOCX/Tabelle erschien nur ca. 300px schmal.
+Behoben durch explizite Überschreibung (`margin: 0; max-width: none; width:
+100%;`) in `css/dokument-vorschau.css`, das nach `style.css` geladen wird.
+
+**Testmethodik-Hinweis:** Playwrights gebündeltes Headless-Chromium zeigt
+eingebettete PDF-Blobs in einem `<iframe>` nicht an (kein PDF-Viewer-Plugin
+im Headless-Modus), obwohl Netzwerk-Request, Blob-Erzeugung und
+Iframe-Einbettung nachweislich korrekt funktionieren (keine
+Konsolenfehler, korrekte `iframe.src`/Abmessungen). Die PDF-Vorschau wurde
+deshalb zusätzlich mit `chromium.launch({channel: "chrome"})` (echtes,
+installiertes Chrome) verifiziert – dort rendert der native PDF-Viewer
+korrekt inkl. Seitenzahl und Text. **Lehre für künftige PDF-/Blob-Iframe-
+Tests:** Bei unerwartet leeren PDF-Vorschauen im Playwright-Test zuerst mit
+`channel: "chrome"` gegentesten, bevor Implementierungsfehler vermutet
+werden.
+
+Getestet: curl (Header-Prüfung aller Dateitypen, 401/404), Playwright mit
+echtem Chrome (alle 6 Dateitypen einzeln als Screenshot verifiziert:
+PDF-Text sichtbar, 1×1-Testbild geladen, DOCX-Text gerendert,
+XLSX-/XLS-Tabelle mit Zellwerten sichtbar, DOC-Fallback-Text angezeigt) plus
+ein kompletter End-to-End-Durchlauf über die echte UI (Icon → Dateiablage →
+Dokument auswählen → "Vorschau"-Button → neuer Tab mit korrektem Inhalt).
+Alle für den Test hochgeladenen Testdokumente wurden anschließend wieder
+gelöscht.
+
 ## Noch offen / nicht begonnen
 
 - Keine serverseitige Bestätigungsprüfung beim Löschen (Client prüft den

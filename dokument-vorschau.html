@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dokumentvorschau – Standortmanager</title>
+  <link href="https://fonts.googleapis.com/css2?family=Istok+Web:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dokument-vorschau.css">
+</head>
+<body class="vorschau-body">
+  <header class="vorschau-header">
+    <span id="vorschauDateiname" class="vorschau-dateiname"></span>
+    <a id="vorschauDownload" class="btn-primary" href="#">Herunterladen</a>
+  </header>
+  <main id="vorschauInhalt" class="vorschau-inhalt">
+    <p id="vorschauStatus" class="vorschau-status">Vorschau wird geladen …</p>
+  </main>
+
+  <script src="js/vendor/jszip.min.js"></script>
+  <script src="js/vendor/docx-preview.min.js"></script>
+  <script src="js/vendor/xlsx.full.min.js"></script>
+  <script src="js/dokument-vorschau.js"></script>
+</body>
+</html>

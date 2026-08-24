@@ -1930,6 +1930,7 @@ const dokDetailLoeschdatum = document.getElementById("dokDetailLoeschdatum");
 const dokDetailHochgeladenAm = document.getElementById("dokDetailHochgeladenAm");
 const dokDetailDatei = document.getElementById("dokDetailDatei");
 const dokDetailDownload = document.getElementById("dokDetailDownload");
+const dokDetailVorschau = document.getElementById("dokDetailVorschau");
 const dokNeueBtn = document.getElementById("dokNeueBtn");
 
 const dokUploadDialog = document.getElementById("dokUploadDialog");
@@ -2025,6 +2026,10 @@ function showDokumentDetail(dokument) {
   dokDetailHochgeladenAm.textContent = formatDateTimeDE(dokument.HochgeladenAm);
   dokDetailDatei.textContent = `${dokument.Dateiname} (${formatDateigroesse(dokument.Dateigroesse)})`;
   dokDetailDownload.href = `/api/dokumente/${dokument.ID}/datei`;
+  dokDetailVorschau.onclick = () => {
+    const url = `/dokument-vorschau.html?id=${dokument.ID}&name=${encodeURIComponent(dokument.Dateiname)}`;
+    window.open(url, "_blank");
+  };
 
   dokumentListe.querySelectorAll(".aktivitaet-list-item").forEach((item) => {
     item.classList.toggle("active", Number(item.dataset.id) === dokument.ID);

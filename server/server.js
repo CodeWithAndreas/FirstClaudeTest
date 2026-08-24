@@ -32,6 +32,7 @@ app.use(
 
 const publicRoot = path.join(__dirname, "..");
 app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(publicRoot, "index.html")));
+app.get("/dokument-vorschau.html", (req, res) => res.sendFile(path.join(publicRoot, "dokument-vorschau.html")));
 app.use("/css", express.static(path.join(publicRoot, "css")));
 app.use("/js", express.static(path.join(publicRoot, "js")));
 app.use("/assets", express.static(path.join(publicRoot, "assets")));
@@ -1648,6 +1649,37 @@ app.get("/api/dokumente/:id/datei", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Datei konnte nicht heruntergeladen werden." });
+  }
+});
+
+app.get("/api/dokumente/:id/vorschau", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const dokument = await resolveDokumentFuerScope(id);
+    if (!dokument) {
+      return res.status(404).json({ error: "Dokument wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(dokument.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für dieses Dokument." });
+      }
+    }
+    const verzeichnis = await resolveUploadVerzeichnis();
+    res.sendFile(path.join(verzeichnis, dokument.GespeicherterDateiname), (err) => {
+      if (err) {
+        console.error(err);
+        if (!res.headersSent) {
+          res.status(404).json({ error: "Datei nicht gefunden." });
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Datei konnte nicht angezeigt werden." });
   }
 });
 

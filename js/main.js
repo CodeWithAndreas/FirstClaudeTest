@@ -163,6 +163,7 @@ function showPage(pageId) {
   }
   if (targetId === "teilnehmende" && tnRowEntries.length > 0) {
     refreshTnAktivitaetBadges();
+    refreshTnDokumentBadges();
   }
   if (targetId === "teilnehmende-aktivitaeten") {
     loadTeilnehmerAktivitaetenPage(currentAktivitaetTeilnehmerId);
@@ -1360,6 +1361,43 @@ async function refreshTnAktivitaetBadges() {
   });
 }
 
+let tnDokumentSummary = new Map();
+
+async function loadTnDokumentSummary() {
+  try {
+    const response = await fetch("/api/dokumente/summary");
+    if (!response.ok) {
+      throw new Error("Dokumente-Übersicht konnte nicht geladen werden.");
+    }
+    const rows = await response.json();
+    tnDokumentSummary = new Map(rows.map((row) => [row.TeilnehmerID, row]));
+  } catch (err) {
+    console.error(err);
+    tnDokumentSummary = new Map();
+  }
+}
+
+function updateDokumentBadge(badgeEl, teilnehmerId) {
+  const summary = tnDokumentSummary.get(teilnehmerId);
+  if (!summary || !summary.Anzahl) {
+    badgeEl.hidden = true;
+    return;
+  }
+  badgeEl.hidden = false;
+  badgeEl.textContent = summary.Anzahl;
+  badgeEl.classList.toggle("badge-aktuell", Boolean(summary.HatAktuelle));
+}
+
+async function refreshTnDokumentBadges() {
+  await loadTnDokumentSummary();
+  tnRowEntries.forEach(({ person, row }) => {
+    const badge = row.querySelector(".dokument-badge");
+    if (badge) {
+      updateDokumentBadge(badge, person.ID);
+    }
+  });
+}
+
 async function loadTeilnehmer() {
   teilnehmerTableBody.innerHTML = "";
   const loadingRow = document.createElement("tr");
@@ -1370,7 +1408,11 @@ async function loadTeilnehmer() {
   teilnehmerTableBody.appendChild(loadingRow);
 
   try {
-    const [response] = await Promise.all([fetch("/api/teilnehmer"), loadTnAktivitaetSummary()]);
+    const [response] = await Promise.all([
+      fetch("/api/teilnehmer"),
+      loadTnAktivitaetSummary(),
+      loadTnDokumentSummary(),
+    ]);
     if (!response.ok) {
       throw new Error("Teilnehmende konnten nicht geladen werden.");
     }
@@ -1451,6 +1493,9 @@ async function loadTeilnehmer() {
 
       historyBtnWrap.append(historyBtn, aktivitaetBadge);
 
+      const filesBtnWrap = document.createElement("span");
+      filesBtnWrap.className = "history-btn-wrap";
+
       const filesBtn = document.createElement("button");
       filesBtn.type = "button";
       filesBtn.className = "row-files-btn";
@@ -1461,6 +1506,13 @@ async function loadTeilnehmer() {
         </svg>
       `;
       filesBtn.addEventListener("click", () => openTeilnehmerDateien(person));
+
+      const dokumentBadge = document.createElement("span");
+      dokumentBadge.className = "dokument-badge";
+      dokumentBadge.hidden = true;
+      updateDokumentBadge(dokumentBadge, person.ID);
+
+      filesBtnWrap.append(filesBtn, dokumentBadge);
 
       const editBtn = document.createElement("button");
       editBtn.type = "button";
@@ -1495,7 +1547,7 @@ async function loadTeilnehmer() {
         })
       );
 
-      actionsWrap.append(historyBtnWrap, filesBtn, editBtn);
+      actionsWrap.append(historyBtnWrap, filesBtnWrap, editBtn);
       if (canDeleteMassnahmenOderTeilnehmer()) {
         actionsWrap.append(deleteBtn);
       }

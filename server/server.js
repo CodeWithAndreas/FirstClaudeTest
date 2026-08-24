@@ -1413,6 +1413,35 @@ app.get("/api/dokumente", async (req, res) => {
   }
 });
 
+app.get("/api/dokumente/summary", async (req, res) => {
+  try {
+    let query = `SELECT d.TeilnehmerID, COUNT(*) AS Anzahl,
+        MAX(CASE WHEN d.HochgeladenAm >= (NOW() - INTERVAL 14 DAY) THEN 1 ELSE 0 END) AS HatAktuelle
+       FROM dokument d`;
+    const params = [];
+
+    if (isRestrictedUser(req)) {
+      const ids = req.session.fachbereichIds || [];
+      if (ids.length === 0) {
+        return res.json([]);
+      }
+      query += ` JOIN teilnehmer t ON t.ID = d.TeilnehmerID
+         JOIN massnahme m ON m.ID = t.MassnahmeID
+         JOIN gruppe g ON g.ID = m.GruppeID
+         WHERE g.FachbereichID IN (?)`;
+      params.push(ids);
+    }
+
+    query += " GROUP BY d.TeilnehmerID";
+
+    const [rows] = await pool.query(query, params);
+    res.json(rows.map((row) => ({ TeilnehmerID: row.TeilnehmerID, Anzahl: row.Anzahl, HatAktuelle: Boolean(row.HatAktuelle) })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Dokumente-Übersicht konnte nicht geladen werden." });
+  }
+});
+
 app.post("/api/dokumente", upload.single("Datei"), async (req, res) => {
   const { TeilnehmerID, Titel, Schlagworte, Dokumentart, Vertraulich, Loeschdatum } = req.body;
   const teilnehmerId = Number(TeilnehmerID);

@@ -4,14 +4,15 @@ Stand: 2026-08-22. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
 **Wichtig für eine neue Session:** Neue **Dokumentenverwaltung pro
-Teilnehmendem**: neues Datei-Icon in der Teilnehmenden-Tabelle öffnet
-eine Master-Detail-Unterseite "Dateiablage" (Upload-Dialog mit Titel/
-Schlagworten/Dokumentart/Vertraulich/Pflicht-Löschdatum, Bearbeiten-
-Dialog für Metadaten, Löschen **ausschließlich für Administrator**).
-Dateien liegen auf der Festplatte, Speicherpfad in neuer admin-only
-**Einstellungen**-Seite konfigurierbar (Default: `server/uploads/`).
-Details siehe Unterabschnitt "Dokumentenverwaltung pro Teilnehmendem"
-weiter unten.
+Teilnehmendem**: neues Datei-Icon in der Teilnehmenden-Tabelle (inkl.
+Anzahl-Badge in derselben Farblogik wie das bestehende
+Aktivitäten-Badge) öffnet eine Master-Detail-Unterseite "Dateiablage"
+(Upload-Dialog mit Titel/Schlagworten/Dokumentart/Vertraulich/Pflicht-
+Löschdatum, Bearbeiten-Dialog für Metadaten, Löschen **ausschließlich
+für Administrator**). Dateien liegen auf der Festplatte, Speicherpfad
+in neuer admin-only **Einstellungen**-Seite konfigurierbar (Default:
+`server/uploads/`). Details siehe Unterabschnitt "Dokumentenverwaltung
+pro Teilnehmendem" weiter unten.
 
 **Sicherheits-Fix als Teil derselben Änderung (wichtig für zukünftige
 Static-Serving-Änderungen):** `express.static` lieferte bis dahin das
@@ -901,17 +902,39 @@ DB, nicht die zugehörigen Dateien auf der Platte (verwaiste Dateien
 bleiben liegen). Unkritisch, da der Ordner ohnehin nicht öffentlich
 erreichbar ist; nicht behoben, um den Rahmen zu wahren. Ebenfalls
 bewusst nicht gebaut: automatische Löschung bei Erreichen des
-Löschdatums (nur Datenfeld, kein Cron-Job), Tag-Autocomplete,
-Dokumentanzahl-Badge am neuen Icon (im Gegensatz zum bestehenden
-Aktivitäten-Badge).
+Löschdatums (nur Datenfeld, kein Cron-Job), Tag-Autocomplete.
+
+**Dokumentanzahl-Badge am Datei-Icon** (nachträglich in derselben
+Session ergänzt, ursprünglich bewusst weggelassen, dann explizit
+nachgefordert): 1:1 nach dem Vorbild des bestehenden Aktivitäten-Badges
+umgesetzt, inkl. identischer Farblogik. Neuer Endpunkt `GET
+/api/dokumente/summary` (Fachbereichs-gescoped, `HatAktuelle` = min.
+ein Dokument mit `HochgeladenAm` in den letzten 14 Tagen) spiegelt
+`GET /api/aktivitaeten/summary` fast wortgleich. Clientseitig
+`tnDokumentSummary`-Map + `loadTnDokumentSummary()`/
+`updateDokumentBadge()`/`refreshTnDokumentBadges()` als exakte Pendants
+zu `tnAktivitaetSummary`/`updateAktivitaetBadge()`/
+`refreshTnAktivitaetBadges()`; das Datei-Icon wurde dafür nachträglich
+in einen `.history-btn-wrap`-Wrapper eingebettet (vorher nacktes
+`<button>`), da dieser Wrapper das `position:relative`-Ankerelement für
+das absolut positionierte Badge ist. CSS: `.dokument-badge` teilt sich
+Selektor und Farbwerte 1:1 mit `.aktivitaet-badge`/`.badge-aktuell`
+(eine gemeinsame Regelgruppe, keine Duplikation) – dadurch garantiert
+farblich identisch, wie gefordert. Badge-Refresh läuft über denselben
+`showPage()`-Hook wie das Aktivitäten-Badge (bei Rückkehr zur
+Teilnehmenden-Tabelle).
 
 Getestet per curl (Upload, Metadaten-Update, Download, Löschen als
 Nicht-Admin → 403/als Admin → 204, inkl. Datei-Bereinigung auf der
-Platte) und Playwright (Admin- und Nicht-Admin-Login, Screenshots):
-kompletter Durchlauf Icon → Upload → Liste → Detail → Bearbeiten →
-Einstellungen-Seite; als Nicht-Admin Bearbeiten-Icon sichtbar,
-Lösch-Icon nicht. Alle Testdaten (Dokumente, Dateien) danach wieder
-entfernt.
+Platte, sowie der neue `summary`-Endpunkt) und Playwright (Admin- und
+Nicht-Admin-Login, Screenshots): kompletter Durchlauf Icon → Upload →
+Liste → Detail → Bearbeiten → Einstellungen-Seite; als Nicht-Admin
+Bearbeiten-Icon sichtbar, Lösch-Icon nicht; Badge-Farbe/-Zahl per
+DOM-Auswertung und vergrößertem Ausschnitt-Screenshot neben dem
+bestehenden Aktivitäten-Badge verglichen. Alle selbst angelegten
+Testdaten (Dokumente, Dateien) danach wieder entfernt – ein vom Nutzer
+selbst während der Session angelegtes echtes Testdokument wurde bewusst
+nicht angetastet.
 
 ### Anwesenheiten-Seite
 

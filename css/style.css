@@ -555,7 +555,8 @@ body.logged-out .app-layout {
   display: inline-flex;
 }
 
-.aktivitaet-badge {
+.aktivitaet-badge,
+.dokument-badge {
   position: absolute;
   top: -2px;
   right: -2px;
@@ -572,7 +573,8 @@ body.logged-out .app-layout {
   pointer-events: none;
 }
 
-.aktivitaet-badge.badge-aktuell {
+.aktivitaet-badge.badge-aktuell,
+.dokument-badge.badge-aktuell {
   background: var(--color-primary);
 }
 

@@ -42,6 +42,7 @@ const pageLabels = {
   dashboard: "Dashboard",
   teilnehmende: "Teilnehmende",
   "teilnehmende-notenverlauf": "Teilnehmende / Notenverlauf",
+  "teilnehmende-steckbrief": "Teilnehmende / Steckbrief",
   leistungskontrollen: "Leistungskontrollen",
   "leistungskontrollen-detail": "Leistungskontrollen / Detail",
   anwesenheiten: "Anwesenheiten",
@@ -147,6 +148,10 @@ function showPage(pageId) {
     targetId = "teilnehmende";
   }
 
+  if (targetId === "teilnehmende-steckbrief" && !currentSteckbriefTeilnehmerId) {
+    targetId = "teilnehmende";
+  }
+
   document.querySelectorAll(".sidebar-group").forEach((group) => {
     const pagesInGroup = [...group.querySelectorAll("[data-page]")].map((el) => el.dataset.page);
     if (pagesInGroup.includes(targetId)) {
@@ -161,7 +166,8 @@ function showPage(pageId) {
   const activeNavPage =
     targetId === "teilnehmende-aktivitaeten" ||
     targetId === "teilnehmende-dateien" ||
-    targetId === "teilnehmende-notenverlauf"
+    targetId === "teilnehmende-notenverlauf" ||
+    targetId === "teilnehmende-steckbrief"
       ? "teilnehmende"
       : targetId === "leistungskontrollen-detail"
       ? "leistungskontrollen"
@@ -200,6 +206,9 @@ function showPage(pageId) {
   }
   if (targetId === "teilnehmende-notenverlauf") {
     loadTeilnehmerNotenverlaufPage(currentNotenverlaufTeilnehmerId);
+  }
+  if (targetId === "teilnehmende-steckbrief") {
+    loadTeilnehmerSteckbriefPage(currentSteckbriefTeilnehmerId);
   }
   if (targetId === "einstellungen") {
     loadEinstellungen();
@@ -1552,6 +1561,22 @@ async function loadTeilnehmer() {
       const actionsWrap = document.createElement("div");
       actionsWrap.className = "row-actions";
 
+      const steckbriefBtn = document.createElement("button");
+      steckbriefBtn.type = "button";
+      steckbriefBtn.className = "row-steckbrief-btn";
+      steckbriefBtn.setAttribute("aria-label", `Steckbrief von ${fullName} anzeigen`);
+      steckbriefBtn.title = "Steckbrief";
+      steckbriefBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+          <circle cx="9" cy="10" r="2"></circle>
+          <path d="M5 16c0-1.66 1.79-3 4-3s4 1.34 4 3"></path>
+          <line x1="14" y1="8" x2="19" y2="8"></line>
+          <line x1="14" y1="12" x2="19" y2="12"></line>
+        </svg>
+      `;
+      steckbriefBtn.addEventListener("click", () => openTeilnehmerSteckbrief(person));
+
       const historyBtnWrap = document.createElement("span");
       historyBtnWrap.className = "history-btn-wrap";
 
@@ -1559,6 +1584,7 @@ async function loadTeilnehmer() {
       historyBtn.type = "button";
       historyBtn.className = "row-history-btn";
       historyBtn.setAttribute("aria-label", `Aktivitäten von ${fullName} anzeigen`);
+      historyBtn.title = "Aktivitäten";
       historyBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"></circle>
@@ -1581,6 +1607,7 @@ async function loadTeilnehmer() {
       filesBtn.type = "button";
       filesBtn.className = "row-files-btn";
       filesBtn.setAttribute("aria-label", `Dateien von ${fullName} anzeigen`);
+      filesBtn.title = "Dateiablage";
       filesBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
@@ -1602,6 +1629,7 @@ async function loadTeilnehmer() {
       notenBtn.type = "button";
       notenBtn.className = "row-noten-btn";
       notenBtn.setAttribute("aria-label", `Notenverlauf von ${fullName} anzeigen`);
+      notenBtn.title = "Notenverlauf";
       notenBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
@@ -1621,6 +1649,7 @@ async function loadTeilnehmer() {
       editBtn.type = "button";
       editBtn.className = "row-edit-btn";
       editBtn.setAttribute("aria-label", `${fullName} bearbeiten`);
+      editBtn.title = "Bearbeiten";
       editBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -1633,6 +1662,7 @@ async function loadTeilnehmer() {
       deleteBtn.type = "button";
       deleteBtn.className = "row-delete-btn";
       deleteBtn.setAttribute("aria-label", `${fullName} löschen`);
+      deleteBtn.title = "Löschen";
       deleteBtn.innerHTML = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"></polyline>
@@ -1650,7 +1680,7 @@ async function loadTeilnehmer() {
         })
       );
 
-      actionsWrap.append(historyBtnWrap, filesBtnWrap, notenBtnWrap, editBtn);
+      actionsWrap.append(steckbriefBtn, historyBtnWrap, filesBtnWrap, notenBtnWrap, editBtn);
       if (canDeleteMassnahmenOderTeilnehmer()) {
         actionsWrap.append(deleteBtn);
       }
@@ -2423,34 +2453,38 @@ function notenverlaufGradeToY(note) {
   return NV_MARGIN.top + ((clamped - 1) / 5) * plotHeight;
 }
 
-function renderNotenverlaufChart(daten, selectedId) {
-  nvChart.innerHTML = "";
+function zeichneNotenChart(zielSvg, zielEmpty, daten, selectedId, onPointClick) {
+  zielSvg.innerHTML = "";
 
   const punkte = daten
     .map((eintrag, index) => ({ ...eintrag, index, noteWert: parseNoteWert(eintrag.Note) }))
     .filter((eintrag) => eintrag.noteWert !== null);
 
   if (punkte.length === 0) {
-    nvChart.setAttribute("width", "0");
-    nvChart.setAttribute("height", String(NV_CHART_HEIGHT));
-    nvChartEmpty.hidden = false;
+    zielSvg.setAttribute("width", "0");
+    zielSvg.setAttribute("height", String(NV_CHART_HEIGHT));
+    if (zielEmpty) {
+      zielEmpty.hidden = false;
+    }
     return;
   }
-  nvChartEmpty.hidden = true;
+  if (zielEmpty) {
+    zielEmpty.hidden = true;
+  }
 
   const plotWidth = Math.max(
     NV_MIN_WIDTH,
     NV_MARGIN.left + NV_MARGIN.right + (punkte.length - 1) * NV_POINT_SPACING + 40
   );
-  nvChart.setAttribute("width", String(plotWidth));
-  nvChart.setAttribute("height", String(NV_CHART_HEIGHT));
-  nvChart.setAttribute("viewBox", `0 0 ${plotWidth} ${NV_CHART_HEIGHT}`);
+  zielSvg.setAttribute("width", String(plotWidth));
+  zielSvg.setAttribute("height", String(NV_CHART_HEIGHT));
+  zielSvg.setAttribute("viewBox", `0 0 ${plotWidth} ${NV_CHART_HEIGHT}`);
 
   const xFor = (index) => NV_MARGIN.left + index * NV_POINT_SPACING;
 
   for (let note = 1; note <= 6; note++) {
     const y = notenverlaufGradeToY(note);
-    nvChart.appendChild(
+    zielSvg.appendChild(
       svgEl("line", {
         x1: NV_MARGIN.left,
         x2: plotWidth - NV_MARGIN.right,
@@ -2467,13 +2501,13 @@ function renderNotenverlaufChart(daten, selectedId) {
       class: "notenverlauf-axis-label",
     });
     label.textContent = formatNoteDE(note.toFixed(1));
-    nvChart.appendChild(label);
+    zielSvg.appendChild(label);
   }
 
   const pfad = punkte
     .map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(p.index)} ${notenverlaufGradeToY(p.noteWert)}`)
     .join(" ");
-  nvChart.appendChild(
+  zielSvg.appendChild(
     svgEl("path", {
       d: pfad,
       fill: "none",
@@ -2512,18 +2546,20 @@ function renderNotenverlaufChart(daten, selectedId) {
     const titel = svgEl("title", {});
     titel.textContent = `${formatDateDE(p.Durchfuehrungsdatum)} – ${p.Bezeichnung}: Note ${formatNoteDE(p.noteWert)}`;
     hit.appendChild(titel);
-    hit.addEventListener("click", () => selectNotenverlaufEintrag(p.ID));
-    hit.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        selectNotenverlaufEintrag(p.ID);
-      }
-    });
+    if (onPointClick) {
+      hit.addEventListener("click", () => onPointClick(p.ID));
+      hit.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onPointClick(p.ID);
+        }
+      });
+    }
     hit.addEventListener("mouseenter", () => punktKreis.setAttribute("r", String(radius + 1)));
     hit.addEventListener("mouseleave", () => punktKreis.setAttribute("r", String(radius)));
 
-    nvChart.appendChild(punktKreis);
-    nvChart.appendChild(hit);
+    zielSvg.appendChild(punktKreis);
+    zielSvg.appendChild(hit);
 
     if (istSelektiert) {
       const wertLabel = svgEl("text", {
@@ -2533,7 +2569,7 @@ function renderNotenverlaufChart(daten, selectedId) {
         class: "notenverlauf-point-label",
       });
       wertLabel.textContent = formatNoteDE(p.noteWert);
-      nvChart.appendChild(wertLabel);
+      zielSvg.appendChild(wertLabel);
     }
 
     const datumLabel = svgEl("text", {
@@ -2544,8 +2580,12 @@ function renderNotenverlaufChart(daten, selectedId) {
     });
     const [jahr, monat, tag] = p.Durchfuehrungsdatum.split("-");
     datumLabel.textContent = `${tag}.${monat}.`;
-    nvChart.appendChild(datumLabel);
+    zielSvg.appendChild(datumLabel);
   });
+}
+
+function renderNotenverlaufChart(daten, selectedId) {
+  zeichneNotenChart(nvChart, nvChartEmpty, daten, selectedId, selectNotenverlaufEintrag);
 }
 
 function renderNotenverlaufListe(daten, selectedId) {
@@ -2665,6 +2705,698 @@ async function loadTeilnehmerNotenverlaufPage(teilnehmerId) {
     nvTableBody.appendChild(errorRow);
   }
 }
+
+// Teilnehmersteckbrief (Unterseite von Teilnehmende)
+
+const skbZurueckBtn = document.getElementById("skbZurueckBtn");
+const skbName = document.getElementById("skbName");
+const skbGeburtsdatum = document.getElementById("skbGeburtsdatum");
+const skbStartdatum = document.getElementById("skbStartdatum");
+const skbEndedatum = document.getElementById("skbEndedatum");
+const skbEmail = document.getElementById("skbEmail");
+const skbTelefon = document.getElementById("skbTelefon");
+const skbFachbereich = document.getElementById("skbFachbereich");
+const skbGruppe = document.getElementById("skbGruppe");
+const skbMassnahme = document.getElementById("skbMassnahme");
+const skbVt = document.getElementById("skbVt");
+
+const skbFehltageGesamt = document.getElementById("skbFehltageGesamt");
+const skbFehltageEntschuldigt = document.getElementById("skbFehltageEntschuldigt");
+const skbFehltageUnentschuldigt = document.getElementById("skbFehltageUnentschuldigt");
+const skbFehlzeitBisher = document.getElementById("skbFehlzeitBisher");
+const skbFehlzeitAufMassnahme = document.getElementById("skbFehlzeitAufMassnahme");
+const skbAnwesenheitHeadRow = document.getElementById("skbAnwesenheitHeadRow");
+const skbAnwesenheitTableBody = document.getElementById("skbAnwesenheitTableBody");
+
+const skbLkAnzahl = document.getElementById("skbLkAnzahl");
+const skbDurchschnittsnote = document.getElementById("skbDurchschnittsnote");
+const skbTrend = document.getElementById("skbTrend");
+const skbChart = document.getElementById("skbChart");
+const skbChartEmpty = document.getElementById("skbChartEmpty");
+
+const skbAktivitaetenListe = document.getElementById("skbAktivitaetenListe");
+const skbPdfBtn = document.getElementById("skbPdfBtn");
+
+let currentSteckbriefTeilnehmerId = null;
+let currentSteckbriefTeilnehmer = null;
+let skbLkDatenCache = [];
+let skbAktivitaetenCache = [];
+let skbAnwesenheitStatsCache = null;
+
+(function initSkbAnwesenheitHeadRow() {
+  for (let tag = 1; tag <= 31; tag++) {
+    const th = document.createElement("th");
+    th.className = "day-col";
+    th.textContent = String(tag);
+    skbAnwesenheitHeadRow.appendChild(th);
+  }
+})();
+
+function openTeilnehmerSteckbrief(person) {
+  currentSteckbriefTeilnehmerId = person.ID;
+  currentSteckbriefTeilnehmer = person;
+  if (window.location.hash === "#teilnehmende-steckbrief") {
+    showPage("teilnehmende-steckbrief");
+  } else {
+    window.location.hash = "teilnehmende-steckbrief";
+  }
+}
+
+skbZurueckBtn.addEventListener("click", () => {
+  window.location.hash = "teilnehmende";
+});
+
+// --- Feiertagsberechnung (deutschlandweit + je Bundesland) ---
+
+function skbOstersonntag(jahr) {
+  const a = jahr % 19;
+  const b = Math.floor(jahr / 100);
+  const c = jahr % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const monat = Math.floor((h + l - 7 * m + 114) / 31);
+  const tag = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(jahr, monat - 1, tag));
+}
+
+function skbAddTage(datum, tage) {
+  const neu = new Date(datum);
+  neu.setUTCDate(neu.getUTCDate() + tage);
+  return neu;
+}
+
+function skbIsoDatum(datum) {
+  return datum.toISOString().slice(0, 10);
+}
+
+const SKB_HEILIGE_DREI_KOENIGE = ["Baden-Württemberg", "Bayern", "Sachsen-Anhalt"];
+const SKB_FRAUENTAG = ["Berlin", "Mecklenburg-Vorpommern"];
+const SKB_FRONLEICHNAM = ["Baden-Württemberg", "Bayern", "Hessen", "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland"];
+const SKB_MARIAE_HIMMELFAHRT = ["Saarland"];
+const SKB_WELTKINDERTAG = ["Thüringen"];
+const SKB_REFORMATIONSTAG = [
+  "Brandenburg",
+  "Bremen",
+  "Hamburg",
+  "Mecklenburg-Vorpommern",
+  "Niedersachsen",
+  "Sachsen",
+  "Sachsen-Anhalt",
+  "Schleswig-Holstein",
+  "Thüringen",
+];
+const SKB_ALLERHEILIGEN = ["Baden-Württemberg", "Bayern", "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland"];
+
+function skbBerechneFeiertage(jahr, bundesland) {
+  const feiertage = new Set();
+  const ostern = skbOstersonntag(jahr);
+
+  feiertage.add(`${jahr}-01-01`);
+  feiertage.add(skbIsoDatum(skbAddTage(ostern, -2)));
+  feiertage.add(skbIsoDatum(skbAddTage(ostern, 1)));
+  feiertage.add(`${jahr}-05-01`);
+  feiertage.add(skbIsoDatum(skbAddTage(ostern, 39)));
+  feiertage.add(skbIsoDatum(skbAddTage(ostern, 50)));
+  feiertage.add(`${jahr}-10-03`);
+  feiertage.add(`${jahr}-12-25`);
+  feiertage.add(`${jahr}-12-26`);
+
+  if (SKB_HEILIGE_DREI_KOENIGE.includes(bundesland)) feiertage.add(`${jahr}-01-06`);
+  if (SKB_FRAUENTAG.includes(bundesland)) feiertage.add(`${jahr}-03-08`);
+  if (SKB_FRONLEICHNAM.includes(bundesland)) feiertage.add(skbIsoDatum(skbAddTage(ostern, 60)));
+  if (SKB_MARIAE_HIMMELFAHRT.includes(bundesland)) feiertage.add(`${jahr}-08-15`);
+  if (SKB_WELTKINDERTAG.includes(bundesland)) feiertage.add(`${jahr}-09-20`);
+  if (SKB_REFORMATIONSTAG.includes(bundesland)) feiertage.add(`${jahr}-10-31`);
+  if (SKB_ALLERHEILIGEN.includes(bundesland)) feiertage.add(`${jahr}-11-01`);
+  if (bundesland === "Sachsen") {
+    const stichtag = new Date(Date.UTC(jahr, 10, 23));
+    const wochentag = stichtag.getUTCDay();
+    const differenz = (wochentag - 3 + 7) % 7 || 7;
+    feiertage.add(skbIsoDatum(skbAddTage(stichtag, -differenz)));
+  }
+
+  return feiertage;
+}
+
+const skbFeiertageCache = new Map();
+
+function skbFeiertageFuerJahr(jahr, bundesland) {
+  const key = `${jahr}|${bundesland}`;
+  if (!skbFeiertageCache.has(key)) {
+    skbFeiertageCache.set(key, skbBerechneFeiertage(jahr, bundesland));
+  }
+  return skbFeiertageCache.get(key);
+}
+
+function skbIstWerktagOhneFeiertag(isoTag, bundesland) {
+  const datum = new Date(`${isoTag}T00:00:00Z`);
+  const wochentag = datum.getUTCDay();
+  if (wochentag === 0 || wochentag === 6) {
+    return false;
+  }
+  return !skbFeiertageFuerJahr(datum.getUTCFullYear(), bundesland).has(isoTag);
+}
+
+function skbZaehleWerktage(vonIso, bisIso, bundesland) {
+  if (!vonIso || !bisIso) {
+    return 0;
+  }
+  let anzahl = 0;
+  let aktuell = new Date(`${vonIso}T00:00:00Z`);
+  const ende = new Date(`${bisIso}T00:00:00Z`);
+  while (aktuell <= ende) {
+    if (skbIstWerktagOhneFeiertag(skbIsoDatum(aktuell), bundesland)) {
+      anzahl++;
+    }
+    aktuell = skbAddTage(aktuell, 1);
+  }
+  return anzahl;
+}
+
+// --- Anwesenheit ---
+
+const SKB_FEHLZEIT_ENTSCHULDIGT = ["E", "K"];
+const SKB_FEHLZEIT_UNENTSCHULDIGT = ["UA"];
+
+function skbFormatProzent(zaehler, nenner) {
+  if (!nenner) {
+    return "–";
+  }
+  return `${((zaehler / nenner) * 100).toFixed(1).replace(".", ",")} %`;
+}
+
+function skbBerechneAnwesenheitStats(person, records, bundesland) {
+  const entschuldigt = records.filter((r) => SKB_FEHLZEIT_ENTSCHULDIGT.includes(r.Kurzzeichen)).length;
+  const unentschuldigt = records.filter((r) => SKB_FEHLZEIT_UNENTSCHULDIGT.includes(r.Kurzzeichen)).length;
+  const fehltageGesamt = entschuldigt + unentschuldigt;
+
+  const heute = heutigesDatumIso();
+  const bisherBis = person.Endedatum && person.Endedatum < heute ? person.Endedatum : heute;
+  const werktageBisher = person.Startdatum ? skbZaehleWerktage(person.Startdatum, bisherBis, bundesland) : 0;
+  const werktageGesamt =
+    person.Startdatum && person.Endedatum ? skbZaehleWerktage(person.Startdatum, person.Endedatum, bundesland) : 0;
+
+  return {
+    fehltageGesamt,
+    entschuldigt,
+    unentschuldigt,
+    fehlzeitBisherProzent: skbFormatProzent(fehltageGesamt, werktageBisher),
+    fehlzeitAufMassnahmeProzent: skbFormatProzent(fehltageGesamt, werktageGesamt),
+    werktageBisher,
+    werktageGesamt,
+  };
+}
+
+function skbMonatsListeZwischen(vonIso, bisIso) {
+  const monate = [];
+  if (!vonIso || !bisIso) {
+    return monate;
+  }
+  let jahr = Number(vonIso.slice(0, 4));
+  let monat = Number(vonIso.slice(5, 7));
+  const endJahr = Number(bisIso.slice(0, 4));
+  const endMonat = Number(bisIso.slice(5, 7));
+  while (jahr < endJahr || (jahr === endJahr && monat <= endMonat)) {
+    monate.push({ jahr, monat });
+    monat += 1;
+    if (monat > 12) {
+      monat = 1;
+      jahr += 1;
+    }
+  }
+  return monate;
+}
+
+function skbIstWochenende(iso) {
+  const wochentag = new Date(`${iso}T00:00:00Z`).getUTCDay();
+  return wochentag === 0 || wochentag === 6;
+}
+
+function skbTageszeichen(iso, recordsByDate, bundesland) {
+  const eintrag = recordsByDate.get(iso);
+  if (eintrag) {
+    return eintrag;
+  }
+  const jahr = Number(iso.slice(0, 4));
+  return skbFeiertageFuerJahr(jahr, bundesland).has(iso) ? "F" : "";
+}
+
+function renderSteckbriefAnwesenheitTabelle(person, records, bundesland) {
+  skbAnwesenheitTableBody.innerHTML = "";
+
+  const recordsByDate = new Map(records.map((r) => [r.Datum, r.Kurzzeichen]));
+  const monate = skbMonatsListeZwischen(person.Startdatum, person.Endedatum);
+
+  if (monate.length === 0) {
+    const emptyRow = document.createElement("tr");
+    const emptyCell = document.createElement("td");
+    emptyCell.colSpan = 33;
+    emptyCell.textContent = "Kein Zeitraum hinterlegt.";
+    emptyRow.appendChild(emptyCell);
+    skbAnwesenheitTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  monate.forEach(({ jahr, monat }) => {
+    const row = document.createElement("tr");
+    const monatCell = document.createElement("td");
+    monatCell.className = "col-sticky col-monat";
+    monatCell.textContent = MONTH_NAMES_DE[monat - 1];
+    const jahrCell = document.createElement("td");
+    jahrCell.className = "col-sticky col-jahr";
+    jahrCell.textContent = String(jahr);
+    row.append(monatCell, jahrCell);
+
+    const tageImMonat = new Date(jahr, monat, 0).getDate();
+    for (let tag = 1; tag <= 31; tag++) {
+      const cell = document.createElement("td");
+      if (tag <= tageImMonat) {
+        const iso = `${jahr}-${String(monat).padStart(2, "0")}-${String(tag).padStart(2, "0")}`;
+        if (skbIstWochenende(iso)) {
+          cell.classList.add("steckbrief-wochenende");
+        }
+        cell.textContent = skbTageszeichen(iso, recordsByDate, bundesland);
+      }
+      row.appendChild(cell);
+    }
+    skbAnwesenheitTableBody.appendChild(row);
+  });
+}
+
+// --- Leistung ---
+
+function renderSteckbriefLeistung(daten) {
+  skbLkAnzahl.textContent = String(daten.length);
+
+  const { durchschnitt, trend } = berechneNotenverlaufKennzahlen(daten);
+  skbDurchschnittsnote.textContent = durchschnitt === null ? "–" : formatNoteDE(durchschnitt.toFixed(1));
+  skbTrend.textContent = trend ? NV_TREND_LABELS[trend] : "–";
+  skbTrend.className = trend ? `stat-value trend-${trend}` : "stat-value";
+
+  zeichneNotenChart(skbChart, skbChartEmpty, daten, null, null);
+}
+
+// --- Aktivitäten ---
+
+function skbFeldMitLabel(label, wert) {
+  const span = document.createElement("span");
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "label";
+  labelSpan.textContent = `${label}:`;
+  span.append(labelSpan, document.createTextNode(` ${wert}`));
+  return span;
+}
+
+function renderSteckbriefAktivitaeten(aktivitaeten) {
+  skbAktivitaetenListe.innerHTML = "";
+
+  if (aktivitaeten.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "aktivitaet-list-empty";
+    empty.textContent = "Noch keine Aktivitäten vorhanden.";
+    skbAktivitaetenListe.appendChild(empty);
+    return;
+  }
+
+  aktivitaeten.forEach((aktivitaet) => {
+    const item = document.createElement("li");
+    item.className = "steckbrief-aktivitaet-item";
+
+    const info = document.createElement("div");
+    info.className = "steckbrief-aktivitaet-info";
+    info.append(
+      skbFeldMitLabel("Datum", formatDateTimeDE(aktivitaet.ErstelltAm)),
+      skbFeldMitLabel("Thema", aktivitaet.Thema || "–"),
+      skbFeldMitLabel("Bearbeiter", aktivitaet.Bearbeiter || "–")
+    );
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-secondary";
+    btn.textContent = "Zur Aktivität";
+    btn.addEventListener("click", () => openTeilnehmerAktivitaeten(currentSteckbriefTeilnehmer, aktivitaet.ID));
+
+    const btnWrap = document.createElement("div");
+    btnWrap.className = "detail-actions";
+    btnWrap.appendChild(btn);
+
+    item.append(info, btnWrap);
+    skbAktivitaetenListe.appendChild(item);
+  });
+}
+
+// --- Laden der Steckbrief-Seite ---
+
+async function loadTeilnehmerSteckbriefPage(teilnehmerId) {
+  const person = currentSteckbriefTeilnehmer;
+  if (!person) {
+    return;
+  }
+
+  skbName.textContent = `${person.Vorname} ${person.Nachname}`;
+  skbGeburtsdatum.textContent = formatDateDE(person.Geburtsdatum);
+  skbStartdatum.textContent = formatDateDE(person.Startdatum);
+  skbEndedatum.textContent = formatDateDE(person.Endedatum);
+  skbEmail.textContent = person.Email || "–";
+  skbTelefon.textContent = person.Telefon || "–";
+  skbFachbereich.textContent = person.FachbereichBezeichnung || "–";
+  skbGruppe.textContent = person.GruppeBezeichnung || "–";
+  skbMassnahme.textContent = person.MassnahmeBezeichnung || "–";
+  skbVt.textContent = person.VT || "–";
+
+  skbAnwesenheitTableBody.innerHTML = "";
+  const ladeRow = document.createElement("tr");
+  const ladeCell = document.createElement("td");
+  ladeCell.colSpan = 33;
+  ladeCell.textContent = "Lädt…";
+  ladeRow.appendChild(ladeCell);
+  skbAnwesenheitTableBody.appendChild(ladeRow);
+
+  skbAktivitaetenListe.innerHTML = "";
+  const ladeItem = document.createElement("li");
+  ladeItem.className = "aktivitaet-list-empty";
+  ladeItem.textContent = "Lädt…";
+  skbAktivitaetenListe.appendChild(ladeItem);
+
+  try {
+    const [anwesenheitResp, bildungsstaetteResp, lkResp, aktivitaetenResp] = await Promise.all([
+      fetch(`/api/teilnehmer/${teilnehmerId}/anwesenheiten`),
+      fetch("/api/einstellungen/bildungsstaette"),
+      fetch(`/api/teilnehmer/${teilnehmerId}/leistungskontrollen`),
+      fetch(`/api/aktivitaeten?teilnehmerId=${teilnehmerId}`),
+    ]);
+
+    if (!anwesenheitResp.ok) throw new Error("Anwesenheiten konnten nicht geladen werden.");
+    if (!lkResp.ok) throw new Error("Leistungskontrollen konnten nicht geladen werden.");
+    if (!aktivitaetenResp.ok) throw new Error("Aktivitäten konnten nicht geladen werden.");
+
+    const anwesenheitRecords = await anwesenheitResp.json();
+    const bildungsstaette = bildungsstaetteResp.ok ? await bildungsstaetteResp.json() : {};
+    const bundesland = bildungsstaette.bildungsstaette_bundesland || "";
+
+    const stats = skbBerechneAnwesenheitStats(person, anwesenheitRecords, bundesland);
+    skbAnwesenheitStatsCache = stats;
+    skbFehltageGesamt.textContent = String(stats.fehltageGesamt);
+    skbFehltageEntschuldigt.textContent = String(stats.entschuldigt);
+    skbFehltageUnentschuldigt.textContent = String(stats.unentschuldigt);
+    skbFehlzeitBisher.textContent = stats.fehlzeitBisherProzent;
+    skbFehlzeitAufMassnahme.textContent = stats.fehlzeitAufMassnahmeProzent;
+    renderSteckbriefAnwesenheitTabelle(person, anwesenheitRecords, bundesland);
+
+    skbLkDatenCache = await lkResp.json();
+    renderSteckbriefLeistung(skbLkDatenCache);
+
+    skbAktivitaetenCache = await aktivitaetenResp.json();
+    renderSteckbriefAktivitaeten(skbAktivitaetenCache);
+  } catch (err) {
+    console.error(err);
+    skbAnwesenheitTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 33;
+    errorCell.textContent = err.message;
+    errorRow.appendChild(errorCell);
+    skbAnwesenheitTableBody.appendChild(errorRow);
+  }
+}
+
+// --- PDF-Bericht ---
+
+async function skbLadeLogoAlsDataUrl() {
+  try {
+    const response = await fetch("/api/einstellungen/unternehmen/logo");
+    if (!response.ok) {
+      return null;
+    }
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+const SKB_PDF_TREND_LABELS = {
+  verbessert: "Verbessert",
+  verschlechtert: "Verschlechtert",
+  stabil: "Stabil",
+};
+
+function skbBildFormatAusDataUrl(dataUrl) {
+  if (dataUrl.startsWith("data:image/png")) return "PNG";
+  if (dataUrl.startsWith("data:image/gif")) return "GIF";
+  if (dataUrl.startsWith("data:image/webp")) return "WEBP";
+  return "JPEG";
+}
+
+async function generateSteckbriefPdf() {
+  const person = currentSteckbriefTeilnehmer;
+  if (!person) {
+    return;
+  }
+
+  const [unternehmen, bildungsstaette, logoDataUrl] = await Promise.all([
+    fetch("/api/einstellungen/unternehmen").then((r) => (r.ok ? r.json() : {})),
+    fetch("/api/einstellungen/bildungsstaette").then((r) => (r.ok ? r.json() : {})),
+    skbLadeLogoAlsDataUrl(),
+  ]);
+  const bundesland = bildungsstaette.bildungsstaette_bundesland || "";
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const marginX = 40;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = 44;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(0, 58, 77);
+  doc.text(unternehmen.unternehmen_name || "Standortmanager", marginX, y);
+
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, skbBildFormatAusDataUrl(logoDataUrl), pageWidth - marginX - 110, y - 26, 110, 44, undefined, "FAST");
+    } catch (err) {
+      console.error("Logo konnte nicht ins PDF eingefügt werden:", err);
+    }
+  }
+
+  y += 16;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(51, 51, 51);
+  if (unternehmen.unternehmen_bezeichnung) {
+    doc.text(unternehmen.unternehmen_bezeichnung, marginX, y);
+    y += 12;
+  }
+  const anschriftZeilen = [
+    bildungsstaette.bildungsstaette_name,
+    [bildungsstaette.bildungsstaette_strasse, bildungsstaette.bildungsstaette_hausnummer].filter(Boolean).join(" "),
+    [bildungsstaette.bildungsstaette_plz, bildungsstaette.bildungsstaette_ort].filter(Boolean).join(" "),
+  ].filter(Boolean);
+  anschriftZeilen.forEach((zeile) => {
+    doc.text(zeile, marginX, y);
+    y += 12;
+  });
+
+  doc.setTextColor(120, 120, 120);
+  doc.text(`Bericht vom ${new Date().toLocaleDateString("de-DE")}`, marginX, y);
+  y += 14;
+
+  doc.setDrawColor(238, 239, 241);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 20;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(0, 58, 77);
+  doc.text(`Teilnehmersteckbrief: ${person.Vorname} ${person.Nachname}`, marginX, y);
+  y += 18;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(51, 51, 51);
+  const kopfZeilen = [
+    `Fachbereich: ${person.FachbereichBezeichnung || "–"}     Gruppe: ${person.GruppeBezeichnung || "–"}     Maßnahme: ${person.MassnahmeBezeichnung || "–"}     VT: ${person.VT || "–"}`,
+    `Geburtsdatum: ${formatDateDE(person.Geburtsdatum) || "–"}     Startdatum: ${formatDateDE(person.Startdatum) || "–"}     Endedatum: ${formatDateDE(person.Endedatum) || "–"}`,
+  ];
+  doc.text(kopfZeilen, marginX, y, { lineHeightFactor: 1.4 });
+  y += kopfZeilen.length * 13 + 14;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(0, 58, 77);
+  doc.text("Anwesenheit", marginX, y);
+  y += 15;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(51, 51, 51);
+  const stats = skbAnwesenheitStatsCache;
+  const anwesenheitZeilen = stats
+    ? [
+        `Fehltage gesamt: ${stats.fehltageGesamt}     davon entschuldigt: ${stats.entschuldigt}     davon unentschuldigt: ${stats.unentschuldigt}`,
+        `Fehlzeit bisher: ${stats.fehlzeitBisherProzent}     Fehlzeit auf Maßnahme: ${stats.fehlzeitAufMassnahmeProzent}`,
+      ]
+    : ["Keine Daten vorhanden."];
+  doc.text(anwesenheitZeilen, marginX, y, { lineHeightFactor: 1.4 });
+  y += anwesenheitZeilen.length * 13 + 10;
+
+  const monate = skbMonatsListeZwischen(person.Startdatum, person.Endedatum);
+  const recordsByDate = new Map((await (await fetch(`/api/teilnehmer/${person.ID}/anwesenheiten`)).json()).map((r) => [r.Datum, r.Kurzzeichen]));
+  if (monate.length > 0) {
+    const head = ["Monat", "Jahr", ...Array.from({ length: 31 }, (_, i) => String(i + 1))];
+    const body = monate.map(({ jahr, monat }) => {
+      const tageImMonat = new Date(jahr, monat, 0).getDate();
+      const zeile = [MONTH_NAMES_DE[monat - 1], String(jahr)];
+      for (let tag = 1; tag <= 31; tag++) {
+        if (tag > tageImMonat) {
+          zeile.push("");
+        } else {
+          const iso = `${jahr}-${String(monat).padStart(2, "0")}-${String(tag).padStart(2, "0")}`;
+          zeile.push(skbTageszeichen(iso, recordsByDate, bundesland));
+        }
+      }
+      return zeile;
+    });
+    const monatColWidth = 55;
+    const jahrColWidth = 32;
+    const dayColWidth = Math.max(11, (pageWidth - marginX * 2 - monatColWidth - jahrColWidth) / 31);
+    const columnStyles = { 0: { cellWidth: monatColWidth, halign: "left" }, 1: { cellWidth: jahrColWidth, halign: "center" } };
+    for (let i = 0; i < 31; i++) {
+      columnStyles[2 + i] = { cellWidth: dayColWidth, halign: "center" };
+    }
+    doc.autoTable({
+      head: [head],
+      body,
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      theme: "grid",
+      styles: { fontSize: 6.5, cellPadding: 2, valign: "middle", lineColor: [238, 239, 241], lineWidth: 0.5 },
+      headStyles: { fillColor: [0, 173, 238], textColor: 255, fontSize: 6.5, halign: "center" },
+      bodyStyles: { textColor: [51, 51, 51] },
+      alternateRowStyles: { fillColor: [243, 247, 250] },
+      columnStyles,
+      didParseCell: (data) => {
+        if (data.section !== "body" || data.column.index < 2) {
+          return;
+        }
+        const { jahr, monat } = monate[data.row.index];
+        const tag = data.column.index - 1;
+        const tageImMonat = new Date(jahr, monat, 0).getDate();
+        if (tag > tageImMonat) {
+          return;
+        }
+        const iso = `${jahr}-${String(monat).padStart(2, "0")}-${String(tag).padStart(2, "0")}`;
+        if (skbIstWochenende(iso)) {
+          data.cell.styles.fillColor = [215, 221, 226];
+        }
+      },
+    });
+    y = doc.lastAutoTable.finalY + 20;
+  }
+
+  if (y > pageHeight - 120) {
+    doc.addPage();
+    y = 44;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(0, 58, 77);
+  doc.text("Leistung", marginX, y);
+  y += 15;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(51, 51, 51);
+  const { durchschnitt, trend } = berechneNotenverlaufKennzahlen(skbLkDatenCache);
+  const leistungZeile = `Leistungskontrollen: ${skbLkDatenCache.length}     Durchschnittsnote: ${
+    durchschnitt === null ? "–" : formatNoteDE(durchschnitt.toFixed(1))
+  }     Trend: ${trend ? SKB_PDF_TREND_LABELS[trend] : "–"}`;
+  doc.text(leistungZeile, marginX, y);
+  y += 18;
+
+  if (skbLkDatenCache.length > 0) {
+    doc.autoTable({
+      head: [["Art", "Bezeichnung", "Durchführungsdatum", "Note"]],
+      body: skbLkDatenCache.map((lk) => {
+        const noteWert = parseNoteWert(lk.Note);
+        return [lk.Art, lk.Bezeichnung, formatDateDE(lk.Durchfuehrungsdatum), noteWert === null ? "–" : formatNoteDE(noteWert)];
+      }),
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3, lineColor: [238, 239, 241], lineWidth: 0.5 },
+      headStyles: { fillColor: [0, 173, 238], textColor: 255, fontSize: 8 },
+      bodyStyles: { textColor: [51, 51, 51] },
+      alternateRowStyles: { fillColor: [243, 247, 250] },
+      columnStyles: { 2: { cellWidth: 110 }, 3: { cellWidth: 60, halign: "center" } },
+    });
+    y = doc.lastAutoTable.finalY + 20;
+  }
+
+  if (y > pageHeight - 120) {
+    doc.addPage();
+    y = 44;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(0, 58, 77);
+  doc.text("Aktivitäten", marginX, y);
+  y += 12;
+
+  if (skbAktivitaetenCache.length > 0) {
+    doc.autoTable({
+      head: [["Datum", "Thema", "Bearbeiter"]],
+      body: skbAktivitaetenCache.map((a) => [formatDateTimeDE(a.ErstelltAm), a.Thema || "–", a.Bearbeiter || "–"]),
+      startY: y,
+      margin: { left: marginX, right: marginX },
+      theme: "grid",
+      styles: { fontSize: 8, cellPadding: 3, lineColor: [238, 239, 241], lineWidth: 0.5 },
+      headStyles: { fillColor: [0, 173, 238], textColor: 255, fontSize: 8 },
+      bodyStyles: { textColor: [51, 51, 51] },
+      alternateRowStyles: { fillColor: [243, 247, 250] },
+    });
+  } else {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(51, 51, 51);
+    doc.text("Keine Aktivitäten vorhanden.", marginX, y + 12);
+  }
+
+  const blobUrl = doc.output("bloburl");
+  window.open(blobUrl, "_blank");
+}
+
+skbPdfBtn.addEventListener("click", async () => {
+  const originalLabel = skbPdfBtn.textContent;
+  skbPdfBtn.disabled = true;
+  skbPdfBtn.textContent = "Erstelle Bericht…";
+  try {
+    await generateSteckbriefPdf();
+  } catch (err) {
+    console.error(err);
+    alert("Der PDF-Bericht konnte nicht erstellt werden.");
+  } finally {
+    skbPdfBtn.disabled = false;
+    skbPdfBtn.textContent = originalLabel;
+  }
+});
 
 // Einstellungen
 
@@ -3838,6 +4570,17 @@ let awStatusList = [];
 let awAttendance = new Map();
 let awGruppen = [];
 let awMassnahmen = [];
+let awBundesland = "";
+
+async function loadAwBundesland() {
+  try {
+    const response = await fetch("/api/einstellungen/bildungsstaette");
+    awBundesland = response.ok ? (await response.json()).bildungsstaette_bundesland || "" : "";
+  } catch (err) {
+    console.error(err);
+    awBundesland = "";
+  }
+}
 
 function awPad(n) {
   return String(n).padStart(2, "0");
@@ -4180,7 +4923,7 @@ function buildAwTableRows() {
 
       const emptyOption = document.createElement("option");
       emptyOption.value = "";
-      emptyOption.textContent = "–";
+      emptyOption.textContent = skbFeiertageFuerJahr(awYear, awBundesland).has(datum) ? "F" : "–";
       select.appendChild(emptyOption);
 
       const currentStatusId = awAttendance.get(awAttendanceKey(person.ID, datum));
@@ -4546,6 +5289,7 @@ async function initAnwesenheiten() {
     loadAwStatusList(),
     loadAwTeilnehmer(),
     loadAwAttendance(),
+    loadAwBundesland(),
   ]);
 
   refreshAwGruppeOptions();

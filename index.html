@@ -607,6 +607,140 @@
           </div>
         </section>
 
+        <section id="page-teilnehmende-steckbrief" class="page">
+          <div class="subpage-header">
+            <button type="button" id="skbZurueckBtn" class="btn-secondary">← Zurück zu Teilnehmende</button>
+          </div>
+
+          <h2>Teilnehmersteckbrief</h2>
+
+          <div class="steckbrief-kopf">
+            <p class="notenverlauf-name" id="skbName"></p>
+            <div class="stat-grid steckbrief-kopf-fields">
+              <div class="stat-card">
+                <span class="stat-value" id="skbGeburtsdatum">–</span>
+                <span class="stat-label">Geburtsdatum</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value" id="skbStartdatum">–</span>
+                <span class="stat-label">Startdatum</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value" id="skbEndedatum">–</span>
+                <span class="stat-label">Endedatum</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value" id="skbEmail">–</span>
+                <span class="stat-label">E-Mail</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value" id="skbTelefon">–</span>
+                <span class="stat-label">Telefon</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="stat-grid steckbrief-meta-grid">
+            <div class="stat-card">
+              <span class="stat-value" id="skbFachbereich">–</span>
+              <span class="stat-label">Fachbereich</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbGruppe">–</span>
+              <span class="stat-label">Gruppe</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbMassnahme">–</span>
+              <span class="stat-label">Maßnahme</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbVt">–</span>
+              <span class="stat-label">VT</span>
+            </div>
+          </div>
+
+          <hr class="steckbrief-divider">
+
+          <h3>Anwesenheit</h3>
+
+          <div class="stat-grid steckbrief-anwesenheit-stats">
+            <div class="stat-card">
+              <span class="stat-value" id="skbFehltageGesamt">–</span>
+              <span class="stat-label">Fehltage gesamt</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbFehltageEntschuldigt">–</span>
+              <span class="stat-label">davon entschuldigt</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbFehltageUnentschuldigt">–</span>
+              <span class="stat-label">davon unentschuldigt</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbFehlzeitBisher">–</span>
+              <span class="stat-label">Fehlzeit bisher</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbFehlzeitAufMassnahme">–</span>
+              <span class="stat-label">Fehlzeit auf Maßnahme</span>
+            </div>
+          </div>
+
+          <div class="table-scroll steckbrief-anwesenheit-scroll">
+            <table class="data-table steckbrief-anwesenheit-table" id="skbAnwesenheitTable">
+              <thead>
+                <tr id="skbAnwesenheitHeadRow">
+                  <th class="col-sticky col-monat">Monat</th>
+                  <th class="col-sticky col-jahr">Jahr</th>
+                </tr>
+              </thead>
+              <tbody id="skbAnwesenheitTableBody">
+                <tr>
+                  <td>Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <hr class="steckbrief-divider">
+
+          <h3>Leistung</h3>
+
+          <div class="stat-grid steckbrief-leistung-stats">
+            <div class="stat-card">
+              <span class="stat-value" id="skbLkAnzahl">–</span>
+              <span class="stat-label">Leistungskontrollen</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbDurchschnittsnote">–</span>
+              <span class="stat-label">Durchschnittsnote</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbTrend">–</span>
+              <span class="stat-label">Trend</span>
+            </div>
+          </div>
+
+          <div class="notenverlauf-chart-scroll">
+            <svg id="skbChart" class="notenverlauf-chart" preserveAspectRatio="xMinYMid meet"></svg>
+          </div>
+          <p class="detail-placeholder" id="skbChartEmpty" hidden>Noch keine Noten vorhanden.</p>
+
+          <hr class="steckbrief-divider">
+
+          <h3>Aktivitäten</h3>
+
+          <ul class="steckbrief-aktivitaeten-liste" id="skbAktivitaetenListe">
+            <li class="aktivitaet-list-empty">Lädt…</li>
+          </ul>
+
+          <hr class="steckbrief-divider">
+
+          <div class="report-actions">
+            <button type="button" id="skbPdfBtn" class="report-btn">Bericht als PDF anzeigen</button>
+          </div>
+        </section>
+
         <dialog id="dokUploadDialog" class="confirm-dialog edit-dialog">
           <form id="dokUploadForm" enctype="multipart/form-data">
             <h3>Datei hochladen</h3>

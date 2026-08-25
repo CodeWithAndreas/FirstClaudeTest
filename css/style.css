@@ -506,7 +506,8 @@ body.logged-out .app-layout {
 .row-erledigt-btn,
 .row-termin-btn,
 .row-files-btn,
-.row-noten-btn {
+.row-noten-btn,
+.row-steckbrief-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -530,7 +531,8 @@ body.logged-out .app-layout {
 .row-erledigt-btn:hover,
 .row-termin-btn:hover,
 .row-files-btn:hover,
-.row-noten-btn:hover {
+.row-noten-btn:hover,
+.row-steckbrief-btn:hover {
   background: var(--color-bg-light);
   color: var(--color-primary);
 }
@@ -543,7 +545,8 @@ body.logged-out .app-layout {
 .row-erledigt-btn svg,
 .row-termin-btn svg,
 .row-files-btn svg,
-.row-noten-btn svg {
+.row-noten-btn svg,
+.row-steckbrief-btn svg {
   width: 18px;
   height: 18px;
 }
@@ -1242,7 +1245,7 @@ a.btn-primary {
 }
 
 .anwesenheiten-table .day-col.weekend {
-  background: var(--color-bg-light);
+  background: #d7dde2;
 }
 
 .anwesenheiten-table th.day-col {
@@ -1377,4 +1380,99 @@ a.btn-primary {
   border-radius: var(--radius-sm);
   padding: 0.5rem;
   background: var(--color-bg-light);
+}
+
+/* Teilnehmersteckbrief */
+
+.steckbrief-kopf {
+  margin-bottom: 1rem;
+}
+
+.steckbrief-kopf-fields .stat-value,
+.steckbrief-meta-grid .stat-value {
+  font-size: 1.15rem;
+  word-break: break-word;
+}
+
+.steckbrief-divider {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.75rem 0;
+}
+
+.steckbrief-anwesenheit-scroll {
+  margin-top: 1rem;
+}
+
+.steckbrief-anwesenheit-table {
+  table-layout: fixed;
+}
+
+.steckbrief-anwesenheit-table th,
+.steckbrief-anwesenheit-table td {
+  padding: 0.35rem 0.3rem;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.steckbrief-anwesenheit-table .col-sticky {
+  position: sticky;
+  background: var(--color-bg);
+  z-index: 1;
+}
+
+.steckbrief-anwesenheit-table thead .col-sticky {
+  z-index: 2;
+}
+
+.steckbrief-anwesenheit-table .col-monat {
+  left: 0;
+  width: 100px;
+  text-align: left;
+}
+
+.steckbrief-anwesenheit-table .col-jahr {
+  left: 100px;
+  width: 55px;
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+}
+
+.steckbrief-anwesenheit-table .day-col {
+  width: 26px;
+}
+
+.steckbrief-anwesenheit-table td.steckbrief-wochenende {
+  background: #d7dde2;
+}
+
+.steckbrief-aktivitaeten-liste {
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.steckbrief-aktivitaet-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.steckbrief-aktivitaet-item:last-child {
+  border-bottom: none;
+}
+
+.steckbrief-aktivitaet-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.steckbrief-aktivitaet-info .label {
+  color: var(--color-text-muted);
+  margin-right: 0.35rem;
 }

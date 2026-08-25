@@ -3,7 +3,206 @@
 Stand: 2026-08-25. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Neuer Einstellungen-Bereich **Unternehmen**
+**Wichtig für eine neue Session:** Dieselbe Layout-Korrektur wie beim
+PDF-Button auch für die "Zur Aktivität"-Buttons in der Aktivitäten-Liste des
+Teilnehmersteckbriefs: statt eines nackten `class="btn-secondary"` jetzt
+umschlossen von einem `<div class="detail-actions">`-Wrapper (das bestehende
+Muster für Aktionsbuttons in Detailansichten, z. B. "Vorschau"/
+"Herunterladen" im Dokument-Detailpanel) – dadurch jetzt korrekt abgerundete
+Pillenform statt eckigem, unstyled Button. **Bewusst nicht angefasst:** die
+"← Zurück zu ..."-Buttons in den `.subpage-header`-Bereichen – die nutzen
+projektweit (auch auf allen älteren Unterseiten wie Aktivitätenverlauf/
+Dateiablage, nicht nur meinen neuen) ebenfalls nacktes `class="btn-secondary"`
+und sehen dadurch bewusst schlicht/textartig statt als Pillen-Button aus;
+das ist ein bestehendes, konsistentes App-weites Muster für Zurück-Links,
+keine dieser Session zuzuschreibende Inkonsistenz – nur auf explizite Anfrage
+mit-ändern, nicht von mir aus.
+
+**Davor:** Der Button "Bericht als PDF anzeigen" im
+Teilnehmersteckbrief nutzt jetzt `class="report-btn"` in einem
+`<div class="report-actions">`-Wrapper statt eines nackten
+`class="btn-primary"` – das ist das bestehende, auf der Anwesenheiten-Seite
+etablierte Muster für PDF-Berichts-Buttons ("PDF-Bericht erstellen"/
+"PDF-Bericht je VT erstellen"). **Ursache des ursprünglichen Layout-Bugs:**
+`.btn-primary` liefert in `style.css` für sich allein nur Hintergrund-/
+Textfarbe – Padding, Rundung (`--radius-lg`) und Fettschrift kommen aus
+kontextabhängigen Selektoren wie `.dialog-actions .btn-primary` oder
+`.detail-actions .btn-primary`. Ein `.btn-primary`-Button **außerhalb** dieser
+Container (wie der PDF-Button, der direkt im Seitenfluss stand) bekommt
+dadurch nur die Farben, aber keine der übrigen Button-Eigenschaften – sah
+entsprechend unfertig/inkonsistent aus. **Lehre:** `.btn-primary`/
+`.btn-secondary` sind in diesem Projekt keine eigenständigen, vollständigen
+Button-Klassen, sondern nur Farb-Modifier, die einen umschließenden Container
+(`.dialog-actions`, `.detail-actions`) oder eine eigene Basis-Klasse wie
+`.report-btn` brauchen, um korrekt auszusehen – bei einem freistehenden
+Button immer prüfen, welcher bestehende Container/welche Klasse für diesen
+Anwendungsfall (hier: PDF-Bericht-Button) bereits existiert, statt
+`.btn-primary` direkt auf ein freistehendes `<button>` zu setzen.
+
+**Davor:** Die sechs Zeilen-Icons auf der
+Teilnehmende-Seite (Steckbrief, Aktivitäten, Dateiablage, Notenverlauf,
+Bearbeiten, Löschen) haben jetzt zusätzlich zum bestehenden `aria-label`
+(nur für Screenreader) ein natives `title`-Attribut mit kurzem Funktionsnamen
+(z. B. "Steckbrief", "Notenverlauf") – zeigt den Browser-Standard-Tooltip
+beim Hover. Bewusst kurz gehalten (nur die Funktion, nicht zusätzlich der
+Name der Zeile wie im `aria-label`), da der Zeilenkontext beim Hovern bereits
+sichtbar ist. **Scope:** Nur die Teilnehmende-Tabelle wurde angefasst, wie
+angefragt – andere Tabellen im Projekt (Fachbereiche/Gruppen/Maßnahmen/
+Dokumente/Benutzer/Leistungskontrollen) haben weiterhin nur `aria-label` ohne
+`title`; falls das dort auch gewünscht ist, müsste es separat nachgezogen
+werden.
+
+**Davor:** Die Feiertags-/Wochenend-Darstellung aus
+dem Teilnehmersteckbrief wurde auf die **Haupt-Anwesenheiten-Seite**
+übertragen (`js/main.js`, `buildAwTableRows()`): Die leere Auswahloption
+jeder Tages-Dropdown-Zelle zeigt jetzt „F" statt „–", wenn der Tag laut
+`skbFeiertageFuerJahr()` ein Feiertag ist (die Steckbrief-Feiertagsfunktionen
+sind trotz `skb`-Präfix bewusst generisch gehalten und werden hier
+direkt wiederverwendet, keine Kopie) – die Zelle bleibt dabei voll editierbar,
+„F" ist nur der Platzhaltertext der leeren Option, ein echter Eintrag hat
+weiterhin Vorrang. Neue Hilfsfunktion `loadAwBundesland()` lädt das
+Bundesland einmalig beim ersten Aufruf der Seite (`ensureAwInitialized()`-
+Gate, gleiches Cache-Verhalten wie `awGruppen`/`awMassnahmen` – bei einer
+Bundesland-Änderung in den Einstellungen während einer laufenden Sitzung
+zeigt diese Seite die alten Feiertage bis zum nächsten Neuladen). Der
+Wochenend-Hintergrund (`.anwesenheiten-table .day-col.weekend`, existierte
+hier bereits vorher) wurde auf denselben dunkleren Grauton `#d7dde2`
+angeglichen wie im Steckbrief, für ein einheitliches Erscheinungsbild.
+**Bewusst nicht angefasst:** der bestehende Anwesenheiten-**PDF**-Bericht
+(`generateAwPdfReport()`/`drawAwReportPage()`) – die Anfrage bezog sich
+explizit nur auf die Seite selbst, anders als beim Steckbrief, wo PDF und
+Bildschirmansicht ausdrücklich beide verlangt waren.
+
+**Davor:** Die Anwesenheits-Monatsmatrix im
+Teilnehmersteckbrief zeigt jetzt zusätzlich zu den erfassten Kurzzeichen auch
+die berechneten Feiertage (`F`) und hebt Wochenend-Zellen mit hellgrauem
+Hintergrund hervor – **identisch sowohl on-screen als auch im PDF-Bericht**.
+Gemeinsame Hilfsfunktionen `skbIstWochenende(iso)` und
+`skbTageszeichen(iso, recordsByDate, bundesland)` in `js/main.js` kapseln die
+Logik einmal und werden von `renderSteckbriefAnwesenheitTabelle()` (Tabelle
+on-screen) UND `generateSteckbriefPdf()` (PDF-Bericht) gemeinsam genutzt –
+**bewusst keine zweite, duplizierte Implementierung fürs PDF**, um zu
+verhindern, dass beide Darstellungen bei künftigen Änderungen auseinanderlaufen.
+Priorität pro Zelle: echter Anwesenheits-Eintrag > berechneter Feiertag (`F`)
+> leer. Die Wochenend-Hervorhebung ist davon unabhängig und wird zusätzlich
+angewendet (ein Feiertag an einem Wochenende zeigt also `F` **und** hat den
+grauen Hintergrund). Im PDF läuft die Wochenend-Einfärbung über den
+`didParseCell`-Hook von `jspdf-autotable` (etwas dunkleres Grau als das
+`alternateRowStyles`-Zebra-Muster, damit es in geraden wie ungeraden Zeilen
+gleichermaßen sichtbar bleibt). Für den Test wurde das Bundesland erneut
+kurzzeitig auf „Berlin" gesetzt (Feiertage wie Frauentag 8. März nur dort
+gesetzlich) und danach zurückgesetzt; die berechneten Feiertage über den
+gesamten Teilnahmezeitraum (Juni 2026–Mai 2028) wurden stichprobenartig gegen
+bekannte Daten geprüft (Neujahr, Ostern-Familie, 1. Mai, Tag der Deutschen
+Einheit, Weihnachten, Frauentag) – alle korrekt.
+
+**Davor:** Die Kopf-Angaben (Geburtsdatum/Startdatum/
+Endedatum/E-Mail/Telefon) im Teilnehmersteckbrief stehen jetzt nebeneinander
+als Stat-Karten statt als vertikale `dl`-Liste. Dabei aufgefallen und direkt
+mitgefixt: Die Standard-`.stat-value`-Schrift (2rem, fett) ist für
+Zahlen-Kacheln (Dashboard) gedacht und lief bei Text-Inhalten wie
+E-Mail-Adressen oder "IT-Systemelektroniker" über die Kartenränder hinaus –
+`.steckbrief-kopf-fields .stat-value` und `.steckbrief-meta-grid .stat-value`
+(letztere schon vorher für Fachbereich/Gruppe/Maßnahme/VT im Einsatz, hatte
+denselben Bug) haben jetzt eine kleinere, umbrechende Schriftgröße
+(1.15rem + `word-break: break-word`). **Lehre:** Das `.stat-card`/
+`.stat-value`-Muster ist ursprünglich für kurze Zahlenwerte (Dashboard)
+gebaut – bei Wiederverwendung für Textinhalte immer mit echten (auch
+längeren) Werten gegenprüfen, nicht nur mit kurzen Testdaten.
+
+**Davor:** Neues, ganz links platziertes Icon in der
+Teilnehmende-Tabelle öffnet den **Teilnehmersteckbrief**
+(`teilnehmende-steckbrief`, gleiches Subpage-Muster wie Aktivitäten/
+Dateiablage/Notenverlauf) – die bislang größte Einzel-Unterseite im Projekt.
+Aufbau: Kopf mit Teilnehmerdaten + Fachbereich/Gruppe/Maßnahme/VT
+nebeneinander, Trennlinie, Sektion **Anwesenheit** (Fehltage gesamt/
+entschuldigt/unentschuldigt + zwei Fehlzeit-Prozentwerte, darunter eine
+Monats-Matrix-Tabelle mit Tag-1-bis-31-Spalten und einer Zeile pro
+Kalendermonat im Teilnahmezeitraum), Trennlinie, Sektion **Leistung**
+(Anzahl/Durchschnittsnote/Trend + dieselbe Notenverlauf-Chart-Funktion wie
+auf der Leistungskontrolle-Seite des Teilnehmenden), Trennlinie, Sektion
+**Aktivitäten** (Liste mit Button "Zur Aktivität", der über den bestehenden
+`pendingAktivitaetId`-Mechanismus direkt zum passenden Eintrag auf der
+Aktivitätenverlauf-Unterseite springt), Trennlinie, Button für einen
+PDF-Bericht.
+
+**Fehlzeiten-Logik (exakt wie vom Nutzer spezifiziert):** Anwesenheitsstatus-
+Kurzzeichen aus der DB sind `A` (Anwesend), `UA` (Fehlt unentschuldigt), `E`
+(Fehlt entschuldigt), `K` (Krank mit AU), `U` (Urlaub), `PR` (Praktikum).
+Fehltage = `UA`+`E`+`K`; davon entschuldigt = `E`+`K`; unentschuldigt = `UA`;
+`U`/`A`/`PR` zählen nicht als Fehlzeit. "Fehlzeit bisher" = Fehltage gesamt ÷
+Werktage von Teilnehmer-Startdatum bis `min(heute, Endedatum)`; "Fehlzeit auf
+Maßnahme" = Fehltage gesamt ÷ Werktage von Startdatum bis Endedatum (beide
+Male dieselbe Fehltage-Zahl im Zähler, nur der Nenner unterscheidet sich).
+Werktage = Mo–Fr ohne die gesetzlichen Feiertage des in den
+Bildungsstätte-Einstellungen hinterlegten Bundeslands.
+
+**Feiertagsberechnung (`js/main.js`, Präfix `skb`):** Eigene, gegen bekannte
+Referenzdaten verifizierte Implementierung (Gauß'sche Osterformel +
+Kalenderregeln je Bundesland, kein Vendor-Paket) – deckt alle 9 bundesweiten
+Feiertage sowie die länderspezifischen ab: Heilige Drei Könige (BW, BY,
+Sachsen-Anhalt), Frauentag (Berlin, Meck-Vorp), Fronleichnam (BW, BY, Hessen,
+NRW, Rheinland-Pfalz, Saarland), Mariä Himmelfahrt (**nur Saarland** – Bayern
+bewusst ausgenommen, da dort nur kommunal in katholisch geprägten Gemeinden,
+nicht landesweit), Weltkindertag (Thüringen), Reformationstag (9 Bundesländer),
+Allerheiligen (BW, BY, NRW, Rheinland-Pfalz, Saarland), Buß- und Bettag
+(**nur Sachsen**, Mittwoch vor dem 23. November). Osterformel gegen
+Ostersonntag 2022–2027 verifiziert, Buß-und-Bettag-Formel gegen 2022–2026 –
+Testskript lag temporär im Scratchpad, ist nicht Teil des Projekts.
+
+**Berechtigungen bewusst gelockert:** Damit *alle* Rollen (nicht nur
+Administrator) den Steckbrief inkl. PDF-Bericht nutzen können, wurde
+`requireRole("Administrator")` bei drei **GET**-Routen entfernt – bei
+`GET /api/einstellungen/bildungsstaette`, `GET /api/einstellungen/unternehmen`
+und `GET /api/einstellungen/unternehmen/logo` (alle drei werden für Anschrift/
+Firmenname/Logo im PDF-Kopf gebraucht). Die zugehörigen PUT/POST/DELETE-Routen
+zum **Ändern** dieser Einstellungen bleiben unverändert Administrator-only.
+Neuer Endpunkt `GET /api/teilnehmer/:id/anwesenheiten` (alle Anwesenheits-
+Datensätze eines Teilnehmenden über die gesamte Historie, nicht nur ein
+Monat wie beim bestehenden `/api/anwesenheiten`) ist – wie die anderen
+Teilnehmer-Unterressourcen – nach Fachbereich gescoped, keine Rollen-
+Einschränkung.
+
+**PDF-Bericht (`generateSteckbriefPdf()`):** Querformat (wie der bestehende
+Anwesenheits-PDF-Bericht), öffnet über `doc.output("bloburl")` +
+`window.open()` in einem neuen Tab (bewusst **kein** `doc.save()` – das
+würde direkt herunterladen statt anzuzeigen, wie explizit gewünscht). Kopf:
+Unternehmensname + Logo rechts (als Data-URL eingebettet, `FileReader` auf
+den Blob von `GET .../unternehmen/logo`), darunter Bildungsstätte-Name und
+Anschrift, Berichtsdatum. Monats-Matrix und Leistungskontroll-/Aktivitäten-
+Listen laufen über `doc.autoTable()` (übernimmt automatische Seitenumbrüche
+bei langer Teilnahmedauer); die Chart-Grafik wird **bewusst nicht** als Bild
+ins PDF eingebettet (kein SVG-zu-PDF-Support im vendorten jsPDF, hätte eine
+Canvas-Neuimplementierung oder ein weiteres Vendor-Paket erfordert) – die
+Notenentwicklung erscheint im PDF stattdessen als kompakte Tabelle
+(Art/Bezeichnung/Datum/Note). **Echter Bug gefunden und behoben:** Die
+Trendpfeile (↑↓→) werden von jsPDFs Standard-Helvetica **nicht** unterstützt
+(nur Latin-1/WinAnsi, keine beliebigen Unicode-Zeichen – deutsche Umlaute/ß
+funktionieren, Pfeile nicht) und erschienen im PDF als Zeichensalat; eigene
+PDF-spezifische Label-Map (`SKB_PDF_TREND_LABELS`, ohne Pfeil) behebt das.
+**Lehre für künftige PDF-Texte:** Sonderzeichen/Emoji/Pfeile vor dem Einsatz
+in `doc.text()` im tatsächlich erzeugten PDF prüfen, nicht nur die HTML-
+Darstellung – dieselbe Zeichenkette kann in der einen Umgebung passen und in
+der anderen brechen.
+
+**Refactoring:** `renderNotenverlaufChart(daten, selectedId)` (Notenverlauf-
+Seite) wurde in eine parametrisierte Kernfunktion `zeichneNotenChart(zielSvg,
+zielEmpty, daten, selectedId, onPointClick)` zerlegt; der Steckbrief ruft sie
+direkt mit `skbChart`/`skbChartEmpty` und `onPointClick = null` (kein
+Klick-Highlighting dort nötig) auf. `renderNotenverlaufChart` selbst ist nur
+noch ein dünner Wrapper – Verhalten der bestehenden Notenverlauf-Seite
+unverändert, per Playwright regressionsgetestet.
+
+Kompletter Workflow (Icon-Klick, alle vier Sektionen, Navigation zu
+Aktivität/Leistungskontrolle, PDF-Erzeugung inkl. Öffnen in neuem Tab, Prüfung
+der Fehlzeit-Prozentwerte gegen unabhängig nachgerechnete Referenzwerte für
+einen echten Teilnehmenden mit gemischten Anwesenheits-Kurzzeichen) wurde per
+Playwright getestet, das erzeugte PDF wurde tatsächlich gelesen und geprüft
+(nicht nur "wurde erzeugt"). Für den Test wurde das Bundesland in den
+Bildungsstätte-Einstellungen kurzzeitig auf "Berlin" gesetzt und danach
+wieder auf leer zurückgesetzt.
+
+**Davor:** Neuer Einstellungen-Bereich **Unternehmen**
 (zwischen Bildungsstätte und Datenbank) mit Name/Bezeichnung des Unternehmens
 (zwei einfache Textfelder, gleiches Key-Value-Muster in `einstellung` wie bei
 Bildungsstätte) sowie einem **Logo-Upload** – der erste Datei-Upload in den

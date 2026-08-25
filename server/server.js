@@ -2052,6 +2052,38 @@ app.get("/api/teilnehmer/:id/leistungskontrollen", async (req, res) => {
   }
 });
 
+app.get("/api/teilnehmer/:id/anwesenheiten", async (req, res) => {
+  const teilnehmerId = Number(req.params.id);
+  if (!Number.isInteger(teilnehmerId)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [teilnehmerRows] = await pool.query("SELECT MassnahmeID FROM teilnehmer WHERE ID = ?", [teilnehmerId]);
+    const teilnehmer = teilnehmerRows[0];
+    if (!teilnehmer) {
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(teilnehmer.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diesen Teilnehmer." });
+      }
+    }
+    const [rows] = await pool.query(
+      `SELECT a.Datum, s.Kurzzeichen
+         FROM anwesenheit a
+         JOIN anwesenheitsstatus s ON s.ID = a.StatusID
+        WHERE a.TeilnehmerID = ?
+        ORDER BY a.Datum ASC`,
+      [teilnehmerId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Anwesenheiten konnten nicht geladen werden." });
+  }
+});
+
 // --- Dokumente ---
 
 const DOKUMENT_ARTEN = [
@@ -2428,7 +2460,7 @@ app.put("/api/einstellungen/logging", requireRole("Administrator"), async (req, 
   }
 });
 
-app.get("/api/einstellungen/bildungsstaette", requireRole("Administrator"), async (req, res) => {
+app.get("/api/einstellungen/bildungsstaette", async (req, res) => {
   try {
     const werte = {};
     for (const schluessel of BILDUNGSSTAETTE_SCHLUESSEL) {
@@ -2478,7 +2510,7 @@ app.put("/api/einstellungen/bildungsstaette", requireRole("Administrator"), asyn
   }
 });
 
-app.get("/api/einstellungen/unternehmen", requireRole("Administrator"), async (req, res) => {
+app.get("/api/einstellungen/unternehmen", async (req, res) => {
   try {
     const werte = {};
     for (const schluessel of UNTERNEHMEN_TEXT_SCHLUESSEL) {
@@ -2512,7 +2544,7 @@ app.put("/api/einstellungen/unternehmen", requireRole("Administrator"), async (r
   }
 });
 
-app.get("/api/einstellungen/unternehmen/logo", requireRole("Administrator"), async (req, res) => {
+app.get("/api/einstellungen/unternehmen/logo", async (req, res) => {
   try {
     const dateiname = await getEinstellung("unternehmen_logo_dateiname", "");
     if (!dateiname) {

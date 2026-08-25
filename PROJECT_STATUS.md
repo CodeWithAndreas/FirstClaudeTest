@@ -3,7 +3,46 @@
 Stand: 2026-08-25. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Menüpunkt/Seitentitel/Breadcrumb heißen jetzt
+**Wichtig für eine neue Session:** Neuer Einstellungen-Bereich **Unternehmen**
+(zwischen Bildungsstätte und Datenbank) mit Name/Bezeichnung des Unternehmens
+(zwei einfache Textfelder, gleiches Key-Value-Muster in `einstellung` wie bei
+Bildungsstätte) sowie einem **Logo-Upload** – der erste Datei-Upload in den
+Einstellungen dieses Projekts, eigenes Muster geschaffen: Logo liegt als
+einzelne Datei in `server/logo/` (wie `server/uploads/`/`server/logs/` **nicht**
+im Git, in `.gitignore` ergänzt, **nicht** über die statische Allowlist
+erreichbar, nur über `GET /api/einstellungen/unternehmen/logo`,
+Administrator-only). Beim Hochladen wird die vorherige Logodatei automatisch
+gelöscht (`POST` mit `multer.memoryStorage()`, Dateiname immer fest `logo<ext>`
+– es existiert also **immer nur eine** Logodatei, kein Verlauf). Bewusst
+**nur Raster-Bildformate** erlaubt (PNG/JPEG/GIF/WEBP, 5 MB Limit,
+`fileFilter` in `server.js`) – **SVG explizit ausgeschlossen**, da ein Browser
+eine SVG-Datei bei direkter Navigation (nicht nur als `<img>`) Skripte darin
+ausführen kann (Stored-XSS-Risiko bei Datei-Uploads); diese Einschränkung
+nicht versehentlich aufheben, ohne das Risiko neu zu bewerten. `DELETE
+.../logo` zum Entfernen. Vorschaubild in den Einstellungen nutzt einen
+Cache-Busting-Query-Parameter (`?t=Date.now()`), da der Dateiname nach jedem
+Upload gleich bleibt und der Browser das alte Bild sonst aus dem Cache zeigen
+würde. **Wichtig:** Das Logo wird aktuell **nur** in den Einstellungen
+verwaltet – es ersetzt (noch) nicht das Standortmanager-Logo im Seitenkopf
+oder auf der Login-Seite; das war nicht Teil der Anfrage.
+
+**Davor:** Neuer, als erste Karte ganz oben platzierter
+Einstellungen-Bereich **Bildungsstätte** (Name, Straße, Hausnummer, Postleitzahl,
+Ort, Bundesland als Dropdown mit allen 16 Bundesländern, E-Mail, Telefon,
+Geschäftsbereich als Dropdown mit fest vorgegebenen Werten Zentrale/West/Ost/
+Nord/Süd/MaxQ/IFTP). Alle neun Felder sind bewusst **optional** (kein Feld ist
+`required`) und liegen als einzelne Key-Value-Paare in der `einstellung`-Tabelle
+(`bildungsstaette_name`, `bildungsstaette_strasse`, … – Konstante
+`BILDUNGSSTAETTE_SCHLUESSEL` in `server.js`), analog zum bestehenden Muster
+bei `dokumentenpfad`/`log_max_dateigroesse_mb`. Eigener Endpunkt
+`GET`/`PUT /api/einstellungen/bildungsstaette` (Administrator-only wie die
+anderen Einstellungen-Endpunkte), PUT validiert Bundesland und Geschäftsbereich
+serverseitig gegen die feste Werteliste, alle übrigen Felder werden nur
+getrimmt, ohne Formatprüfung (auch die E-Mail-Adresse – nur `type="email"` im
+Frontend als Browser-Validierung, keine serverseitige Regex, konsistent mit
+der Email-Handhabung bei Benutzerkonten).
+
+**Davor:** Menüpunkt/Seitentitel/Breadcrumb heißen jetzt
 "Leistungskontrollen" (Plural, analog zu Teilnehmende/Maßnahmen/Gruppen/
 Fachbereiche) statt "Leistungskontrolle" – bewusst **nicht** überall umbenannt:
 Texte, die sich auf **einen einzelnen** Eintrag beziehen (Button "Neue

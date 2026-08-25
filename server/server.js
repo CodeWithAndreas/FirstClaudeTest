@@ -54,6 +54,39 @@ const UNRESTRICTED_ROLLEN = ["Administrator", "Lehrgangsorganisation", "Bildungs
 const ADMIN_SEED_USERNAME = "admin";
 const ADMIN_SEED_PASSWORT = "Admin2026!";
 
+const BUNDESLAENDER = [
+  "Baden-Württemberg",
+  "Bayern",
+  "Berlin",
+  "Brandenburg",
+  "Bremen",
+  "Hamburg",
+  "Hessen",
+  "Mecklenburg-Vorpommern",
+  "Niedersachsen",
+  "Nordrhein-Westfalen",
+  "Rheinland-Pfalz",
+  "Saarland",
+  "Sachsen",
+  "Sachsen-Anhalt",
+  "Schleswig-Holstein",
+  "Thüringen",
+];
+const GESCHAEFTSBEREICHE = ["Zentrale", "West", "Ost", "Nord", "Süd", "MaxQ", "IFTP"];
+const BILDUNGSSTAETTE_SCHLUESSEL = [
+  "bildungsstaette_name",
+  "bildungsstaette_strasse",
+  "bildungsstaette_hausnummer",
+  "bildungsstaette_plz",
+  "bildungsstaette_ort",
+  "bildungsstaette_bundesland",
+  "bildungsstaette_email",
+  "bildungsstaette_telefon",
+  "bildungsstaette_geschaeftsbereich",
+];
+const UNTERNEHMEN_TEXT_SCHLUESSEL = ["unternehmen_name", "unternehmen_bezeichnung"];
+const LOGO_ERLAUBTE_MIMETYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
 async function bootstrapDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS benutzer (
@@ -162,6 +195,12 @@ async function bootstrapDatabase() {
   await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('loeschfrist_offset_jahre', '3')");
   await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('dokumentenpfad', '')");
   await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES ('log_max_dateigroesse_mb', '')");
+  for (const schluessel of BILDUNGSSTAETTE_SCHLUESSEL) {
+    await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES (?, '')", [schluessel]);
+  }
+  for (const schluessel of [...UNTERNEHMEN_TEXT_SCHLUESSEL, "unternehmen_logo_dateiname"]) {
+    await pool.query("INSERT IGNORE INTO einstellung (Schluessel, Wert) VALUES (?, '')", [schluessel]);
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS rolle (
@@ -285,6 +324,26 @@ async function resolveUploadVerzeichnis() {
   fs.mkdirSync(zielpfad, { recursive: true });
   return zielpfad;
 }
+
+// --- Unternehmen: Logo ---
+
+const LOGO_VERZEICHNIS = path.join(__dirname, "logo");
+
+function ensureLogoVerzeichnis() {
+  fs.mkdirSync(LOGO_VERZEICHNIS, { recursive: true });
+}
+
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!LOGO_ERLAUBTE_MIMETYPES.includes(file.mimetype)) {
+      cb(new Error("UNGUELTIGER_DATEITYP"));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 // --- Systemlogs: Dateioperationen ---
 
@@ -2366,6 +2425,161 @@ app.put("/api/einstellungen/logging", requireRole("Administrator"), async (req, 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Einstellung konnte nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/einstellungen/bildungsstaette", requireRole("Administrator"), async (req, res) => {
+  try {
+    const werte = {};
+    for (const schluessel of BILDUNGSSTAETTE_SCHLUESSEL) {
+      werte[schluessel] = await getEinstellung(schluessel, "");
+    }
+    res.json(werte);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellungen konnten nicht geladen werden." });
+  }
+});
+
+app.put("/api/einstellungen/bildungsstaette", requireRole("Administrator"), async (req, res) => {
+  const bundesland = (req.body.bildungsstaette_bundesland || "").trim();
+  const geschaeftsbereich = (req.body.bildungsstaette_geschaeftsbereich || "").trim();
+
+  if (bundesland && !BUNDESLAENDER.includes(bundesland)) {
+    return res.status(400).json({ error: "Ungültiges Bundesland." });
+  }
+  if (geschaeftsbereich && !GESCHAEFTSBEREICHE.includes(geschaeftsbereich)) {
+    return res.status(400).json({ error: "Ungültiger Geschäftsbereich." });
+  }
+
+  const werte = {
+    bildungsstaette_name: (req.body.bildungsstaette_name || "").trim(),
+    bildungsstaette_strasse: (req.body.bildungsstaette_strasse || "").trim(),
+    bildungsstaette_hausnummer: (req.body.bildungsstaette_hausnummer || "").trim(),
+    bildungsstaette_plz: (req.body.bildungsstaette_plz || "").trim(),
+    bildungsstaette_ort: (req.body.bildungsstaette_ort || "").trim(),
+    bildungsstaette_bundesland: bundesland,
+    bildungsstaette_email: (req.body.bildungsstaette_email || "").trim(),
+    bildungsstaette_telefon: (req.body.bildungsstaette_telefon || "").trim(),
+    bildungsstaette_geschaeftsbereich: geschaeftsbereich,
+  };
+
+  try {
+    for (const [schluessel, wert] of Object.entries(werte)) {
+      await pool.query(
+        "INSERT INTO einstellung (Schluessel, Wert) VALUES (?, ?) ON DUPLICATE KEY UPDATE Wert = VALUES(Wert)",
+        [schluessel, wert]
+      );
+    }
+    res.json(werte);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellungen konnten nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/einstellungen/unternehmen", requireRole("Administrator"), async (req, res) => {
+  try {
+    const werte = {};
+    for (const schluessel of UNTERNEHMEN_TEXT_SCHLUESSEL) {
+      werte[schluessel] = await getEinstellung(schluessel, "");
+    }
+    werte.unternehmen_logo_dateiname = await getEinstellung("unternehmen_logo_dateiname", "");
+    res.json(werte);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellungen konnten nicht geladen werden." });
+  }
+});
+
+app.put("/api/einstellungen/unternehmen", requireRole("Administrator"), async (req, res) => {
+  const werte = {
+    unternehmen_name: (req.body.unternehmen_name || "").trim(),
+    unternehmen_bezeichnung: (req.body.unternehmen_bezeichnung || "").trim(),
+  };
+
+  try {
+    for (const [schluessel, wert] of Object.entries(werte)) {
+      await pool.query(
+        "INSERT INTO einstellung (Schluessel, Wert) VALUES (?, ?) ON DUPLICATE KEY UPDATE Wert = VALUES(Wert)",
+        [schluessel, wert]
+      );
+    }
+    res.json(werte);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Einstellungen konnten nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/einstellungen/unternehmen/logo", requireRole("Administrator"), async (req, res) => {
+  try {
+    const dateiname = await getEinstellung("unternehmen_logo_dateiname", "");
+    if (!dateiname) {
+      return res.status(404).json({ error: "Kein Logo hinterlegt." });
+    }
+    res.sendFile(path.join(LOGO_VERZEICHNIS, dateiname), (err) => {
+      if (err) {
+        console.error(err);
+        if (!res.headersSent) {
+          res.status(404).json({ error: "Logo nicht gefunden." });
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Logo konnte nicht geladen werden." });
+  }
+});
+
+app.post("/api/einstellungen/unternehmen/logo", requireRole("Administrator"), (req, res) => {
+  logoUpload.single("Logo")(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      if (uploadErr instanceof multer.MulterError && uploadErr.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "Logo ist zu groß (max. 5 MB)." });
+      }
+      return res.status(400).json({ error: "Nur PNG-, JPEG-, GIF- oder WEBP-Bilder sind als Logo erlaubt." });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "Eine Bilddatei ist erforderlich." });
+    }
+    try {
+      ensureLogoVerzeichnis();
+      const bisherigerDateiname = await getEinstellung("unternehmen_logo_dateiname", "");
+      if (bisherigerDateiname) {
+        fs.unlink(path.join(LOGO_VERZEICHNIS, bisherigerDateiname), () => {});
+      }
+      const dateiname = `logo${path.extname(req.file.originalname).toLowerCase() || ".png"}`;
+      fs.writeFileSync(path.join(LOGO_VERZEICHNIS, dateiname), req.file.buffer);
+      await pool.query(
+        "INSERT INTO einstellung (Schluessel, Wert) VALUES ('unternehmen_logo_dateiname', ?) ON DUPLICATE KEY UPDATE Wert = VALUES(Wert)",
+        [dateiname]
+      );
+      res.json({ unternehmen_logo_dateiname: dateiname });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Logo konnte nicht gespeichert werden." });
+    }
+  });
+});
+
+app.delete("/api/einstellungen/unternehmen/logo", requireRole("Administrator"), async (req, res) => {
+  try {
+    const dateiname = await getEinstellung("unternehmen_logo_dateiname", "");
+    if (dateiname) {
+      fs.unlink(path.join(LOGO_VERZEICHNIS, dateiname), (err) => {
+        if (err && err.code !== "ENOENT") {
+          console.error("Logo konnte nicht gelöscht werden:", err);
+        }
+      });
+    }
+    await pool.query(
+      "INSERT INTO einstellung (Schluessel, Wert) VALUES ('unternehmen_logo_dateiname', '') ON DUPLICATE KEY UPDATE Wert = VALUES(Wert)"
+    );
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Logo konnte nicht entfernt werden." });
   }
 });
 

@@ -205,6 +205,8 @@ function showPage(pageId) {
     loadEinstellungen();
     loadDatenbankEinstellungen();
     loadLoggingEinstellungen();
+    loadBildungsstaetteEinstellungen();
+    loadUnternehmenEinstellungen();
   }
   if (targetId === "systemlogs-dateioperationen") {
     loadSystemlogsDateioperationen();
@@ -2863,6 +2865,198 @@ einstLoggingForm.addEventListener("submit", async (event) => {
   } catch (err) {
     einstLoggingFormMessage.textContent = err.message;
     einstLoggingFormMessage.className = "form-message error";
+  }
+});
+
+const einstBildungsstaetteForm = document.getElementById("einstBildungsstaetteForm");
+const einstBildungsstaetteFormMessage = document.getElementById("einstBildungsstaetteFormMessage");
+const einstBildName = document.getElementById("einstBildName");
+const einstBildStrasse = document.getElementById("einstBildStrasse");
+const einstBildHausnummer = document.getElementById("einstBildHausnummer");
+const einstBildPlz = document.getElementById("einstBildPlz");
+const einstBildOrt = document.getElementById("einstBildOrt");
+const einstBildBundesland = document.getElementById("einstBildBundesland");
+const einstBildEmail = document.getElementById("einstBildEmail");
+const einstBildTelefon = document.getElementById("einstBildTelefon");
+const einstBildGeschaeftsbereich = document.getElementById("einstBildGeschaeftsbereich");
+
+async function loadBildungsstaetteEinstellungen() {
+  try {
+    const response = await fetch("/api/einstellungen/bildungsstaette");
+    if (!response.ok) {
+      throw new Error("Einstellungen konnten nicht geladen werden.");
+    }
+    const data = await response.json();
+    einstBildName.value = data.bildungsstaette_name || "";
+    einstBildStrasse.value = data.bildungsstaette_strasse || "";
+    einstBildHausnummer.value = data.bildungsstaette_hausnummer || "";
+    einstBildPlz.value = data.bildungsstaette_plz || "";
+    einstBildOrt.value = data.bildungsstaette_ort || "";
+    einstBildBundesland.value = data.bildungsstaette_bundesland || "";
+    einstBildEmail.value = data.bildungsstaette_email || "";
+    einstBildTelefon.value = data.bildungsstaette_telefon || "";
+    einstBildGeschaeftsbereich.value = data.bildungsstaette_geschaeftsbereich || "";
+  } catch (err) {
+    console.error(err);
+    einstBildungsstaetteFormMessage.textContent = err.message;
+    einstBildungsstaetteFormMessage.className = "form-message error";
+  }
+}
+
+einstBildungsstaetteForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  einstBildungsstaetteFormMessage.textContent = "";
+  einstBildungsstaetteFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/einstellungen/bildungsstaette", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bildungsstaette_name: einstBildName.value.trim(),
+        bildungsstaette_strasse: einstBildStrasse.value.trim(),
+        bildungsstaette_hausnummer: einstBildHausnummer.value.trim(),
+        bildungsstaette_plz: einstBildPlz.value.trim(),
+        bildungsstaette_ort: einstBildOrt.value.trim(),
+        bildungsstaette_bundesland: einstBildBundesland.value,
+        bildungsstaette_email: einstBildEmail.value.trim(),
+        bildungsstaette_telefon: einstBildTelefon.value.trim(),
+        bildungsstaette_geschaeftsbereich: einstBildGeschaeftsbereich.value,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Einstellungen konnten nicht gespeichert werden.");
+    }
+    einstBildungsstaetteFormMessage.textContent = "Gespeichert.";
+    einstBildungsstaetteFormMessage.className = "form-message";
+  } catch (err) {
+    einstBildungsstaetteFormMessage.textContent = err.message;
+    einstBildungsstaetteFormMessage.className = "form-message error";
+  }
+});
+
+const einstUnternehmenForm = document.getElementById("einstUnternehmenForm");
+const einstUnternehmenFormMessage = document.getElementById("einstUnternehmenFormMessage");
+const einstUntName = document.getElementById("einstUntName");
+const einstUntBezeichnung = document.getElementById("einstUntBezeichnung");
+
+const einstUnternehmenLogoForm = document.getElementById("einstUnternehmenLogoForm");
+const einstUnternehmenLogoFormMessage = document.getElementById("einstUnternehmenLogoFormMessage");
+const einstUntLogo = document.getElementById("einstUntLogo");
+const einstUntLogoPreview = document.getElementById("einstUntLogoPreview");
+const einstUntLogoEmpty = document.getElementById("einstUntLogoEmpty");
+const einstUntLogoRemoveBtn = document.getElementById("einstUntLogoRemoveBtn");
+
+function renderUnternehmenLogo(hatLogo) {
+  if (hatLogo) {
+    einstUntLogoPreview.src = `/api/einstellungen/unternehmen/logo?t=${Date.now()}`;
+    einstUntLogoPreview.hidden = false;
+    einstUntLogoEmpty.hidden = true;
+    einstUntLogoRemoveBtn.hidden = false;
+  } else {
+    einstUntLogoPreview.hidden = true;
+    einstUntLogoPreview.removeAttribute("src");
+    einstUntLogoEmpty.hidden = false;
+    einstUntLogoRemoveBtn.hidden = true;
+  }
+}
+
+async function loadUnternehmenEinstellungen() {
+  try {
+    const response = await fetch("/api/einstellungen/unternehmen");
+    if (!response.ok) {
+      throw new Error("Einstellungen konnten nicht geladen werden.");
+    }
+    const data = await response.json();
+    einstUntName.value = data.unternehmen_name || "";
+    einstUntBezeichnung.value = data.unternehmen_bezeichnung || "";
+    renderUnternehmenLogo(Boolean(data.unternehmen_logo_dateiname));
+  } catch (err) {
+    console.error(err);
+    einstUnternehmenFormMessage.textContent = err.message;
+    einstUnternehmenFormMessage.className = "form-message error";
+  }
+}
+
+einstUnternehmenForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  einstUnternehmenFormMessage.textContent = "";
+  einstUnternehmenFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/einstellungen/unternehmen", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        unternehmen_name: einstUntName.value.trim(),
+        unternehmen_bezeichnung: einstUntBezeichnung.value.trim(),
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Einstellungen konnten nicht gespeichert werden.");
+    }
+    einstUnternehmenFormMessage.textContent = "Gespeichert.";
+    einstUnternehmenFormMessage.className = "form-message";
+  } catch (err) {
+    einstUnternehmenFormMessage.textContent = err.message;
+    einstUnternehmenFormMessage.className = "form-message error";
+  }
+});
+
+einstUnternehmenLogoForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  einstUnternehmenLogoFormMessage.textContent = "";
+  einstUnternehmenLogoFormMessage.className = "form-message";
+
+  if (!einstUntLogo.files || einstUntLogo.files.length === 0) {
+    einstUnternehmenLogoFormMessage.textContent = "Bitte eine Bilddatei auswählen.";
+    einstUnternehmenLogoFormMessage.className = "form-message error";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.set("Logo", einstUntLogo.files[0]);
+
+  try {
+    const response = await fetch("/api/einstellungen/unternehmen/logo", {
+      method: "POST",
+      body: formData,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Logo konnte nicht hochgeladen werden.");
+    }
+    einstUnternehmenLogoForm.reset();
+    renderUnternehmenLogo(true);
+    einstUnternehmenLogoFormMessage.textContent = "Logo gespeichert.";
+    einstUnternehmenLogoFormMessage.className = "form-message";
+  } catch (err) {
+    einstUnternehmenLogoFormMessage.textContent = err.message;
+    einstUnternehmenLogoFormMessage.className = "form-message error";
+  }
+});
+
+einstUntLogoRemoveBtn.addEventListener("click", async () => {
+  einstUnternehmenLogoFormMessage.textContent = "";
+  einstUnternehmenLogoFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/einstellungen/unternehmen/logo", { method: "DELETE" });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Logo konnte nicht entfernt werden.");
+    }
+    renderUnternehmenLogo(false);
+    einstUnternehmenLogoFormMessage.textContent = "Logo entfernt.";
+    einstUnternehmenLogoFormMessage.className = "form-message";
+  } catch (err) {
+    einstUnternehmenLogoFormMessage.textContent = err.message;
+    einstUnternehmenLogoFormMessage.className = "form-message error";
   }
 });
 

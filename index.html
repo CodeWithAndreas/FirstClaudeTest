@@ -1579,6 +1579,113 @@
           <h2>Einstellungen</h2>
 
           <div class="settings-section">
+            <h3>Bildungsstätte</h3>
+            <form id="einstBildungsstaetteForm" class="data-form">
+              <div class="form-row">
+                <label for="einstBildName">Name der Bildungsstätte</label>
+                <input type="text" id="einstBildName" name="bildungsstaette_name" maxlength="255">
+              </div>
+              <div class="form-row">
+                <label for="einstBildStrasse">Straße</label>
+                <input type="text" id="einstBildStrasse" name="bildungsstaette_strasse" maxlength="255">
+              </div>
+              <div class="form-row">
+                <label for="einstBildHausnummer">Hausnummer</label>
+                <input type="text" id="einstBildHausnummer" name="bildungsstaette_hausnummer" maxlength="20">
+              </div>
+              <div class="form-row">
+                <label for="einstBildPlz">Postleitzahl</label>
+                <input type="text" id="einstBildPlz" name="bildungsstaette_plz" maxlength="10" inputmode="numeric">
+              </div>
+              <div class="form-row">
+                <label for="einstBildOrt">Ort</label>
+                <input type="text" id="einstBildOrt" name="bildungsstaette_ort" maxlength="255">
+              </div>
+              <div class="form-row">
+                <label for="einstBildBundesland">Bundesland</label>
+                <select id="einstBildBundesland" name="bildungsstaette_bundesland">
+                  <option value="">– bitte wählen –</option>
+                  <option value="Baden-Württemberg">Baden-Württemberg</option>
+                  <option value="Bayern">Bayern</option>
+                  <option value="Berlin">Berlin</option>
+                  <option value="Brandenburg">Brandenburg</option>
+                  <option value="Bremen">Bremen</option>
+                  <option value="Hamburg">Hamburg</option>
+                  <option value="Hessen">Hessen</option>
+                  <option value="Mecklenburg-Vorpommern">Mecklenburg-Vorpommern</option>
+                  <option value="Niedersachsen">Niedersachsen</option>
+                  <option value="Nordrhein-Westfalen">Nordrhein-Westfalen</option>
+                  <option value="Rheinland-Pfalz">Rheinland-Pfalz</option>
+                  <option value="Saarland">Saarland</option>
+                  <option value="Sachsen">Sachsen</option>
+                  <option value="Sachsen-Anhalt">Sachsen-Anhalt</option>
+                  <option value="Schleswig-Holstein">Schleswig-Holstein</option>
+                  <option value="Thüringen">Thüringen</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="einstBildEmail">E-Mail-Adresse</label>
+                <input type="email" id="einstBildEmail" name="bildungsstaette_email" maxlength="255">
+              </div>
+              <div class="form-row">
+                <label for="einstBildTelefon">Telefonnummer</label>
+                <input type="text" id="einstBildTelefon" name="bildungsstaette_telefon" maxlength="45">
+              </div>
+              <div class="form-row">
+                <label for="einstBildGeschaeftsbereich">Geschäftsbereich</label>
+                <select id="einstBildGeschaeftsbereich" name="bildungsstaette_geschaeftsbereich">
+                  <option value="">– bitte wählen –</option>
+                  <option value="Zentrale">Zentrale</option>
+                  <option value="West">West</option>
+                  <option value="Ost">Ost</option>
+                  <option value="Nord">Nord</option>
+                  <option value="Süd">Süd</option>
+                  <option value="MaxQ">MaxQ</option>
+                  <option value="IFTP">IFTP</option>
+                </select>
+              </div>
+              <p class="form-message" id="einstBildungsstaetteFormMessage" role="status"></p>
+              <div class="dialog-actions">
+                <button type="submit" class="btn-primary">Speichern</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="settings-section">
+            <h3>Unternehmen</h3>
+            <form id="einstUnternehmenForm" class="data-form">
+              <div class="form-row">
+                <label for="einstUntName">Name des Unternehmens</label>
+                <input type="text" id="einstUntName" name="unternehmen_name" maxlength="255">
+              </div>
+              <div class="form-row">
+                <label for="einstUntBezeichnung">Bezeichnung des Unternehmens</label>
+                <input type="text" id="einstUntBezeichnung" name="unternehmen_bezeichnung" maxlength="255">
+              </div>
+              <p class="form-message" id="einstUnternehmenFormMessage" role="status"></p>
+              <div class="dialog-actions">
+                <button type="submit" class="btn-primary">Speichern</button>
+              </div>
+            </form>
+
+            <form id="einstUnternehmenLogoForm" class="data-form" enctype="multipart/form-data">
+              <div class="form-row">
+                <label for="einstUntLogo">Logo</label>
+                <input type="file" id="einstUntLogo" name="Logo" accept="image/png,image/jpeg,image/gif,image/webp">
+              </div>
+              <div class="settings-logo-preview-row">
+                <img id="einstUntLogoPreview" class="settings-logo-preview" alt="Aktuelles Logo" hidden>
+                <span id="einstUntLogoEmpty" class="detail-placeholder">Kein Logo hinterlegt.</span>
+                <button type="button" id="einstUntLogoRemoveBtn" class="btn-secondary" hidden>Logo entfernen</button>
+              </div>
+              <p class="form-message" id="einstUnternehmenLogoFormMessage" role="status"></p>
+              <div class="dialog-actions">
+                <button type="submit" class="btn-primary">Logo hochladen</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="settings-section">
             <h3>Datenbank</h3>
             <form id="einstDatenbankForm" class="data-form">
               <div class="form-row">

@@ -3,7 +3,102 @@
 Stand: 2026-08-25. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Neuer Sidebar-Punkt **Leistungskontrolle**
+**Wichtig für eine neue Session:** Menüpunkt/Seitentitel/Breadcrumb heißen jetzt
+"Leistungskontrollen" (Plural, analog zu Teilnehmende/Maßnahmen/Gruppen/
+Fachbereiche) statt "Leistungskontrolle" – bewusst **nicht** überall umbenannt:
+Texte, die sich auf **einen einzelnen** Eintrag beziehen (Button "Neue
+Leistungskontrolle", Überschrift "Leistungskontrolle Nr. X" auf der
+Detailseite, Fehlermeldungen "Leistungskontrolle konnte nicht … werden",
+aria-labels je Zeile), bleiben bewusst im Singular. Neue Leistungskontrollen
+bekommen bei der Erstellung außerdem automatisch `Gesamtpunkte = 100` als
+Standardwert (`POST /api/leistungskontrollen` in `server.js`, greift nur bei
+der Neuanlage – ein späteres bewusstes Leeren des Felds über die Detailseite
+bleibt weiterhin möglich).
+
+**Davor:** Der Menüpunkt "Leistungskontrolle" ist für
+die Rolle Lehrgangsorganisation (Kürzel "LO") ausgeblendet (`applyRolePermissions()`
+in `js/main.js`) und zusätzlich per Redirect in `showPage()` abgesichert (direkte
+Hash-Navigation `#leistungskontrollen` landet für diese Rolle auf dem Dashboard) –
+rein UI-seitig, die Backend-API wurde bewusst **nicht** eingeschränkt (Lehrgangs-
+organisation bleibt eine der drei uneingeschränkten Rollen `UNRESTRICTED_ROLLEN`
+in `server.js`, das war explizit nicht Teil der Anfrage). **Stolperfalle beim
+Einbauen entdeckt:** Der bestehende generische `operativePages`-Block am Ende von
+`applyRolePermissions()` setzt für alle nicht-Auditor-only-Nutzer `display = ""`
+auf eine feste Liste von Sidebar-Links – da "leistungskontrollen" ursprünglich
+in dieser Liste stand, überschrieb dieser Block meine vorher gesetzte
+`display: none`-Regel wieder. Fix: "leistungskontrollen" aus `operativePages`
+entfernt und stattdessen in der eigenen, weiter oben stehenden Regel sowohl
+`auditOnly` als auch die LO-Rolle geprüft. **Lehre:** Bei rollenabhängiger
+Sidebar-Sichtbarkeit immer prüfen, ob ein späterer Block in
+`applyRolePermissions()` denselben Link nochmal anfasst (Funktion ist lang und
+mehrere generische Listen/Schleifen laufen nacheinander durch) – sonst gewinnt
+stillschweigend der zuletzt ausgeführte Codeblock.
+
+**Davor:** Das Notenverlauf-Icon in der Teilnehmende-
+Tabelle hat jetzt ein Badge, exakt nach dem bestehenden Muster von
+Aktivitäten-/Dokumenten-Badge (`.aktivitaet-badge`/`.dokument-badge`/
+`.noten-badge` teilen sich dieselben CSS-Regeln): Grüner Kreis mit Anzahl,
+wird zu Blau (`--color-primary`, Klasse `badge-aktuell`), wenn mindestens eine
+zugewiesene Leistungskontrolle in den letzten 14 Tagen angelegt wurde (`lk.
+ErstelltAm >= NOW() - INTERVAL 14 DAY`) – bewusst dieselbe 14-Tage-Regel wie
+bei den anderen beiden Badges, nicht das Durchführungsdatum. Neuer Endpunkt
+`GET /api/leistungskontrollen/summary` (1:1 nach dem Vorbild von
+`/api/aktivitaeten/summary` und `/api/dokumente/summary` gebaut, inkl.
+Fachbereichs-Scoping). **Wichtig bei künftigen neuen `/api/leistungskontrollen/*`-
+Routen:** `/summary` muss in `server.js` **vor** der `GET /api/leistungskontrollen/:id`-
+Route registriert werden, sonst fängt die `:id`-Route den Request ab (Express
+matcht Routen in Registrierungsreihenfolge) – exakt das gleiche Muster wie
+bei `/api/dokumente/summary` vor `/api/dokumente/:id`.
+
+**Davor:** Neues drittes Icon (Trend-Symbol) pro Zeile
+in der Teilnehmende-Tabelle öffnet die Unterseite **Notenverlauf**
+(`teilnehmende-notenverlauf`, gleiches Subpage-Muster wie Aktivitäten/
+Dateiablage). Zeigt oben Teilnehmerdaten (Vorname, Nachname, Fachbereich,
+Gruppe, VT – kommen direkt aus dem bereits geladenen `person`-Objekt der
+Teilnehmende-Tabelle, **kein** eigener Backend-Call dafür nötig) sowie zwei
+Stat-Kacheln "Durchschnittsnote" und "Trend". Trend wird über einen simplen
+Vergleich erste vs. zweite Hälfte der chronologischen Noten berechnet
+(Schwelle 0,3 Notenpunkte; `verbessert`/`stabil`/`verschlechtert`, Farben
+Grün/Grau/Orange – bewusst dieselben Statusfarben wie die bestehenden
+`.form-message.success`/`.error`-Klassen, keine neuen Farben eingeführt).
+Darunter eine **selbstgebaute inline-SVG-Liniengrafik** (kein Chart-Vendor-Lib
+hinzugefügt, passend zur "kein Build-Tooling"-Philosophie – siehe
+`renderNotenverlaufChart()` in `js/main.js`): Y-Achse bewusst **invertiert**
+(Note 1,0 oben, 6,0 unten, da niedrigere Note = besser), X-Achse ordinal mit
+fester Punktbreite (90px) in einem horizontal scrollbaren Wrapper (analog zu
+`.table-scroll`), Klick/Tastatur-Fokus auf einen Punkt oder eine Zeile der
+Liste darunter selektiert denselben Eintrag (`selectNotenverlaufEintrag()`,
+State-getrieben, rendert Chart+Liste komplett neu – bei den überschaubaren
+Datenmengen hier unproblematisch). Darunter Liste **aller** der Maßnahme des
+Teilnehmenden zugewiesenen Leistungskontrollen (auch ohne Note, zeigt dann
+„–"), mit eigenem Bearbeiten-Icon je Zeile, das direkt zur bestehenden
+Leistungskontrolle-Detailseite navigiert (`openLeistungskontrolleDetail()`,
+wiederverwendet – kein Duplikat-Bearbeiten-UI). Bearbeitungsrecht ist
+bewusst **nicht** neu auf die Rolle Fachbereichsleiter eingeschränkt worden,
+sondern nutzt unverändert das bestehende Fachbereichs-Scoping (Ausbilder UND
+Fachbereichsleiter dürfen wie bisher Leistungskontrollen im eigenen
+Fachbereich bearbeiten) – das war eine explizite Nutzer-Entscheidung in
+dieser Session, keine Owner-Vorgabe.
+
+Backend: Note ist beim Ergebnisse-Erfassen jetzt auf die deutsche Notenskala
+1,0–6,0 validiert (`PUT /api/leistungskontrollen/:id/ergebnisse`, Zahlenfeld
+statt Freitext in der UI), die Spalte `leistungskontrolle_teilnehmer.Note`
+bleibt aber bewusst `VARCHAR(20)` (keine Migration nötig, Wert wird als
+String gespeichert). Neuer Endpunkt `GET /api/teilnehmer/:id/leistungskontrollen`
+liefert alle über die Maßnahme zugewiesenen Leistungskontrollen inkl. der
+individuellen Ergebnis-Felder (LEFT JOIN, Fachbereichs-Scoping wie bei
+`/api/aktivitaeten`).
+
+**Echter Bug beim Testen gefunden und behoben:** `Number(null)` ergibt in
+JavaScript `0`, nicht `NaN` – dadurch wurden Leistungskontrollen ganz ohne
+Note fälschlich als Note „0" in Durchschnitt, Trend und Chart-Punkten gezählt.
+Fix: neue Hilfsfunktion `parseNoteWert()`, die explizit auf
+`null`/`undefined`/`""` prüft, bevor `Number()` aufgerufen wird – **Lehre für
+künftige Auswertungen von optionalen numerischen Datenbank-Feldern:**
+`Number.isFinite(Number(x))` reicht als Nullish-Check NICHT aus, `Number(null)`
+und `Number("")` sind beide finite Zahlen (0).
+
+**Davor:** Neuer Sidebar-Punkt **Leistungskontrolle**
 (eigenständiger, flacher Menüpunkt direkt unterhalb von "Teilnehmende", **nicht**
 verschachtelt – bewusste Entscheidung, da eine Verschachtelung von "Teilnehmende"
 selbst das bestehende Nutzerverhalten verändert hätte). Verwaltet Klausuren/Tests/

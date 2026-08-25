@@ -115,7 +115,7 @@
                   <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
                 </svg>
               </span>
-              <span class="label">Leistungskontrolle</span>
+              <span class="label">Leistungskontrollen</span>
             </a>
           </li>
           <li>
@@ -550,6 +550,63 @@
           </div>
         </section>
 
+        <section id="page-teilnehmende-notenverlauf" class="page">
+          <div class="subpage-header">
+            <button type="button" id="nvZurueckBtn" class="btn-secondary">← Zurück zu Teilnehmende</button>
+          </div>
+
+          <h2>Notenverlauf</h2>
+
+          <div class="notenverlauf-header">
+            <div class="notenverlauf-teilnehmer-info">
+              <p class="notenverlauf-name" id="nvName"></p>
+              <dl class="aktivitaet-detail-fields">
+                <dt>Fachbereich</dt>
+                <dd id="nvFachbereich"></dd>
+                <dt>Gruppe</dt>
+                <dd id="nvGruppe"></dd>
+                <dt>VT</dt>
+                <dd id="nvVt"></dd>
+              </dl>
+            </div>
+
+            <div class="stat-grid notenverlauf-stats">
+              <div class="stat-card">
+                <span class="stat-value" id="nvDurchschnittsnote">–</span>
+                <span class="stat-label">Durchschnittsnote</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-value" id="nvTrend">–</span>
+                <span class="stat-label">Trend</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="notenverlauf-chart-scroll">
+            <svg id="nvChart" class="notenverlauf-chart" preserveAspectRatio="xMinYMid meet"></svg>
+          </div>
+          <p class="detail-placeholder" id="nvChartEmpty" hidden>Noch keine Noten vorhanden.</p>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Art</th>
+                  <th>Bezeichnung</th>
+                  <th>Durchführungsdatum</th>
+                  <th>Note</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="nvTableBody">
+                <tr>
+                  <td colspan="5">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <dialog id="dokUploadDialog" class="confirm-dialog edit-dialog">
           <form id="dokUploadForm" enctype="multipart/form-data">
             <h3>Datei hochladen</h3>
@@ -684,7 +741,7 @@
         </dialog>
 
         <section id="page-leistungskontrollen" class="page">
-          <h2>Leistungskontrolle</h2>
+          <h2>Leistungskontrollen</h2>
 
           <div class="filter-bar">
             <div class="form-row">
@@ -788,7 +845,7 @@
 
         <section id="page-leistungskontrollen-detail" class="page">
           <div class="subpage-header">
-            <button type="button" id="lkZurueckBtn" class="btn-secondary">← Zurück zu Leistungskontrolle</button>
+            <button type="button" id="lkZurueckBtn" class="btn-secondary">← Zurück zu Leistungskontrollen</button>
           </div>
 
           <h2>Leistungskontrolle Nr. <span id="lkDetailNummer"></span></h2>

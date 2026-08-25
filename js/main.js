@@ -41,8 +41,9 @@ const auditPages = [
 const pageLabels = {
   dashboard: "Dashboard",
   teilnehmende: "Teilnehmende",
-  leistungskontrollen: "Leistungskontrolle",
-  "leistungskontrollen-detail": "Leistungskontrolle / Detail",
+  "teilnehmende-notenverlauf": "Teilnehmende / Notenverlauf",
+  leistungskontrollen: "Leistungskontrollen",
+  "leistungskontrollen-detail": "Leistungskontrollen / Detail",
   anwesenheiten: "Anwesenheiten",
   stammdaten: "Stammdaten",
   massnahmen: "Stammdaten / Maßnahmen",
@@ -134,6 +135,18 @@ function showPage(pageId) {
     targetId = "leistungskontrollen";
   }
 
+  if (
+    (targetId === "leistungskontrollen" || targetId === "leistungskontrollen-detail") &&
+    currentUser &&
+    currentUser.roles.includes("Lehrgangsorganisation")
+  ) {
+    targetId = defaultPage;
+  }
+
+  if (targetId === "teilnehmende-notenverlauf" && !currentNotenverlaufTeilnehmerId) {
+    targetId = "teilnehmende";
+  }
+
   document.querySelectorAll(".sidebar-group").forEach((group) => {
     const pagesInGroup = [...group.querySelectorAll("[data-page]")].map((el) => el.dataset.page);
     if (pagesInGroup.includes(targetId)) {
@@ -146,7 +159,9 @@ function showPage(pageId) {
   });
 
   const activeNavPage =
-    targetId === "teilnehmende-aktivitaeten" || targetId === "teilnehmende-dateien"
+    targetId === "teilnehmende-aktivitaeten" ||
+    targetId === "teilnehmende-dateien" ||
+    targetId === "teilnehmende-notenverlauf"
       ? "teilnehmende"
       : targetId === "leistungskontrollen-detail"
       ? "leistungskontrollen"
@@ -175,12 +190,16 @@ function showPage(pageId) {
   if (targetId === "teilnehmende" && tnRowEntries.length > 0) {
     refreshTnAktivitaetBadges();
     refreshTnDokumentBadges();
+    refreshTnNotenBadges();
   }
   if (targetId === "teilnehmende-aktivitaeten") {
     loadTeilnehmerAktivitaetenPage(currentAktivitaetTeilnehmerId);
   }
   if (targetId === "teilnehmende-dateien") {
     loadTeilnehmerDateienPage(currentDokumentTeilnehmerId);
+  }
+  if (targetId === "teilnehmende-notenverlauf") {
+    loadTeilnehmerNotenverlaufPage(currentNotenverlaufTeilnehmerId);
   }
   if (targetId === "einstellungen") {
     loadEinstellungen();
@@ -1420,6 +1439,43 @@ async function refreshTnDokumentBadges() {
   });
 }
 
+let tnNotenSummary = new Map();
+
+async function loadTnNotenSummary() {
+  try {
+    const response = await fetch("/api/leistungskontrollen/summary");
+    if (!response.ok) {
+      throw new Error("Leistungskontrollen-Übersicht konnte nicht geladen werden.");
+    }
+    const rows = await response.json();
+    tnNotenSummary = new Map(rows.map((row) => [row.TeilnehmerID, row]));
+  } catch (err) {
+    console.error(err);
+    tnNotenSummary = new Map();
+  }
+}
+
+function updateNotenBadge(badgeEl, teilnehmerId) {
+  const summary = tnNotenSummary.get(teilnehmerId);
+  if (!summary || !summary.Anzahl) {
+    badgeEl.hidden = true;
+    return;
+  }
+  badgeEl.hidden = false;
+  badgeEl.textContent = summary.Anzahl;
+  badgeEl.classList.toggle("badge-aktuell", Boolean(summary.HatAktuelle));
+}
+
+async function refreshTnNotenBadges() {
+  await loadTnNotenSummary();
+  tnRowEntries.forEach(({ person, row }) => {
+    const badge = row.querySelector(".noten-badge");
+    if (badge) {
+      updateNotenBadge(badge, person.ID);
+    }
+  });
+}
+
 async function loadTeilnehmer() {
   teilnehmerTableBody.innerHTML = "";
   const loadingRow = document.createElement("tr");
@@ -1434,6 +1490,7 @@ async function loadTeilnehmer() {
       fetch("/api/teilnehmer"),
       loadTnAktivitaetSummary(),
       loadTnDokumentSummary(),
+      loadTnNotenSummary(),
     ]);
     if (!response.ok) {
       throw new Error("Teilnehmende konnten nicht geladen werden.");
@@ -1536,6 +1593,28 @@ async function loadTeilnehmer() {
 
       filesBtnWrap.append(filesBtn, dokumentBadge);
 
+      const notenBtnWrap = document.createElement("span");
+      notenBtnWrap.className = "history-btn-wrap";
+
+      const notenBtn = document.createElement("button");
+      notenBtn.type = "button";
+      notenBtn.className = "row-noten-btn";
+      notenBtn.setAttribute("aria-label", `Notenverlauf von ${fullName} anzeigen`);
+      notenBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+          <polyline points="17 6 23 6 23 12"></polyline>
+        </svg>
+      `;
+      notenBtn.addEventListener("click", () => openTeilnehmerNotenverlauf(person));
+
+      const notenBadge = document.createElement("span");
+      notenBadge.className = "noten-badge";
+      notenBadge.hidden = true;
+      updateNotenBadge(notenBadge, person.ID);
+
+      notenBtnWrap.append(notenBtn, notenBadge);
+
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "row-edit-btn";
@@ -1569,7 +1648,7 @@ async function loadTeilnehmer() {
         })
       );
 
-      actionsWrap.append(historyBtnWrap, filesBtnWrap, editBtn);
+      actionsWrap.append(historyBtnWrap, filesBtnWrap, notenBtnWrap, editBtn);
       if (canDeleteMassnahmenOderTeilnehmer()) {
         actionsWrap.append(deleteBtn);
       }
@@ -2259,6 +2338,331 @@ dokEditForm.addEventListener("submit", async (event) => {
     dokEditFormMessage.classList.add("error");
   }
 });
+
+// Notenverlauf (Unterseite von Teilnehmende)
+
+const nvZurueckBtn = document.getElementById("nvZurueckBtn");
+const nvName = document.getElementById("nvName");
+const nvFachbereich = document.getElementById("nvFachbereich");
+const nvGruppe = document.getElementById("nvGruppe");
+const nvVt = document.getElementById("nvVt");
+const nvDurchschnittsnote = document.getElementById("nvDurchschnittsnote");
+const nvTrend = document.getElementById("nvTrend");
+const nvChart = document.getElementById("nvChart");
+const nvChartEmpty = document.getElementById("nvChartEmpty");
+const nvTableBody = document.getElementById("nvTableBody");
+
+let currentNotenverlaufTeilnehmerId = null;
+let currentNotenverlaufTeilnehmer = null;
+let currentNvDaten = [];
+let currentNvSelectedId = null;
+
+const NV_CHART_HEIGHT = 280;
+const NV_MARGIN = { top: 20, right: 30, bottom: 40, left: 44 };
+const NV_POINT_SPACING = 90;
+const NV_MIN_WIDTH = 400;
+
+function openTeilnehmerNotenverlauf(person) {
+  currentNotenverlaufTeilnehmerId = person.ID;
+  currentNotenverlaufTeilnehmer = person;
+  if (window.location.hash === "#teilnehmende-notenverlauf") {
+    showPage("teilnehmende-notenverlauf");
+  } else {
+    window.location.hash = "teilnehmende-notenverlauf";
+  }
+}
+
+nvZurueckBtn.addEventListener("click", () => {
+  window.location.hash = "teilnehmende";
+});
+
+function formatNoteDE(note) {
+  return String(note).replace(".", ",");
+}
+
+function parseNoteWert(note) {
+  if (note === null || note === undefined || note === "") {
+    return null;
+  }
+  const zahl = Number(note);
+  return Number.isFinite(zahl) ? zahl : null;
+}
+
+function berechneNotenverlaufKennzahlen(daten) {
+  const numerisch = daten.map((e) => parseNoteWert(e.Note)).filter((n) => n !== null);
+
+  if (numerisch.length === 0) {
+    return { durchschnitt: null, trend: null };
+  }
+
+  const avg = (arr) => arr.reduce((summe, n) => summe + n, 0) / arr.length;
+  const durchschnitt = avg(numerisch);
+
+  let trend = null;
+  if (numerisch.length >= 2) {
+    const mitte = Math.floor(numerisch.length / 2);
+    const diff = avg(numerisch.slice(mitte)) - avg(numerisch.slice(0, mitte));
+    const SCHWELLE = 0.3;
+    trend = diff <= -SCHWELLE ? "verbessert" : diff >= SCHWELLE ? "verschlechtert" : "stabil";
+  }
+
+  return { durchschnitt, trend };
+}
+
+function svgEl(tag, attrs = {}) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+  return el;
+}
+
+function notenverlaufGradeToY(note) {
+  const plotHeight = NV_CHART_HEIGHT - NV_MARGIN.top - NV_MARGIN.bottom;
+  const clamped = Math.min(6, Math.max(1, note));
+  return NV_MARGIN.top + ((clamped - 1) / 5) * plotHeight;
+}
+
+function renderNotenverlaufChart(daten, selectedId) {
+  nvChart.innerHTML = "";
+
+  const punkte = daten
+    .map((eintrag, index) => ({ ...eintrag, index, noteWert: parseNoteWert(eintrag.Note) }))
+    .filter((eintrag) => eintrag.noteWert !== null);
+
+  if (punkte.length === 0) {
+    nvChart.setAttribute("width", "0");
+    nvChart.setAttribute("height", String(NV_CHART_HEIGHT));
+    nvChartEmpty.hidden = false;
+    return;
+  }
+  nvChartEmpty.hidden = true;
+
+  const plotWidth = Math.max(
+    NV_MIN_WIDTH,
+    NV_MARGIN.left + NV_MARGIN.right + (punkte.length - 1) * NV_POINT_SPACING + 40
+  );
+  nvChart.setAttribute("width", String(plotWidth));
+  nvChart.setAttribute("height", String(NV_CHART_HEIGHT));
+  nvChart.setAttribute("viewBox", `0 0 ${plotWidth} ${NV_CHART_HEIGHT}`);
+
+  const xFor = (index) => NV_MARGIN.left + index * NV_POINT_SPACING;
+
+  for (let note = 1; note <= 6; note++) {
+    const y = notenverlaufGradeToY(note);
+    nvChart.appendChild(
+      svgEl("line", {
+        x1: NV_MARGIN.left,
+        x2: plotWidth - NV_MARGIN.right,
+        y1: y,
+        y2: y,
+        stroke: "#eeeff1",
+        "stroke-width": 1,
+      })
+    );
+    const label = svgEl("text", {
+      x: NV_MARGIN.left - 10,
+      y: y + 4,
+      "text-anchor": "end",
+      class: "notenverlauf-axis-label",
+    });
+    label.textContent = formatNoteDE(note.toFixed(1));
+    nvChart.appendChild(label);
+  }
+
+  const pfad = punkte
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(p.index)} ${notenverlaufGradeToY(p.noteWert)}`)
+    .join(" ");
+  nvChart.appendChild(
+    svgEl("path", {
+      d: pfad,
+      fill: "none",
+      stroke: "#00adee",
+      "stroke-width": 2,
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+    })
+  );
+
+  punkte.forEach((p) => {
+    const x = xFor(p.index);
+    const y = notenverlaufGradeToY(p.noteWert);
+    const istSelektiert = p.ID === selectedId;
+    const radius = istSelektiert ? 7 : 5;
+
+    const punktKreis = svgEl("circle", {
+      cx: x,
+      cy: y,
+      r: radius,
+      fill: istSelektiert ? "#003a4d" : "#00adee",
+      stroke: "#ffffff",
+      "stroke-width": 2,
+      class: "notenverlauf-point",
+    });
+
+    const hit = svgEl("circle", {
+      cx: x,
+      cy: y,
+      r: 14,
+      class: "notenverlauf-point-hit",
+      tabindex: "0",
+      role: "button",
+      "aria-label": `${formatDateDE(p.Durchfuehrungsdatum)}, ${p.Bezeichnung}: Note ${formatNoteDE(p.noteWert)}`,
+    });
+    const titel = svgEl("title", {});
+    titel.textContent = `${formatDateDE(p.Durchfuehrungsdatum)} – ${p.Bezeichnung}: Note ${formatNoteDE(p.noteWert)}`;
+    hit.appendChild(titel);
+    hit.addEventListener("click", () => selectNotenverlaufEintrag(p.ID));
+    hit.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectNotenverlaufEintrag(p.ID);
+      }
+    });
+    hit.addEventListener("mouseenter", () => punktKreis.setAttribute("r", String(radius + 1)));
+    hit.addEventListener("mouseleave", () => punktKreis.setAttribute("r", String(radius)));
+
+    nvChart.appendChild(punktKreis);
+    nvChart.appendChild(hit);
+
+    if (istSelektiert) {
+      const wertLabel = svgEl("text", {
+        x,
+        y: y - 14,
+        "text-anchor": "middle",
+        class: "notenverlauf-point-label",
+      });
+      wertLabel.textContent = formatNoteDE(p.noteWert);
+      nvChart.appendChild(wertLabel);
+    }
+
+    const datumLabel = svgEl("text", {
+      x,
+      y: NV_CHART_HEIGHT - NV_MARGIN.bottom + 20,
+      "text-anchor": "middle",
+      class: "notenverlauf-axis-label",
+    });
+    const [jahr, monat, tag] = p.Durchfuehrungsdatum.split("-");
+    datumLabel.textContent = `${tag}.${monat}.`;
+    nvChart.appendChild(datumLabel);
+  });
+}
+
+function renderNotenverlaufListe(daten, selectedId) {
+  nvTableBody.innerHTML = "";
+
+  if (daten.length === 0) {
+    const emptyRow = document.createElement("tr");
+    const emptyCell = document.createElement("td");
+    emptyCell.colSpan = 5;
+    emptyCell.textContent = "Keine Leistungskontrollen für diese Maßnahme vorhanden.";
+    emptyRow.appendChild(emptyCell);
+    nvTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  daten.forEach((eintrag) => {
+    const row = document.createElement("tr");
+    row.className = "notenverlauf-row";
+    if (eintrag.ID === selectedId) {
+      row.classList.add("selected");
+    }
+
+    const artCell = document.createElement("td");
+    artCell.textContent = eintrag.Art;
+
+    const bezeichnungCell = document.createElement("td");
+    bezeichnungCell.textContent = eintrag.Bezeichnung;
+
+    const datumCell = document.createElement("td");
+    datumCell.textContent = formatDateDE(eintrag.Durchfuehrungsdatum);
+
+    const noteCell = document.createElement("td");
+    const noteWert = parseNoteWert(eintrag.Note);
+    noteCell.textContent = noteWert === null ? "–" : formatNoteDE(noteWert);
+
+    const actionsCell = document.createElement("td");
+    const actionsWrap = document.createElement("div");
+    actionsWrap.className = "row-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "row-edit-btn";
+    editBtn.setAttribute("aria-label", `Leistungskontrolle ${eintrag.ID} bearbeiten`);
+    editBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+      </svg>
+    `;
+    editBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openLeistungskontrolleDetail(eintrag);
+    });
+
+    actionsWrap.append(editBtn);
+    actionsCell.appendChild(actionsWrap);
+
+    row.append(artCell, bezeichnungCell, datumCell, noteCell, actionsCell);
+    row.addEventListener("click", () => selectNotenverlaufEintrag(eintrag.ID));
+    nvTableBody.appendChild(row);
+  });
+}
+
+function selectNotenverlaufEintrag(lkId) {
+  currentNvSelectedId = currentNvSelectedId === lkId ? null : lkId;
+  renderNotenverlaufChart(currentNvDaten, currentNvSelectedId);
+  renderNotenverlaufListe(currentNvDaten, currentNvSelectedId);
+}
+
+const NV_TREND_LABELS = {
+  verbessert: "Verbessert ↑",
+  verschlechtert: "Verschlechtert ↓",
+  stabil: "Stabil →",
+};
+
+async function loadTeilnehmerNotenverlaufPage(teilnehmerId) {
+  const person = currentNotenverlaufTeilnehmer;
+  nvName.textContent = person ? `${person.Vorname} ${person.Nachname}` : "";
+  nvFachbereich.textContent = (person && person.FachbereichBezeichnung) || "";
+  nvGruppe.textContent = (person && person.GruppeBezeichnung) || "";
+  nvVt.textContent = (person && person.VT) || "";
+  nvDurchschnittsnote.textContent = "–";
+  nvTrend.textContent = "–";
+  nvTrend.className = "stat-value";
+
+  nvTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 5;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  nvTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch(`/api/teilnehmer/${teilnehmerId}/leistungskontrollen`);
+    if (!response.ok) {
+      throw new Error("Notenverlauf konnte nicht geladen werden.");
+    }
+    currentNvDaten = await response.json();
+    currentNvSelectedId = null;
+
+    const { durchschnitt, trend } = berechneNotenverlaufKennzahlen(currentNvDaten);
+    nvDurchschnittsnote.textContent = durchschnitt === null ? "–" : formatNoteDE(durchschnitt.toFixed(1));
+    nvTrend.textContent = trend ? NV_TREND_LABELS[trend] : "–";
+    nvTrend.className = trend ? `stat-value trend-${trend}` : "stat-value";
+
+    renderNotenverlaufChart(currentNvDaten, currentNvSelectedId);
+    renderNotenverlaufListe(currentNvDaten, currentNvSelectedId);
+  } catch (err) {
+    console.error(err);
+    nvTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 5;
+    errorCell.textContent = err.message;
+    errorRow.appendChild(errorCell);
+    nvTableBody.appendChild(errorRow);
+  }
+}
 
 // Einstellungen
 
@@ -3137,10 +3541,12 @@ lkDetailErgebnisseBtn.addEventListener("click", async () => {
 
       const noteCell = document.createElement("td");
       const noteInput = document.createElement("input");
-      noteInput.type = "text";
-      noteInput.maxLength = 20;
+      noteInput.type = "number";
+      noteInput.min = "1";
+      noteInput.max = "6";
+      noteInput.step = "0.1";
       noteInput.name = "Note";
-      noteInput.value = teilnehmer.Note || "";
+      noteInput.value = teilnehmer.Note === null || teilnehmer.Note === undefined ? "" : teilnehmer.Note;
       noteCell.appendChild(noteInput);
 
       const korrekturCell = document.createElement("td");
@@ -4525,6 +4931,12 @@ function canDeleteDokument() {
 function applyRolePermissions(user) {
   const isAdmin = (user.roles || []).includes("Administrator");
   const auditOnly = isAuditorOnly(user);
+  const isLehrgangsorganisation = (user.roles || []).includes("Lehrgangsorganisation");
+
+  const leistungskontrolleLink = document.querySelector('.sidebar-link[data-page="leistungskontrollen"]');
+  if (leistungskontrolleLink) {
+    leistungskontrolleLink.closest("li").style.display = isLehrgangsorganisation || auditOnly ? "none" : "";
+  }
 
   const fachbereicheLink = document.querySelector('.sidebar-link[data-page="fachbereiche"]');
   if (fachbereicheLink) {
@@ -4561,7 +4973,7 @@ function applyRolePermissions(user) {
     stammdatenGroup.closest("li").style.display = auditOnly ? "none" : "";
   }
 
-  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende", "leistungskontrollen"];
+  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende"];
   operativePages.forEach((page) => {
     const link = document.querySelector(`.sidebar-link[data-page="${page}"]`);
     if (link) {

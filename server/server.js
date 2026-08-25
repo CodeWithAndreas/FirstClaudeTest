@@ -1646,6 +1646,36 @@ app.get("/api/leistungskontrollen", async (req, res) => {
   }
 });
 
+app.get("/api/leistungskontrollen/summary", async (req, res) => {
+  try {
+    let query = `SELECT t.ID AS TeilnehmerID, COUNT(DISTINCT lk.ID) AS Anzahl,
+        MAX(CASE WHEN lk.ErstelltAm >= (NOW() - INTERVAL 14 DAY) THEN 1 ELSE 0 END) AS HatAktuelle
+       FROM teilnehmer t
+       JOIN leistungskontrolle_massnahme lm ON lm.MassnahmeID = t.MassnahmeID
+       JOIN leistungskontrolle lk ON lk.ID = lm.LeistungskontrolleID`;
+    const params = [];
+
+    if (isRestrictedUser(req)) {
+      const ids = req.session.fachbereichIds || [];
+      if (ids.length === 0) {
+        return res.json([]);
+      }
+      query += ` JOIN massnahme m ON m.ID = t.MassnahmeID
+         JOIN gruppe g ON g.ID = m.GruppeID
+         WHERE g.FachbereichID IN (?)`;
+      params.push(ids);
+    }
+
+    query += " GROUP BY t.ID";
+
+    const [rows] = await pool.query(query, params);
+    res.json(rows.map((row) => ({ TeilnehmerID: row.TeilnehmerID, Anzahl: row.Anzahl, HatAktuelle: Boolean(row.HatAktuelle) })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Leistungskontrollen-Übersicht konnte nicht geladen werden." });
+  }
+});
+
 app.get("/api/leistungskontrollen/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
@@ -1675,6 +1705,9 @@ app.post("/api/leistungskontrollen", async (req, res) => {
   const { error, values } = readLeistungskontrolleBody(req.body);
   if (error) {
     return res.status(400).json({ error });
+  }
+  if (values.Gesamtpunkte === null) {
+    values.Gesamtpunkte = 100;
   }
 
   try {
@@ -1901,7 +1934,12 @@ app.put("/api/leistungskontrollen/:id/ergebnisse", async (req, res) => {
         eintrag.Ergebnispunkte === "" || eintrag.Ergebnispunkte === null || eintrag.Ergebnispunkte === undefined
           ? null
           : Number(eintrag.Ergebnispunkte);
-      const note = (eintrag.Note || "").toString().trim() || null;
+      const noteWert =
+        eintrag.Note === "" || eintrag.Note === null || eintrag.Note === undefined ? null : Number(eintrag.Note);
+      if (noteWert !== null && (!Number.isFinite(noteWert) || noteWert < 1 || noteWert > 6)) {
+        return res.status(400).json({ error: "Note muss zwischen 1,0 und 6,0 liegen." });
+      }
+      const note = noteWert === null ? null : String(noteWert);
       const korrekturdatum = eintrag.Korrekturdatum || null;
       const besprochenAmDatum = eintrag.BesprochenAmDatum || null;
 
@@ -1918,6 +1956,40 @@ app.put("/api/leistungskontrollen/:id/ergebnisse", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Ergebnisse konnten nicht gespeichert werden." });
+  }
+});
+
+app.get("/api/teilnehmer/:id/leistungskontrollen", async (req, res) => {
+  const teilnehmerId = Number(req.params.id);
+  if (!Number.isInteger(teilnehmerId)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [teilnehmerRows] = await pool.query("SELECT MassnahmeID FROM teilnehmer WHERE ID = ?", [teilnehmerId]);
+    const teilnehmer = teilnehmerRows[0];
+    if (!teilnehmer) {
+      return res.status(404).json({ error: "Teilnehmer wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const fachbereichId = await resolveFachbereichForMassnahme(teilnehmer.MassnahmeID);
+      if (!fachbereichInScope(req, fachbereichId)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diesen Teilnehmer." });
+      }
+    }
+    const [rows] = await pool.query(
+      `SELECT lk.ID, lk.Art, lk.Bezeichnung, lk.Durchfuehrungsdatum, lk.Gesamtpunkte,
+              lt.Ergebnispunkte, lt.Note, lt.Korrekturdatum, lt.BesprochenAmDatum
+         FROM leistungskontrolle_massnahme lm
+         JOIN leistungskontrolle lk ON lk.ID = lm.LeistungskontrolleID
+         LEFT JOIN leistungskontrolle_teilnehmer lt ON lt.LeistungskontrolleID = lk.ID AND lt.TeilnehmerID = ?
+        WHERE lm.MassnahmeID = ?
+        ORDER BY lk.Durchfuehrungsdatum ASC, lk.ID ASC`,
+      [teilnehmerId, teilnehmer.MassnahmeID]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Notenverlauf konnte nicht geladen werden." });
   }
 });
 

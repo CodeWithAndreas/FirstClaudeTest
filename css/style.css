@@ -505,7 +505,8 @@ body.logged-out .app-layout {
 .row-toggle-aktiv-btn,
 .row-erledigt-btn,
 .row-termin-btn,
-.row-files-btn {
+.row-files-btn,
+.row-noten-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -528,7 +529,8 @@ body.logged-out .app-layout {
 .row-toggle-aktiv-btn:hover,
 .row-erledigt-btn:hover,
 .row-termin-btn:hover,
-.row-files-btn:hover {
+.row-files-btn:hover,
+.row-noten-btn:hover {
   background: var(--color-bg-light);
   color: var(--color-primary);
 }
@@ -540,7 +542,8 @@ body.logged-out .app-layout {
 .row-toggle-aktiv-btn svg,
 .row-erledigt-btn svg,
 .row-termin-btn svg,
-.row-files-btn svg {
+.row-files-btn svg,
+.row-noten-btn svg {
   width: 18px;
   height: 18px;
 }
@@ -556,7 +559,8 @@ body.logged-out .app-layout {
 }
 
 .aktivitaet-badge,
-.dokument-badge {
+.dokument-badge,
+.noten-badge {
   position: absolute;
   top: -2px;
   right: -2px;
@@ -574,7 +578,8 @@ body.logged-out .app-layout {
 }
 
 .aktivitaet-badge.badge-aktuell,
-.dokument-badge.badge-aktuell {
+.dokument-badge.badge-aktuell,
+.noten-badge.badge-aktuell {
   background: var(--color-primary);
 }
 
@@ -1273,4 +1278,85 @@ a.btn-primary {
 .anwesenheiten-table .day-select:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+
+/* Notenverlauf */
+
+.notenverlauf-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.notenverlauf-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin-bottom: 0.5rem;
+}
+
+.notenverlauf-stats {
+  margin-top: 0;
+  flex: 0 1 auto;
+}
+
+.notenverlauf-stats .stat-card {
+  min-width: 160px;
+}
+
+.trend-verbessert {
+  color: #256927;
+}
+
+.trend-verschlechtert {
+  color: var(--color-accent);
+}
+
+.trend-stabil {
+  color: var(--color-text-muted);
+}
+
+.notenverlauf-chart-scroll {
+  overflow-x: auto;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.notenverlauf-chart {
+  display: block;
+  height: 280px;
+}
+
+.notenverlauf-axis-label {
+  font-size: 11px;
+  fill: var(--color-text-muted);
+}
+
+.notenverlauf-point-label {
+  font-size: 12px;
+  font-weight: 700;
+  fill: var(--color-primary-dark);
+}
+
+.notenverlauf-point-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.notenverlauf-point-hit:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.notenverlauf-row {
+  cursor: pointer;
+}
+
+.notenverlauf-row.selected {
+  background: var(--color-bg-light);
 }

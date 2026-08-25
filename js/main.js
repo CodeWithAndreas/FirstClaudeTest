@@ -41,6 +41,8 @@ const auditPages = [
 const pageLabels = {
   dashboard: "Dashboard",
   teilnehmende: "Teilnehmende",
+  leistungskontrollen: "Leistungskontrolle",
+  "leistungskontrollen-detail": "Leistungskontrolle / Detail",
   anwesenheiten: "Anwesenheiten",
   stammdaten: "Stammdaten",
   massnahmen: "Stammdaten / Maßnahmen",
@@ -128,6 +130,10 @@ function showPage(pageId) {
     targetId = "teilnehmende";
   }
 
+  if (targetId === "leistungskontrollen-detail" && !currentLkId) {
+    targetId = "leistungskontrollen";
+  }
+
   document.querySelectorAll(".sidebar-group").forEach((group) => {
     const pagesInGroup = [...group.querySelectorAll("[data-page]")].map((el) => el.dataset.page);
     if (pagesInGroup.includes(targetId)) {
@@ -140,7 +146,11 @@ function showPage(pageId) {
   });
 
   const activeNavPage =
-    targetId === "teilnehmende-aktivitaeten" || targetId === "teilnehmende-dateien" ? "teilnehmende" : targetId;
+    targetId === "teilnehmende-aktivitaeten" || targetId === "teilnehmende-dateien"
+      ? "teilnehmende"
+      : targetId === "leistungskontrollen-detail"
+      ? "leistungskontrollen"
+      : targetId;
   navLinks.forEach((link) => {
     link.classList.toggle("active", link.dataset.page === activeNavPage);
   });
@@ -179,6 +189,12 @@ function showPage(pageId) {
   }
   if (targetId === "systemlogs-dateioperationen") {
     loadSystemlogsDateioperationen();
+  }
+  if (targetId === "leistungskontrollen") {
+    ensureLkInitialized();
+  }
+  if (targetId === "leistungskontrollen-detail") {
+    loadLeistungskontrolleDetailPage(currentLkId);
   }
 }
 
@@ -2565,6 +2581,634 @@ sysLogResetFilterBtn.addEventListener("click", () => {
   renderSystemlogsTabelle();
 });
 
+// Leistungskontrolle
+
+const lkFachbereichFilter = document.getElementById("lkFachbereichFilter");
+const lkGruppeFilter = document.getElementById("lkGruppeFilter");
+const lkMassnahmeFilter = document.getElementById("lkMassnahmeFilter");
+const lkVtFilter = document.getElementById("lkVtFilter");
+const lkResetFilterBtn = document.getElementById("lkResetFilterBtn");
+const lkForm = document.getElementById("lkForm");
+const lkFormMessage = document.getElementById("lkFormMessage");
+const lkMassnahmenCheckboxes = document.getElementById("lkMassnahmenCheckboxes");
+const leistungskontrolleTableBody = document.getElementById("leistungskontrolleTableBody");
+
+const lkZurueckBtn = document.getElementById("lkZurueckBtn");
+const lkDetailNummer = document.getElementById("lkDetailNummer");
+const lkDetailForm = document.getElementById("lkDetailForm");
+const lkDetailFormMessage = document.getElementById("lkDetailFormMessage");
+const lkDetailMassnahmenCheckboxes = document.getElementById("lkDetailMassnahmenCheckboxes");
+const lkDetailDeleteBtn = document.getElementById("lkDetailDeleteBtn");
+const lkDetailErgebnisseBtn = document.getElementById("lkDetailErgebnisseBtn");
+
+const lkErgebnisseDialog = document.getElementById("lkErgebnisseDialog");
+const lkErgebnisseForm = document.getElementById("lkErgebnisseForm");
+const lkErgebnisseBezeichnung = document.getElementById("lkErgebnisseBezeichnung");
+const lkErgebnisseTableBody = document.getElementById("lkErgebnisseTableBody");
+const lkErgebnisseFormMessage = document.getElementById("lkErgebnisseFormMessage");
+const lkErgebnisseCancelBtn = document.getElementById("lkErgebnisseCancelBtn");
+
+let lkGruppen = [];
+let lkMassnahmen = [];
+let lkListe = [];
+let lkInitialized = false;
+let currentLkId = null;
+
+async function loadLkGruppen() {
+  try {
+    const response = await fetch("/api/gruppen");
+    if (!response.ok) {
+      throw new Error("Gruppen konnten nicht geladen werden.");
+    }
+    lkGruppen = await response.json();
+  } catch (err) {
+    console.error(err);
+    lkGruppen = [];
+  }
+}
+
+async function loadLkMassnahmen() {
+  try {
+    const response = await fetch("/api/massnahmen");
+    if (!response.ok) {
+      throw new Error("Maßnahmen konnten nicht geladen werden.");
+    }
+    lkMassnahmen = await response.json();
+  } catch (err) {
+    console.error(err);
+    lkMassnahmen = [];
+  }
+}
+
+function lkMassnahmenForFachbereichUndGruppe() {
+  const fachbereichId = lkFachbereichFilter.value;
+  const gruppeId = lkGruppeFilter.value;
+
+  return lkMassnahmen.filter((massnahme) => {
+    if (gruppeId) {
+      return String(massnahme.GruppeID || "") === gruppeId;
+    }
+    if (fachbereichId) {
+      const gruppe = lkGruppen.find((g) => g.ID === massnahme.GruppeID);
+      return Boolean(gruppe) && String(gruppe.FachbereichID || "") === fachbereichId;
+    }
+    return true;
+  });
+}
+
+function refreshLkGruppeOptions() {
+  const fachbereichId = lkFachbereichFilter.value;
+  const gruppen = fachbereichId ? lkGruppen.filter((g) => String(g.FachbereichID || "") === fachbereichId) : lkGruppen;
+
+  const currentValue = lkGruppeFilter.value;
+  lkGruppeFilter.querySelectorAll("option[data-gruppe]").forEach((option) => option.remove());
+
+  gruppen
+    .slice()
+    .sort((a, b) => a.Bezeichnung.localeCompare(b.Bezeichnung, "de"))
+    .forEach((gruppe) => {
+      const option = document.createElement("option");
+      option.value = gruppe.ID;
+      option.textContent = gruppe.Bezeichnung;
+      option.dataset.gruppe = "true";
+      lkGruppeFilter.appendChild(option);
+    });
+
+  lkGruppeFilter.value = gruppen.some((g) => String(g.ID) === currentValue) ? currentValue : "";
+}
+
+function refreshLkMassnahmeOptions() {
+  const bezeichnungen = [...new Set(lkMassnahmenForFachbereichUndGruppe().map((m) => m.Bezeichnung).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, "de")
+  );
+
+  const currentValue = lkMassnahmeFilter.value;
+  lkMassnahmeFilter.querySelectorAll("option[data-massnahme]").forEach((option) => option.remove());
+
+  bezeichnungen.forEach((bezeichnung) => {
+    const option = document.createElement("option");
+    option.value = bezeichnung;
+    option.textContent = bezeichnung;
+    option.dataset.massnahme = "true";
+    lkMassnahmeFilter.appendChild(option);
+  });
+
+  lkMassnahmeFilter.value = bezeichnungen.includes(currentValue) ? currentValue : "";
+}
+
+function refreshLkVtOptions() {
+  const massnahmeBezeichnung = lkMassnahmeFilter.value;
+  const relevant = lkMassnahmenForFachbereichUndGruppe().filter(
+    (m) => !massnahmeBezeichnung || m.Bezeichnung === massnahmeBezeichnung
+  );
+  const vtValues = [...new Set(relevant.map((m) => m.VT).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "de", { numeric: true })
+  );
+
+  const currentValue = lkVtFilter.value;
+  lkVtFilter.querySelectorAll("option[data-vt]").forEach((option) => option.remove());
+
+  vtValues.forEach((vt) => {
+    const option = document.createElement("option");
+    option.value = vt;
+    option.textContent = vt;
+    option.dataset.vt = "true";
+    lkVtFilter.appendChild(option);
+  });
+
+  lkVtFilter.value = vtValues.includes(currentValue) ? currentValue : "";
+}
+
+async function initLkFilterOptions() {
+  await Promise.all([loadLkGruppen(), loadLkMassnahmen()]);
+  refreshLkGruppeOptions();
+  refreshLkMassnahmeOptions();
+  refreshLkVtOptions();
+}
+
+function buildLkMassnahmenCheckboxes(container, checkedIds = []) {
+  const items = lkMassnahmen
+    .slice()
+    .sort((a, b) => a.Bezeichnung.localeCompare(b.Bezeichnung, "de"))
+    .map((m) => ({ ID: m.ID, Label: `${m.Bezeichnung} (${m.VT || "–"})` }));
+  buildCheckboxGroup(container, items, { labelKey: "Label", checkedIds });
+}
+
+function lkMatchesFilter(lk) {
+  const fachbereichId = lkFachbereichFilter.value;
+  const gruppeId = lkGruppeFilter.value;
+  const massnahmeBezeichnung = lkMassnahmeFilter.value;
+  const vt = lkVtFilter.value;
+
+  if (!fachbereichId && !gruppeId && !massnahmeBezeichnung && !vt) {
+    return true;
+  }
+
+  return lk.Massnahmen.some((m) => {
+    if (fachbereichId && String(m.FachbereichID || "") !== fachbereichId) {
+      return false;
+    }
+    if (gruppeId && String(m.GruppeID || "") !== gruppeId) {
+      return false;
+    }
+    if (massnahmeBezeichnung && (m.Bezeichnung || "") !== massnahmeBezeichnung) {
+      return false;
+    }
+    if (vt && (m.VT || "") !== vt) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function canDeleteLeistungskontrolle(lk) {
+  if (currentUser && currentUser.roles.includes("Administrator")) {
+    return true;
+  }
+  if (!lk.Durchfuehrungsdatum) {
+    return false;
+  }
+  return new Date(lk.Durchfuehrungsdatum) >= new Date(new Date().toDateString());
+}
+
+function openLeistungskontrolleDetail(lk) {
+  currentLkId = lk.ID;
+  if (window.location.hash === "#leistungskontrollen-detail") {
+    showPage("leistungskontrollen-detail");
+  } else {
+    window.location.hash = "leistungskontrollen-detail";
+  }
+}
+
+function renderLeistungskontrolleTabelle() {
+  leistungskontrolleTableBody.innerHTML = "";
+
+  const gefiltert = lkListe.filter(lkMatchesFilter);
+
+  if (gefiltert.length === 0) {
+    const emptyRow = document.createElement("tr");
+    const emptyCell = document.createElement("td");
+    emptyCell.colSpan = 7;
+    emptyCell.textContent = lkListe.length === 0 ? "Noch keine Leistungskontrollen vorhanden." : "Keine Leistungskontrollen für diesen Filter.";
+    emptyRow.appendChild(emptyCell);
+    leistungskontrolleTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  gefiltert.forEach((lk) => {
+    const row = document.createElement("tr");
+
+    const nummerCell = document.createElement("td");
+    nummerCell.textContent = lk.ID;
+
+    const artCell = document.createElement("td");
+    artCell.textContent = lk.Art;
+
+    const bezeichnungCell = document.createElement("td");
+    bezeichnungCell.textContent = lk.Bezeichnung;
+
+    const durchfuehrungCell = document.createElement("td");
+    durchfuehrungCell.textContent = formatDateDE(lk.Durchfuehrungsdatum);
+
+    const gesamtpunkteCell = document.createElement("td");
+    gesamtpunkteCell.textContent = lk.Gesamtpunkte === null || lk.Gesamtpunkte === undefined ? "" : lk.Gesamtpunkte;
+
+    const vtCell = document.createElement("td");
+    vtCell.textContent = lk.Massnahmen.map((m) => `${m.Bezeichnung} (${m.VT})`).join(", ");
+
+    const actionsCell = document.createElement("td");
+    const actionsWrap = document.createElement("div");
+    actionsWrap.className = "row-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "row-edit-btn";
+    editBtn.setAttribute("aria-label", `Leistungskontrolle ${lk.ID} anzeigen`);
+    editBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+      </svg>
+    `;
+    editBtn.addEventListener("click", () => openLeistungskontrolleDetail(lk));
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "row-delete-btn";
+    deleteBtn.setAttribute("aria-label", `Leistungskontrolle ${lk.ID} löschen`);
+    deleteBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6"></path>
+        <path d="M14 11v6"></path>
+        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+      </svg>
+    `;
+    deleteBtn.addEventListener("click", () =>
+      openDeleteDialog({
+        name: lk.Bezeichnung,
+        endpoint: `/api/leistungskontrollen/${lk.ID}`,
+        reload: loadLeistungskontrollen,
+      })
+    );
+
+    actionsWrap.append(editBtn);
+    if (canDeleteLeistungskontrolle(lk)) {
+      actionsWrap.append(deleteBtn);
+    }
+    actionsCell.appendChild(actionsWrap);
+
+    row.append(nummerCell, artCell, bezeichnungCell, durchfuehrungCell, gesamtpunkteCell, vtCell, actionsCell);
+    leistungskontrolleTableBody.appendChild(row);
+  });
+}
+
+async function loadLeistungskontrollen() {
+  leistungskontrolleTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 7;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  leistungskontrolleTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch("/api/leistungskontrollen");
+    if (!response.ok) {
+      throw new Error("Leistungskontrollen konnten nicht geladen werden.");
+    }
+    lkListe = await response.json();
+    renderLeistungskontrolleTabelle();
+  } catch (err) {
+    console.error(err);
+    leistungskontrolleTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 7;
+    errorCell.textContent = err.message;
+    errorRow.appendChild(errorCell);
+    leistungskontrolleTableBody.appendChild(errorRow);
+  }
+}
+
+lkFachbereichFilter.addEventListener("change", () => {
+  refreshLkGruppeOptions();
+  refreshLkMassnahmeOptions();
+  refreshLkVtOptions();
+  renderLeistungskontrolleTabelle();
+});
+
+lkGruppeFilter.addEventListener("change", () => {
+  refreshLkMassnahmeOptions();
+  refreshLkVtOptions();
+  renderLeistungskontrolleTabelle();
+});
+
+lkMassnahmeFilter.addEventListener("change", () => {
+  refreshLkVtOptions();
+  renderLeistungskontrolleTabelle();
+});
+
+lkVtFilter.addEventListener("change", renderLeistungskontrolleTabelle);
+
+lkResetFilterBtn.addEventListener("click", () => {
+  lkFachbereichFilter.value = "";
+  lkGruppeFilter.value = "";
+  lkMassnahmeFilter.value = "";
+  lkVtFilter.value = "";
+  refreshLkGruppeOptions();
+  refreshLkMassnahmeOptions();
+  refreshLkVtOptions();
+  renderLeistungskontrolleTabelle();
+});
+
+async function ensureLkInitialized() {
+  if (!lkInitialized) {
+    lkInitialized = true;
+    await loadFachbereichOptionsInto(lkFachbereichFilter);
+    await initLkFilterOptions();
+    buildLkMassnahmenCheckboxes(lkMassnahmenCheckboxes, []);
+  }
+  await loadLeistungskontrollen();
+}
+
+lkForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(lkForm);
+  const payload = {
+    Art: formData.get("Art"),
+    Bezeichnung: formData.get("Bezeichnung").trim(),
+    Beschreibung: formData.get("Beschreibung").trim(),
+    Durchfuehrungsdatum: formData.get("Durchfuehrungsdatum"),
+    Lagerort: formData.get("Lagerort").trim(),
+    MassnahmeIDs: getCheckedValues(lkMassnahmenCheckboxes),
+  };
+
+  lkFormMessage.textContent = "";
+  lkFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/leistungskontrollen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Leistungskontrolle konnte nicht gespeichert werden.");
+    }
+
+    lkForm.reset();
+    buildLkMassnahmenCheckboxes(lkMassnahmenCheckboxes, []);
+    lkFormMessage.textContent = "Leistungskontrolle gespeichert.";
+    lkFormMessage.classList.add("success");
+    await loadLeistungskontrollen();
+  } catch (err) {
+    lkFormMessage.textContent = err.message;
+    lkFormMessage.classList.add("error");
+  }
+});
+
+// Leistungskontrolle-Detailseite
+
+let currentLkDetail = null;
+
+async function loadLeistungskontrolleDetailPage(id) {
+  lkDetailFormMessage.textContent = "";
+  lkDetailFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/leistungskontrollen/${id}`);
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Leistungskontrolle konnte nicht geladen werden.");
+    }
+    currentLkDetail = await response.json();
+
+    lkDetailNummer.textContent = currentLkDetail.ID;
+    lkDetailForm.elements.Art.value = currentLkDetail.Art;
+    lkDetailForm.elements.Bezeichnung.value = currentLkDetail.Bezeichnung;
+    lkDetailForm.elements.Beschreibung.value = currentLkDetail.Beschreibung;
+    lkDetailForm.elements.Durchfuehrungsdatum.value = currentLkDetail.Durchfuehrungsdatum;
+    lkDetailForm.elements.Gesamtpunkte.value =
+      currentLkDetail.Gesamtpunkte === null || currentLkDetail.Gesamtpunkte === undefined ? "" : currentLkDetail.Gesamtpunkte;
+    lkDetailForm.elements.Loeschdatum.value =
+      currentLkDetail.Loeschdatum || berechneLoeschdatumVorschlag(heutigesDatumIso(), loeschfristOffsetJahre);
+    lkDetailForm.elements.Lagerort.value = currentLkDetail.Lagerort;
+
+    if (lkMassnahmen.length === 0) {
+      await loadLkMassnahmen();
+    }
+    buildLkMassnahmenCheckboxes(
+      lkDetailMassnahmenCheckboxes,
+      currentLkDetail.Massnahmen.map((m) => m.ID)
+    );
+
+    lkDetailDeleteBtn.hidden = !canDeleteLeistungskontrolle(currentLkDetail);
+  } catch (err) {
+    console.error(err);
+    lkDetailFormMessage.textContent = err.message;
+    lkDetailFormMessage.className = "form-message error";
+  }
+}
+
+lkZurueckBtn.addEventListener("click", () => {
+  window.location.hash = "leistungskontrollen";
+});
+
+lkDetailForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(lkDetailForm);
+  const payload = {
+    Art: formData.get("Art"),
+    Bezeichnung: formData.get("Bezeichnung").trim(),
+    Beschreibung: formData.get("Beschreibung").trim(),
+    Durchfuehrungsdatum: formData.get("Durchfuehrungsdatum"),
+    Gesamtpunkte: formData.get("Gesamtpunkte"),
+    Loeschdatum: formData.get("Loeschdatum"),
+    Lagerort: formData.get("Lagerort").trim(),
+    MassnahmeIDs: getCheckedValues(lkDetailMassnahmenCheckboxes),
+  };
+
+  lkDetailFormMessage.textContent = "";
+  lkDetailFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/leistungskontrollen/${currentLkId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Leistungskontrolle konnte nicht aktualisiert werden.");
+    }
+
+    await loadLeistungskontrolleDetailPage(currentLkId);
+    lkDetailFormMessage.textContent = "Gespeichert.";
+    lkDetailFormMessage.classList.add("success");
+  } catch (err) {
+    lkDetailFormMessage.textContent = err.message;
+    lkDetailFormMessage.classList.add("error");
+  }
+});
+
+lkDetailDeleteBtn.addEventListener("click", () => {
+  if (!currentLkDetail) {
+    return;
+  }
+  openDeleteDialog({
+    name: currentLkDetail.Bezeichnung,
+    endpoint: `/api/leistungskontrollen/${currentLkDetail.ID}`,
+    reload: () => {
+      window.location.hash = "leistungskontrollen";
+    },
+  });
+});
+
+// Ergebniserfassung (Sub-Dialog der Leistungskontrolle-Detailseite)
+
+function heutigesDatumIso() {
+  const heute = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${heute.getFullYear()}-${pad(heute.getMonth() + 1)}-${pad(heute.getDate())}`;
+}
+
+lkDetailErgebnisseBtn.addEventListener("click", async () => {
+  if (!currentLkId) {
+    return;
+  }
+
+  lkErgebnisseFormMessage.textContent = "";
+  lkErgebnisseFormMessage.className = "form-message";
+  lkErgebnisseBezeichnung.textContent = currentLkDetail ? currentLkDetail.Bezeichnung : "";
+  lkErgebnisseTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 6;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  lkErgebnisseTableBody.appendChild(loadingRow);
+  lkErgebnisseDialog.showModal();
+
+  try {
+    const response = await fetch(`/api/leistungskontrollen/${currentLkId}/ergebnisse`);
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Ergebnisse konnten nicht geladen werden.");
+    }
+    const teilnehmerListe = await response.json();
+
+    lkErgebnisseTableBody.innerHTML = "";
+
+    if (teilnehmerListe.length === 0) {
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 6;
+      emptyCell.textContent = "Keine Teilnehmenden in den zugewiesenen Maßnahmen.";
+      emptyRow.appendChild(emptyCell);
+      lkErgebnisseTableBody.appendChild(emptyRow);
+      return;
+    }
+
+    teilnehmerListe.forEach((teilnehmer) => {
+      const row = document.createElement("tr");
+      row.dataset.teilnehmerId = teilnehmer.TeilnehmerID;
+
+      const nameCell = document.createElement("td");
+      nameCell.textContent = `${teilnehmer.Vorname} ${teilnehmer.Nachname}`;
+
+      const vtCell = document.createElement("td");
+      vtCell.textContent = teilnehmer.VT || "";
+
+      const punkteCell = document.createElement("td");
+      const punkteInput = document.createElement("input");
+      punkteInput.type = "number";
+      punkteInput.step = "0.01";
+      punkteInput.min = "0";
+      punkteInput.name = "Ergebnispunkte";
+      punkteInput.value = teilnehmer.Ergebnispunkte === null || teilnehmer.Ergebnispunkte === undefined ? "" : teilnehmer.Ergebnispunkte;
+      punkteCell.appendChild(punkteInput);
+
+      const noteCell = document.createElement("td");
+      const noteInput = document.createElement("input");
+      noteInput.type = "text";
+      noteInput.maxLength = 20;
+      noteInput.name = "Note";
+      noteInput.value = teilnehmer.Note || "";
+      noteCell.appendChild(noteInput);
+
+      const korrekturCell = document.createElement("td");
+      const korrekturInput = document.createElement("input");
+      korrekturInput.type = "date";
+      korrekturInput.name = "Korrekturdatum";
+      korrekturInput.value = teilnehmer.Korrekturdatum || heutigesDatumIso();
+      korrekturCell.appendChild(korrekturInput);
+
+      const besprochenCell = document.createElement("td");
+      const besprochenInput = document.createElement("input");
+      besprochenInput.type = "date";
+      besprochenInput.name = "BesprochenAmDatum";
+      besprochenInput.value = teilnehmer.BesprochenAmDatum || "";
+      besprochenCell.appendChild(besprochenInput);
+
+      row.append(nameCell, vtCell, punkteCell, noteCell, korrekturCell, besprochenCell);
+      lkErgebnisseTableBody.appendChild(row);
+    });
+  } catch (err) {
+    console.error(err);
+    lkErgebnisseTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 6;
+    errorCell.textContent = err.message;
+    errorRow.appendChild(errorCell);
+    lkErgebnisseTableBody.appendChild(errorRow);
+  }
+});
+
+lkErgebnisseCancelBtn.addEventListener("click", () => {
+  lkErgebnisseDialog.close();
+});
+
+lkErgebnisseForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const ergebnisse = Array.from(lkErgebnisseTableBody.querySelectorAll("tr[data-teilnehmer-id]")).map((row) => ({
+    TeilnehmerID: Number(row.dataset.teilnehmerId),
+    Ergebnispunkte: row.querySelector('input[name="Ergebnispunkte"]').value,
+    Note: row.querySelector('input[name="Note"]').value,
+    Korrekturdatum: row.querySelector('input[name="Korrekturdatum"]').value,
+    BesprochenAmDatum: row.querySelector('input[name="BesprochenAmDatum"]').value,
+  }));
+
+  lkErgebnisseFormMessage.textContent = "";
+  lkErgebnisseFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/leistungskontrollen/${currentLkId}/ergebnisse`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Ergebnisse: ergebnisse }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Ergebnisse konnten nicht gespeichert werden.");
+    }
+
+    lkErgebnisseDialog.close();
+  } catch (err) {
+    lkErgebnisseFormMessage.textContent = err.message;
+    lkErgebnisseFormMessage.className = "form-message error";
+  }
+});
+
 // Anwesenheiten
 
 const awFachbereichFilter = document.getElementById("awFachbereichFilter");
@@ -3917,7 +4561,7 @@ function applyRolePermissions(user) {
     stammdatenGroup.closest("li").style.display = auditOnly ? "none" : "";
   }
 
-  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende"];
+  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende", "leistungskontrollen"];
   operativePages.forEach((page) => {
     const link = document.querySelector(`.sidebar-link[data-page="${page}"]`);
     if (link) {

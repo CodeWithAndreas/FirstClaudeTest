@@ -108,6 +108,17 @@
             </a>
           </li>
           <li>
+            <a href="#leistungskontrollen" class="sidebar-link" data-page="leistungskontrollen">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 11l3 3L22 4"></path>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+              </span>
+              <span class="label">Leistungskontrolle</span>
+            </a>
+          </li>
+          <li>
             <details class="sidebar-group" data-group="stammdaten">
               <summary class="sidebar-link" data-page="stammdaten">
                 <span class="icon" aria-hidden="true">
@@ -667,6 +678,207 @@
 
             <div class="dialog-actions">
               <button type="button" id="editTeilnehmerCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
+        <section id="page-leistungskontrollen" class="page">
+          <h2>Leistungskontrolle</h2>
+
+          <div class="filter-bar">
+            <div class="form-row">
+              <label for="lkFachbereichFilter">Fachbereich</label>
+              <select id="lkFachbereichFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="lkGruppeFilter">Gruppe</label>
+              <select id="lkGruppeFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="lkMassnahmeFilter">Maßnahmebezeichnung</label>
+              <select id="lkMassnahmeFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="lkVtFilter">VT</label>
+              <select id="lkVtFilter">
+                <option value="">– alle –</option>
+              </select>
+            </div>
+
+            <button type="button" id="lkResetFilterBtn" class="filter-reset-btn">Filter zurücksetzen</button>
+          </div>
+
+          <details class="collapsible-form">
+            <summary>Neue Leistungskontrolle</summary>
+
+            <form id="lkForm" class="data-form">
+              <div class="form-row">
+                <label for="lkArt">Art</label>
+                <select id="lkArt" name="Art" required>
+                  <option value="Klausur">Klausur</option>
+                  <option value="Schriftlicher Test">Schriftlicher Test</option>
+                  <option value="Präsentation">Präsentation</option>
+                  <option value="Projekt">Projekt</option>
+                  <option value="Dokumentation">Dokumentation</option>
+                  <option value="Lehrstück">Lehrstück</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="lkBezeichnung">Bezeichnung</label>
+                <input type="text" id="lkBezeichnung" name="Bezeichnung" maxlength="255" required>
+              </div>
+
+              <div class="form-row">
+                <label for="lkBeschreibung">Beschreibung</label>
+                <textarea id="lkBeschreibung" name="Beschreibung" rows="4" required></textarea>
+              </div>
+
+              <div class="form-row">
+                <label for="lkDurchfuehrungsdatum">Durchführungsdatum</label>
+                <input type="date" id="lkDurchfuehrungsdatum" name="Durchfuehrungsdatum" required>
+              </div>
+
+              <div class="form-row">
+                <label for="lkLagerort">Lagerort</label>
+                <input type="text" id="lkLagerort" name="Lagerort" maxlength="255" required>
+              </div>
+
+              <div class="form-row">
+                <label>Zugewiesene Maßnahmen (VT)</label>
+                <div class="checkbox-group" id="lkMassnahmenCheckboxes"></div>
+              </div>
+
+              <button type="submit">Speichern</button>
+              <p class="form-message" id="lkFormMessage" role="status"></p>
+            </form>
+          </details>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nummer</th>
+                  <th>Art</th>
+                  <th>Bezeichnung</th>
+                  <th>Durchführungsdatum</th>
+                  <th>Gesamtpunkte</th>
+                  <th>Zugewiesene VTs</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="leistungskontrolleTableBody">
+                <tr>
+                  <td colspan="7">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="page-leistungskontrollen-detail" class="page">
+          <div class="subpage-header">
+            <button type="button" id="lkZurueckBtn" class="btn-secondary">← Zurück zu Leistungskontrolle</button>
+          </div>
+
+          <h2>Leistungskontrolle Nr. <span id="lkDetailNummer"></span></h2>
+
+          <form id="lkDetailForm" class="data-form">
+            <div class="form-row">
+              <label for="lkDetailArt">Art</label>
+              <select id="lkDetailArt" name="Art" required>
+                <option value="Klausur">Klausur</option>
+                <option value="Schriftlicher Test">Schriftlicher Test</option>
+                <option value="Präsentation">Präsentation</option>
+                <option value="Projekt">Projekt</option>
+                <option value="Dokumentation">Dokumentation</option>
+                <option value="Lehrstück">Lehrstück</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="lkDetailBezeichnung">Bezeichnung</label>
+              <input type="text" id="lkDetailBezeichnung" name="Bezeichnung" maxlength="255" required>
+            </div>
+
+            <div class="form-row">
+              <label for="lkDetailBeschreibung">Beschreibung</label>
+              <textarea id="lkDetailBeschreibung" name="Beschreibung" rows="4" required></textarea>
+            </div>
+
+            <div class="form-row">
+              <label for="lkDetailDurchfuehrungsdatum">Durchführungsdatum</label>
+              <input type="date" id="lkDetailDurchfuehrungsdatum" name="Durchfuehrungsdatum" required>
+            </div>
+
+            <div class="form-row">
+              <label for="lkDetailGesamtpunkte">Gesamtpunkte</label>
+              <input type="number" id="lkDetailGesamtpunkte" name="Gesamtpunkte" min="0" step="0.01">
+            </div>
+
+            <div class="form-row">
+              <label for="lkDetailLoeschdatum">Löschdatum</label>
+              <input type="date" id="lkDetailLoeschdatum" name="Loeschdatum">
+            </div>
+
+            <div class="form-row">
+              <label for="lkDetailLagerort">Lagerort</label>
+              <input type="text" id="lkDetailLagerort" name="Lagerort" maxlength="255" required>
+            </div>
+
+            <div class="form-row">
+              <label>Zugewiesene Maßnahmen (VT)</label>
+              <div class="checkbox-group" id="lkDetailMassnahmenCheckboxes"></div>
+            </div>
+
+            <p class="form-message" id="lkDetailFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="lkDetailDeleteBtn" class="btn-danger" hidden>Löschen</button>
+              <button type="button" id="lkDetailErgebnisseBtn" class="btn-secondary">Ergebnisse eingeben</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </section>
+
+        <dialog id="lkErgebnisseDialog" class="confirm-dialog edit-dialog wide-dialog">
+          <form id="lkErgebnisseForm">
+            <h3>Ergebnisse erfassen</h3>
+            <p id="lkErgebnisseBezeichnung"></p>
+
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Teilnehmer</th>
+                    <th>VT</th>
+                    <th>Ergebnispunkte</th>
+                    <th>Note</th>
+                    <th>Korrekturdatum</th>
+                    <th>Besprochen am</th>
+                  </tr>
+                </thead>
+                <tbody id="lkErgebnisseTableBody">
+                  <tr>
+                    <td colspan="6">Lädt…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="form-message" id="lkErgebnisseFormMessage" role="status"></p>
+            <div class="dialog-actions">
+              <button type="button" id="lkErgebnisseCancelBtn" class="btn-secondary">Abbrechen</button>
               <button type="submit" class="btn-primary">Speichern</button>
             </div>
           </form>

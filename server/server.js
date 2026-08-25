@@ -112,6 +112,47 @@ async function bootstrapDatabase() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS leistungskontrolle (
+      ID INT NOT NULL AUTO_INCREMENT,
+      Art VARCHAR(60) NOT NULL,
+      Bezeichnung VARCHAR(255) NOT NULL,
+      Beschreibung TEXT NOT NULL,
+      Durchfuehrungsdatum DATE NOT NULL,
+      Gesamtpunkte DECIMAL(6,2) DEFAULT NULL,
+      Loeschdatum DATE DEFAULT NULL,
+      Lagerort VARCHAR(255) NOT NULL,
+      ErstelltAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (ID)
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS leistungskontrolle_massnahme (
+      LeistungskontrolleID INT NOT NULL,
+      MassnahmeID INT NOT NULL,
+      PRIMARY KEY (LeistungskontrolleID, MassnahmeID),
+      KEY fk_LKMassnahme_Massnahme_idx (MassnahmeID),
+      CONSTRAINT fk_LKMassnahme_LK FOREIGN KEY (LeistungskontrolleID) REFERENCES leistungskontrolle (ID) ON DELETE CASCADE,
+      CONSTRAINT fk_LKMassnahme_Massnahme FOREIGN KEY (MassnahmeID) REFERENCES massnahme (ID) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS leistungskontrolle_teilnehmer (
+      LeistungskontrolleID INT NOT NULL,
+      TeilnehmerID INT NOT NULL,
+      Ergebnispunkte DECIMAL(6,2) DEFAULT NULL,
+      Note VARCHAR(20) DEFAULT NULL,
+      Korrekturdatum DATE DEFAULT NULL,
+      BesprochenAmDatum DATE DEFAULT NULL,
+      PRIMARY KEY (LeistungskontrolleID, TeilnehmerID),
+      KEY fk_LKTeilnehmer_Teilnehmer_idx (TeilnehmerID),
+      CONSTRAINT fk_LKTeilnehmer_LK FOREIGN KEY (LeistungskontrolleID) REFERENCES leistungskontrolle (ID) ON DELETE CASCADE,
+      CONSTRAINT fk_LKTeilnehmer_Teilnehmer FOREIGN KEY (TeilnehmerID) REFERENCES teilnehmer (ID) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS einstellung (
       Schluessel VARCHAR(100) NOT NULL,
       Wert VARCHAR(500) DEFAULT NULL,
@@ -1492,6 +1533,391 @@ app.put("/api/aktivitaeten/:id/wiedervorlage", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Wiedervorlagetermin konnte nicht gespeichert werden." });
+  }
+});
+
+// --- Leistungskontrollen ---
+
+const LEISTUNGSKONTROLLE_ARTEN = [
+  "Klausur",
+  "Schriftlicher Test",
+  "Präsentation",
+  "Projekt",
+  "Dokumentation",
+  "Lehrstück",
+];
+
+async function attachMassnahmenZuLeistungskontrollen(lkRows) {
+  if (lkRows.length === 0) {
+    return [];
+  }
+  const ids = lkRows.map((lk) => lk.ID);
+  const [massnahmenRows] = await pool.query(
+    `SELECT lm.LeistungskontrolleID, m.ID, m.Bezeichnung, m.VT, m.GruppeID, g.FachbereichID, g.Bezeichnung AS GruppeBezeichnung
+       FROM leistungskontrolle_massnahme lm
+       JOIN massnahme m ON m.ID = lm.MassnahmeID
+       LEFT JOIN gruppe g ON g.ID = m.GruppeID
+      WHERE lm.LeistungskontrolleID IN (?)`,
+    [ids]
+  );
+  return lkRows.map((lk) => ({
+    ...lk,
+    Massnahmen: massnahmenRows
+      .filter((m) => m.LeistungskontrolleID === lk.ID)
+      .map(({ LeistungskontrolleID, ...rest }) => rest),
+  }));
+}
+
+async function resolveMassnahmenFuerLeistungskontrolle(id) {
+  const [lkMitMassnahmen] = await attachMassnahmenZuLeistungskontrollen([{ ID: id }]);
+  return lkMitMassnahmen.Massnahmen;
+}
+
+function leistungskontrolleInScope(req, massnahmenZuordnungen) {
+  if (!isRestrictedUser(req)) {
+    return true;
+  }
+  return massnahmenZuordnungen.some((m) => fachbereichInScope(req, m.FachbereichID));
+}
+
+function readLeistungskontrolleBody(body) {
+  const { Art, Bezeichnung, Beschreibung, Durchfuehrungsdatum, Gesamtpunkte, Loeschdatum, Lagerort, MassnahmeIDs } = body;
+
+  const bezeichnung = typeof Bezeichnung === "string" ? Bezeichnung.trim() : "";
+  const beschreibung = typeof Beschreibung === "string" ? Beschreibung.trim() : "";
+  const lagerort = typeof Lagerort === "string" ? Lagerort.trim() : "";
+  const massnahmeIds = Array.isArray(MassnahmeIDs) ? [...new Set(MassnahmeIDs.map(Number))] : [];
+
+  if (
+    !LEISTUNGSKONTROLLE_ARTEN.includes(Art) ||
+    !bezeichnung ||
+    !beschreibung ||
+    !Durchfuehrungsdatum ||
+    Number.isNaN(Date.parse(Durchfuehrungsdatum)) ||
+    !lagerort ||
+    massnahmeIds.length === 0 ||
+    massnahmeIds.some((massnahmeId) => !Number.isInteger(massnahmeId))
+  ) {
+    return {
+      error:
+        "Art, Bezeichnung, Beschreibung, Durchführungsdatum, Lagerort und mindestens eine zugewiesene Maßnahme sind erforderlich.",
+    };
+  }
+
+  const gesamtpunkteWert =
+    Gesamtpunkte === "" || Gesamtpunkte === null || Gesamtpunkte === undefined ? null : Number(Gesamtpunkte);
+  if (gesamtpunkteWert !== null && (!Number.isFinite(gesamtpunkteWert) || gesamtpunkteWert < 0)) {
+    return { error: "Gesamtpunkte müssen eine positive Zahl sein." };
+  }
+
+  const loeschdatumWert = Loeschdatum || null;
+  if (loeschdatumWert && Number.isNaN(Date.parse(loeschdatumWert))) {
+    return { error: "Löschdatum ist ungültig." };
+  }
+
+  return {
+    values: {
+      Art,
+      Bezeichnung: bezeichnung,
+      Beschreibung: beschreibung,
+      Durchfuehrungsdatum,
+      Gesamtpunkte: gesamtpunkteWert,
+      Loeschdatum: loeschdatumWert,
+      Lagerort: lagerort,
+      MassnahmeIDs: massnahmeIds,
+    },
+  };
+}
+
+app.get("/api/leistungskontrollen", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT ID, Art, Bezeichnung, Beschreibung, Durchfuehrungsdatum, Gesamtpunkte, Loeschdatum, Lagerort, ErstelltAm
+         FROM leistungskontrolle ORDER BY Durchfuehrungsdatum DESC, ID DESC`
+    );
+    const mitMassnahmen = await attachMassnahmenZuLeistungskontrollen(rows);
+    const ergebnis = isRestrictedUser(req)
+      ? mitMassnahmen.filter((lk) => leistungskontrolleInScope(req, lk.Massnahmen))
+      : mitMassnahmen;
+    res.json(ergebnis);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Leistungskontrollen konnten nicht geladen werden." });
+  }
+});
+
+app.get("/api/leistungskontrollen/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [rows] = await pool.query(
+      `SELECT ID, Art, Bezeichnung, Beschreibung, Durchfuehrungsdatum, Gesamtpunkte, Loeschdatum, Lagerort, ErstelltAm
+         FROM leistungskontrolle WHERE ID = ?`,
+      [id]
+    );
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Leistungskontrolle wurde nicht gefunden." });
+    }
+    const massnahmen = await resolveMassnahmenFuerLeistungskontrolle(id);
+    if (isRestrictedUser(req) && !leistungskontrolleInScope(req, massnahmen)) {
+      return res.status(403).json({ error: "Keine Berechtigung für diese Leistungskontrolle." });
+    }
+    res.json({ ...rows[0], Massnahmen: massnahmen });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Leistungskontrolle konnte nicht geladen werden." });
+  }
+});
+
+app.post("/api/leistungskontrollen", async (req, res) => {
+  const { error, values } = readLeistungskontrolleBody(req.body);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  try {
+    if (isRestrictedUser(req)) {
+      for (const massnahmeId of values.MassnahmeIDs) {
+        const fachbereichId = await resolveFachbereichForMassnahme(massnahmeId);
+        if (!fachbereichInScope(req, fachbereichId)) {
+          return res.status(403).json({ error: "Keine Berechtigung für eine der zugewiesenen Maßnahmen." });
+        }
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Berechtigung konnte nicht geprüft werden." });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [result] = await conn.query(
+      `INSERT INTO leistungskontrolle (Art, Bezeichnung, Beschreibung, Durchfuehrungsdatum, Gesamtpunkte, Loeschdatum, Lagerort)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        values.Art,
+        values.Bezeichnung,
+        values.Beschreibung,
+        values.Durchfuehrungsdatum,
+        values.Gesamtpunkte,
+        values.Loeschdatum,
+        values.Lagerort,
+      ]
+    );
+    const id = result.insertId;
+    for (const massnahmeId of values.MassnahmeIDs) {
+      await conn.query("INSERT INTO leistungskontrolle_massnahme (LeistungskontrolleID, MassnahmeID) VALUES (?, ?)", [
+        id,
+        massnahmeId,
+      ]);
+    }
+    await conn.commit();
+
+    const massnahmen = await resolveMassnahmenFuerLeistungskontrolle(id);
+    res.status(201).json({ ID: id, ...values, Massnahmen: massnahmen });
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: "Leistungskontrolle konnte nicht gespeichert werden." });
+  } finally {
+    conn.release();
+  }
+});
+
+app.put("/api/leistungskontrollen/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const { error, values } = readLeistungskontrolleBody(req.body);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  try {
+    const [existingRows] = await pool.query("SELECT ID FROM leistungskontrolle WHERE ID = ?", [id]);
+    if (!existingRows[0]) {
+      return res.status(404).json({ error: "Leistungskontrolle wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      const bestehendeMassnahmen = await resolveMassnahmenFuerLeistungskontrolle(id);
+      if (!leistungskontrolleInScope(req, bestehendeMassnahmen)) {
+        return res.status(403).json({ error: "Keine Berechtigung für diese Leistungskontrolle." });
+      }
+      for (const massnahmeId of values.MassnahmeIDs) {
+        const fachbereichId = await resolveFachbereichForMassnahme(massnahmeId);
+        if (!fachbereichInScope(req, fachbereichId)) {
+          return res.status(403).json({ error: "Keine Berechtigung für eine der zugewiesenen Maßnahmen." });
+        }
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Berechtigung konnte nicht geprüft werden." });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [result] = await conn.query(
+      `UPDATE leistungskontrolle SET Art = ?, Bezeichnung = ?, Beschreibung = ?, Durchfuehrungsdatum = ?,
+              Gesamtpunkte = ?, Loeschdatum = ?, Lagerort = ? WHERE ID = ?`,
+      [
+        values.Art,
+        values.Bezeichnung,
+        values.Beschreibung,
+        values.Durchfuehrungsdatum,
+        values.Gesamtpunkte,
+        values.Loeschdatum,
+        values.Lagerort,
+        id,
+      ]
+    );
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: "Leistungskontrolle wurde nicht gefunden." });
+    }
+    await conn.query("DELETE FROM leistungskontrolle_massnahme WHERE LeistungskontrolleID = ?", [id]);
+    for (const massnahmeId of values.MassnahmeIDs) {
+      await conn.query("INSERT INTO leistungskontrolle_massnahme (LeistungskontrolleID, MassnahmeID) VALUES (?, ?)", [
+        id,
+        massnahmeId,
+      ]);
+    }
+    await conn.commit();
+
+    const massnahmen = await resolveMassnahmenFuerLeistungskontrolle(id);
+    res.json({ ID: id, ...values, Massnahmen: massnahmen });
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: "Leistungskontrolle konnte nicht aktualisiert werden." });
+  } finally {
+    conn.release();
+  }
+});
+
+app.delete("/api/leistungskontrollen/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [rows] = await pool.query("SELECT Durchfuehrungsdatum FROM leistungskontrolle WHERE ID = ?", [id]);
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Leistungskontrolle wurde nicht gefunden." });
+    }
+    const massnahmen = await resolveMassnahmenFuerLeistungskontrolle(id);
+    if (isRestrictedUser(req) && !leistungskontrolleInScope(req, massnahmen)) {
+      return res.status(403).json({ error: "Keine Berechtigung für diese Leistungskontrolle." });
+    }
+    const istAdmin = hasRole(req, "Administrator");
+    const heuteOderSpaeter = new Date(rows[0].Durchfuehrungsdatum) >= new Date(new Date().toDateString());
+    if (!istAdmin && !heuteOderSpaeter) {
+      return res.status(403).json({
+        error: "Leistungskontrollen mit vergangenem Durchführungsdatum können nur von Administratoren gelöscht werden.",
+      });
+    }
+    await pool.query("DELETE FROM leistungskontrolle WHERE ID = ?", [id]);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Leistungskontrolle konnte nicht gelöscht werden." });
+  }
+});
+
+app.get("/api/leistungskontrollen/:id/ergebnisse", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [existingRows] = await pool.query("SELECT ID FROM leistungskontrolle WHERE ID = ?", [id]);
+    if (!existingRows[0]) {
+      return res.status(404).json({ error: "Leistungskontrolle wurde nicht gefunden." });
+    }
+    const massnahmen = await resolveMassnahmenFuerLeistungskontrolle(id);
+    if (isRestrictedUser(req) && !leistungskontrolleInScope(req, massnahmen)) {
+      return res.status(403).json({ error: "Keine Berechtigung für diese Leistungskontrolle." });
+    }
+    const massnahmeIds = massnahmen.map((m) => m.ID);
+    if (massnahmeIds.length === 0) {
+      return res.json([]);
+    }
+    const [rows] = await pool.query(
+      `SELECT t.ID AS TeilnehmerID, t.Vorname, t.Nachname, t.MassnahmeID, m.Bezeichnung AS MassnahmeBezeichnung, m.VT,
+              lt.Ergebnispunkte, lt.Note, lt.Korrekturdatum, lt.BesprochenAmDatum
+         FROM teilnehmer t
+         JOIN massnahme m ON m.ID = t.MassnahmeID
+         LEFT JOIN leistungskontrolle_teilnehmer lt ON lt.LeistungskontrolleID = ? AND lt.TeilnehmerID = t.ID
+        WHERE t.MassnahmeID IN (?)
+        ORDER BY t.Nachname, t.Vorname`,
+      [id, massnahmeIds]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Ergebnisse konnten nicht geladen werden." });
+  }
+});
+
+app.put("/api/leistungskontrollen/:id/ergebnisse", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  const { Ergebnisse } = req.body;
+  if (!Array.isArray(Ergebnisse)) {
+    return res.status(400).json({ error: "Ergebnisse sind erforderlich." });
+  }
+
+  try {
+    const [existingRows] = await pool.query("SELECT ID FROM leistungskontrolle WHERE ID = ?", [id]);
+    if (!existingRows[0]) {
+      return res.status(404).json({ error: "Leistungskontrolle wurde nicht gefunden." });
+    }
+    const massnahmen = await resolveMassnahmenFuerLeistungskontrolle(id);
+    if (isRestrictedUser(req) && !leistungskontrolleInScope(req, massnahmen)) {
+      return res.status(403).json({ error: "Keine Berechtigung für diese Leistungskontrolle." });
+    }
+
+    const gueltigeTeilnehmerIds = new Set();
+    const massnahmeIds = massnahmen.map((m) => m.ID);
+    if (massnahmeIds.length > 0) {
+      const [teilnehmerRows] = await pool.query("SELECT ID FROM teilnehmer WHERE MassnahmeID IN (?)", [massnahmeIds]);
+      teilnehmerRows.forEach((t) => gueltigeTeilnehmerIds.add(t.ID));
+    }
+
+    for (const eintrag of Ergebnisse) {
+      const teilnehmerId = Number(eintrag.TeilnehmerID);
+      if (!gueltigeTeilnehmerIds.has(teilnehmerId)) {
+        continue;
+      }
+      const ergebnispunkte =
+        eintrag.Ergebnispunkte === "" || eintrag.Ergebnispunkte === null || eintrag.Ergebnispunkte === undefined
+          ? null
+          : Number(eintrag.Ergebnispunkte);
+      const note = (eintrag.Note || "").toString().trim() || null;
+      const korrekturdatum = eintrag.Korrekturdatum || null;
+      const besprochenAmDatum = eintrag.BesprochenAmDatum || null;
+
+      await pool.query(
+        `INSERT INTO leistungskontrolle_teilnehmer (LeistungskontrolleID, TeilnehmerID, Ergebnispunkte, Note, Korrekturdatum, BesprochenAmDatum)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE Ergebnispunkte = VALUES(Ergebnispunkte), Note = VALUES(Note),
+           Korrekturdatum = VALUES(Korrekturdatum), BesprochenAmDatum = VALUES(BesprochenAmDatum)`,
+        [id, teilnehmerId, ergebnispunkte, note, korrekturdatum, besprochenAmDatum]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Ergebnisse konnten nicht gespeichert werden." });
   }
 });
 

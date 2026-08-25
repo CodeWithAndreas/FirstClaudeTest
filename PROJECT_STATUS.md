@@ -1,9 +1,59 @@
 # Standortmanager – Projektstatus
 
-Stand: 2026-08-24. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
+Stand: 2026-08-25. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Neuer Sidebar-Punkt **Systemlogs** (ganz
+**Wichtig für eine neue Session:** Neuer Sidebar-Punkt **Leistungskontrolle**
+(eigenständiger, flacher Menüpunkt direkt unterhalb von "Teilnehmende", **nicht**
+verschachtelt – bewusste Entscheidung, da eine Verschachtelung von "Teilnehmende"
+selbst das bestehende Nutzerverhalten verändert hätte). Verwaltet Klausuren/Tests/
+Präsentationen/Projekte/Dokumentationen/Lehrstücke, die einer oder mehreren
+Maßnahmen (VTs) zugewiesen werden (Many-to-many über `leistungskontrolle_massnahme`).
+Filterleiste (Fachbereich/Gruppe/Maßnahme/VT) ist 1:1 von der Teilnehmende-Filterleiste
+kopiert, inkl. eigenem `lkGruppen`/`lkMassnahmen`-Cache – Projekt-Konvention ist,
+dass **jede** gefilterte Seite ihren eigenen Cache + eigene `refreshXOptions()`-
+Funktionen bekommt (siehe Anwesenheiten mit `awGruppen`/`awMassnahmen`), keine
+Wiederverwendung über Seiten hinweg. Klick auf eine Zeile öffnet eine eigene
+Detail-Unterseite (`leistungskontrollen-detail`, analog zum Aktivitäten-/Dateiablage-
+Muster bei Teilnehmenden) mit vollständigem Bearbeiten-Formular (dort auch
+Gesamtpunkte/Löschdatum editierbar, die beim Anlegen bewusst **nicht** verpflichtend
+sind), Löschen-Button (nur sichtbar/serverseitig erlaubt, wenn Durchführungsdatum in
+der Zukunft liegt **oder** Rolle Administrator) und Button "Ergebnisse eingeben" für
+einen Dialog mit einer Zeile pro Teilnehmer/in der zugewiesenen Maßnahmen
+(Ergebnispunkte/Note/Korrekturdatum/BesprochenAmDatum). Wichtige Design-Entscheidung:
+Die Zwischentabelle `leistungskontrolle_teilnehmer` wird **nicht** beim Anlegen/
+Zuweisen eager mit einer Zeile pro Teilnehmer befüllt, sondern der Ergebnisse-
+Dialog berechnet die Teilnehmerliste bei jedem Öffnen frisch aus den aktuell
+zugewiesenen Maßnahmen (`GET .../ergebnisse` per LEFT JOIN) und das Speichern macht
+ein Upsert (`ON DUPLICATE KEY UPDATE`) nur für die tatsächlich angezeigten
+Teilnehmer – das hält die Liste auch dann korrekt, wenn nach dem Anlegen der
+Leistungskontrolle noch neue Teilnehmende der zugewiesenen Maßnahme hinzukommen.
+Neue Tabellen `leistungskontrolle` / `leistungskontrolle_massnahme` /
+`leistungskontrolle_teilnehmer` werden – wie `dokument` und `einstellung` – idempotent
+per `CREATE TABLE IF NOT EXISTS` in `bootstrapDatabase()` angelegt, **nicht** in
+`schema.sql` (Projekt-Konvention: `schema.sql` ist nur das Grundschema für einen
+Fresh-Install, alles danach Ergänzte kommt über den Bootstrap). Fachbereichs-Scoping
+für eingeschränkte Rollen folgt exakt dem bei Dokumenten/Aktivitäten etablierten
+Muster (`isRestrictedUser`/`fachbereichInScope`, geprüft gegen alle zugewiesenen
+Maßnahmen). Beim Testen dieser Session wurde ein echter Bug gefunden und behoben:
+Nach dem Speichern im Detail-Formular wurde `loadLeistungskontrolleDetailPage()`
+aufgerufen, welches am Anfang die Formularmeldung zurücksetzt – dadurch verschwand
+die "Gespeichert."-Erfolgsmeldung sofort wieder. Fix: Erfolgsmeldung wird jetzt
+**nach** dem Neuladen gesetzt, nicht davor (Lehre für ähnliche Save-und-Neuladen-
+Muster: Reihenfolge beachten, wenn die Reload-Funktion dieselbe Message-Node anfasst).
+Kompletter Workflow (Anlegen, Filtern, Detail-Bearbeiten, Ergebnisse erfassen,
+Löschen mit Bestätigungsdialog) wurde per Playwright end-to-end im Browser getestet
+(nicht nur per API) – Playwright war im Projekt nicht vorhanden und wurde nur
+temporär im Scratchpad-Verzeichnis installiert, ist nicht Teil des Projekts.
+Zwei kleine Nachbesserungen in derselben Session: Im Ergebnisse-Dialog ist das
+Korrekturdatum-Feld je Teilnehmer/in standardmäßig mit dem heutigen Datum vorbelegt
+(nur wenn noch kein Wert gespeichert ist). Auf der Leistungskontrolle-Detailseite
+wird das Löschdatum-Feld, sofern noch leer, mit heutigem Datum plus dem bestehenden
+Löschfrist-Offset aus den Einstellungen vorbelegt (`berechneLoeschdatumVorschlag()`,
+dieselbe Funktion, die auch beim Dokument-Upload den Löschdatum-Vorschlag berechnet
+– hier nur mit dem heutigen Tag statt dem Enddatum des Teilnehmers als Basis).
+
+**Davor:** Neuer Sidebar-Punkt **Systemlogs** (ganz
 unten, nur Administrator, aufklappbare Gruppe wie Stammdaten/Audit) mit
 Unterpunkt **Dateioperationen**, der Upload/Download/Änderung/Löschung von
 Dokumenten in der Dateiablage protokolliert. Das Protokoll ist bewusst eine

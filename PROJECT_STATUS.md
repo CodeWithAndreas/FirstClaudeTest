@@ -1,9 +1,185 @@
 # Standortmanager – Projektstatus
 
-Stand: 2026-08-25. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
+Stand: 2026-08-26. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Dieselbe Layout-Korrektur wie beim
+**Wichtig für eine neue Session:** Der Menüpunkt **Formulare** ist jetzt nur
+für die Rollen Administrator, Bildungsstättenleiter und Fachbereichsleiter
+sichtbar/nutzbar (`FORMULARE_ERLAUBTE_ROLLEN` + `canAccessFormulare(user)`
+in `js/main.js`) – für Ausbilder, Lehrgangsorganisation und Auditor ist
+sowohl der Sidebar-Link als auch die Stammdaten-Übersichtskarte
+(`stammdatenFormulareCard`) ausgeblendet, und eine direkte Hash-Navigation
+`#formulare` wird in `showPage()` auf das Dashboard umgeleitet – exakt
+dasselbe Muster wie beim bestehenden Ausblenden von „Leistungskontrolle" für
+Lehrgangsorganisation. **Bewusst rein UI-seitig, keine Backend-Sperre**:
+Die Formulierung der Anfrage ("Der Menüpunkt … soll nur … nutzbar sein")
+entspricht wortgleich dem Muster der bereits früher in dieser Session
+getroffenen Entscheidung beim Leistungskontrolle/Lehrgangsorganisation-Fall
+(dort ebenfalls ausdrücklich nur UI-seitig umgesetzt, Backend-API bewusst
+nicht eingeschränkt) – falls zusätzlich eine serverseitige Zugriffssperre
+auf `/api/formulare/*` gewünscht ist (z. B. `requireRole("Administrator",
+"Bildungsstättenleiter", "Fachbereichsleiter")` analog zu den bestehenden
+`requireRole(...)`-Gates), müsste das separat angefragt werden. Zusätzlich
+wurden die beiden Stellen angepasst, die `/api/formulare` bisher
+unconditional für **jeden** angemeldeten Nutzer aufgerufen haben (sonst hätte
+ein ausgeschlossener Nutzer beim Login bzw. auf der Stammdaten-Übersicht
+unnötige Fetches gemacht): Der eager-Load in `initializeApp()`
+(`loadFormularFormOptions()`/`loadFormulare()`) läuft jetzt nur noch, wenn
+`canAccessFormulare(currentUser)` zutrifft (gleiches Muster wie der
+bestehende `if (currentUser.roles.includes("Administrator"))`-Block für
+Benutzer-Daten direkt darunter), und `loadStammdatenStats()` lässt den
+`/api/formulare`-Kennzahl-Fetch für ausgeschlossene Rollen weg (zeigt dort
+direkt „–" statt einen Request zu schicken, der ohnehin nichts anzeigen
+dürfte). Getestet per Playwright mit vier Rollen-Kombinationen (Administrator,
+Bildungsstättenleiter, Ausbilder-only, Lehrgangsorganisation) gegen
+vorhandene Testkonten aus einer früheren Session (`VB`/`LO`/`Ausbilder`) –
+deren Passwörter wurden dafür kurzzeitig auf `TestPass123!` zurückgesetzt
+(sind erkennbar synthetische Testkonten mit `.test`-E-Mail-Adressen, keine
+echten Nutzer); falls diese Konten noch gebraucht werden, bitte das Passwort
+beachten oder erneut zurücksetzen.
+
+**Davor:** Zwei kleine Nachbesserungen am
+Formulare-Feature. **Erstens:** Der Button „Ersetzen" im Bearbeiten-Dialog
+steht jetzt in derselben `.dialog-actions`-Zeile wie „Abbrechen"/„Speichern"
+(ganz links, analog zum bestehenden Muster bei der Leistungskontrolle-
+Detailseite, wo „Löschen" ebenfalls als zusätzlicher Button links von
+„Abbrechen"/„Speichern" im selben `.dialog-actions`-Container steht) – der
+vorherige eigene `.detail-actions`-Wrapper darüber wurde entfernt.
+**Zweitens:** `buildCheckboxGroup()` (die generische Checkbox-Gruppen-
+Hilfsfunktion in `js/main.js`, projektweit für Rollen/Fachbereiche/
+Maßnahmen-Zuordnungen verwendet) hat jetzt einen optionalen Parameter
+`selectAllLabel`; wenn gesetzt, wird eine „Alle …"-Checkbox vor den
+einzelnen Einträgen eingefügt (visuell abgesetzt durch eine untere
+Trennlinie, `.checkbox-group-select-all` in `css/style.css`), die beim
+Anklicken alle Einträge auf denselben Zustand setzt und selbst
+`indeterminate` wird, sobald nur ein Teil der Einträge angehakt ist.
+`getCheckedValues()` filtert die Select-all-Checkbox über
+`dataset.selectAll` heraus, damit sie nie fälschlich als eigener
+(nicht-existenter) ID-Wert mit übertragen wird. **Bewusst nur für die
+Formular-Fachbereichszuordnung aktiviert** (beide Checkbox-Gruppen: das
+Neuanlage-Formular und der Bearbeiten-Dialog, inkl. der Zurücksetzen-Stelle
+nach erfolgreichem Speichern) – die Funktion selbst ist zwar jetzt generisch
+nutzbar, wurde aber bei den bestehenden Aufrufstellen (Benutzer-Rollen/
+-Fachbereiche, Leistungskontrolle-Maßnahmen) nicht angefasst, da nur die
+Formular-Fachbereichszuordnung angefragt wurde; bei Bedarf dort einfach
+`selectAllLabel: "..."` ergänzen. Beides per Playwright getestet
+(Select-all checkt/uncheckt alle Fachbereiche, wird bei Teilauswahl
+indeterminate, das Speichern mit „Alle Fachbereiche" aktiviert überträgt
+korrekt alle echten Fachbereich-IDs ohne Phantom-Wert, die drei
+Dialog-Buttons liegen auf identischer Y-Position).
+
+**Davor:** Der beim Formular-Upload gespeicherte
+`Dateiname` (die Spalte, die in der Tabelle angezeigt und als
+Download-Dateiname vorgeschlagen wird) wird jetzt serverseitig generiert
+statt den Original-Dateinamen der hochgeladenen Datei zu übernehmen: Format
+`{Titel} v{Version} {TT.MM.JJJJ}.{Endung}` (`buildFormularDateiname()` in
+`server.js`, Datum = Uploadzeitpunkt, Endung aus dem Original-Dateinamen).
+Neue Spalte `formular.Version` (INT, Default 1, per ALTER-TABLE-Fallback
+wie bei `benutzer.Aktiv` auch für die bereits laufende Datenbank dieser
+Session nachgezogen) startet bei 1 und wird nur beim **Ersetzen** der Datei
+automatisch hochgezählt – ein reines Bearbeiten der Metadaten (`PUT`) ändert
+die Version nicht. Neuer Endpunkt `POST /api/formulare/:id/ersetzen`
+(multipart, gleiches manuelles `multer`-Wrapping wie beim Anlegen) lädt die
+neue Datei hoch, erhöht `Version`, generiert den neuen `Dateiname` (nutzt
+dabei den **bestehenden** Titel aus der DB, nicht den Original-Dateinamen
+der neuen Datei) und löscht anschließend die alte Datei von der Platte
+(`GespeicherterDateiname`, weiterhin ein UUID-Dateiname – nur der
+Anzeige-`Dateiname` trägt Titel/Version/Datum, nicht der tatsächliche
+Dateiname auf der Platte). Es wird bewusst **keine** Versionshistorie
+geführt – jede vorherige Datei wird beim Ersetzen unwiderruflich gelöscht,
+genau wie beim Unternehmens-Logo-Upload; falls künftig eine Historie
+gewünscht ist, wäre das eine separate Anfrage. Berechtigungen für den
+Ersetzen-Endpunkt entsprechen exakt dem bestehenden `PUT`
+(Fachbereichs-Scoping für eingeschränkte Rollen, **kein**
+Administrator-Gate) – anders als beim `DELETE`, das Administrator-only
+bleibt.
+
+Der neue Button **„Ersetzen"** sitzt im Bearbeiten-Dialog
+(`editFormularDialog`, aktuell die einzige Detail-/Bearbeitenansicht dieses
+Features – es gibt keine eigene Subpage wie bei Leistungskontrolle) unter
+einer schreibgeschützten Anzeige des aktuellen `Dateiname`s, öffnet einen
+versteckten `<input type="file">` und lädt bei Dateiauswahl sofort hoch
+(kein zusätzlicher Bestätigungsdialog – im Projekt wird für destruktive
+Aktionen zwar sonst ein Tipp-Bestätigungsdialog verwendet, aber das war
+nicht Teil der Anfrage und der native Datei-Auswahldialog ist bereits ein
+bewusster Nutzerschritt). **Layout-Stolperfalle wieder aufgetreten und
+sofort behoben:** Der Button wurde zunächst als nacktes `class="btn-secondary"`
+direkt in einem `.form-row` platziert – exakt derselbe Bug wie beim
+PDF-Bericht-Button im Steckbrief weiter unten in dieser Datei dokumentiert
+(`.btn-secondary` liefert außerhalb von `.dialog-actions`/`.detail-actions`
+nur Farben, keine Rundung/Padding). Fix: Button in einen
+`<div class="detail-actions">`-Wrapper verschoben. **Lehre bestätigt:** Bei
+jedem neuen freistehenden Button in diesem Projekt sofort einen der
+bestehenden Container (`.dialog-actions`, `.detail-actions`) verwenden,
+nicht erst hinterher als Bug entdecken.
+
+Kompletter Workflow (Anlegen → Dateiname zeigt „v1" + heutiges Datum,
+Bearbeiten-Dialog öffnen → aktuelle Datei sichtbar, Ersetzen → Version wird
+zu „v2", danach nochmal ersetzt → „v3", Tabelle aktualisiert sich, Vorschau
+nach dem Ersetzen lädt weiterhin korrekt die neue Datei, alte Datei wird von
+der Platte entfernt) wurde per Playwright getestet.
+
+**Davor:** Neuer Menüpunkt **Formulare** als
+Unterpunkt von Stammdaten (Sidebar-Link + eigene Stat-Karte auf der
+Stammdaten-Übersicht, eager beim Login geladen wie Fachbereich/Gruppe/
+Maßnahme – kein Lazy-`ensureXInitialized()`-Gate). Verwaltet hochladbare
+Formular-Vorlagen (PDF/Word/Excel) mit eindeutiger DB-ID, QM-Kennung, Titel,
+Beschreibung und Zuordnung zu einem oder mehreren Fachbereichen
+(Many-to-many über neue Tabelle `formular_fachbereich`, exakt nach dem
+`leistungskontrolle_massnahme`-Muster: `attachFachbereicheZuFormularen()`
+macht einen einzigen `IN (?)`-Query + JS-seitiges Gruppieren statt
+N+1-Queries). **Bewusste Scoping-Entscheidung:** Die Anfrage endete mit dem
+Satz "Workflows werden später implementiert, ebenso Arbeitsschritte" –
+daraus wurde geschlossen, dass diese Session **nur** die Formulare-Verwaltung
+gebaut wird. Workflows und Arbeitsschritte (eigene Entitäten mit Kennung/
+QM-Kennung/Bezeichnung/Beschreibung, Many-to-many Arbeitsschritt↔Workflow)
+wurden komplett weggelassen – keine Tabellen, keine Felder, **kein**
+Workflow-Zuordnungsfeld/-Dropdown auf Formular (ein leeres Stub-Dropdown
+ohne Daten wäre ein halbfertiges Feature gewesen). Diese Entscheidung wurde
+dem Nutzer vor Beginn der Umsetzung explizit mitgeteilt. **Für eine künftige
+Session, die Workflows/Arbeitsschritte nachträgt:** Formular braucht dann
+zusätzlich eine Many-to-many-Zuordnung zu Workflow, analog zum bestehenden
+Fachbereich-Muster (neue Join-Tabelle `formular_workflow`, gleiches
+Checkbox-Group-UI wie bei den Fachbereichen).
+
+Datei-Uploads laufen wie beim Unternehmens-Logo über `multer` mit manuellem
+`upload.single("Datei")(req, res, callback)`-Wrapping für saubere
+JSON-Fehlermeldungen, hier aber diskbasiert (nicht `memoryStorage`) mit
+`crypto.randomUUID()`-Dateinamen (+ Original-Endung) in `server/formulare/`
+(neu in `.gitignore`, außerhalb der `express.static`-Allowlist, nur über
+eigene, authentifizierte Routen erreichbar – wie alle Uploads in diesem
+Projekt). Erlaubt sind bewusst nur PDF/DOC/DOCX/XLS/XLSX
+(`FORMULAR_ERLAUBTE_MIMETYPES`, serverseitiger `fileFilter`), 20 MB Limit;
+Bildformate/SVG sind hier kein Thema, da es sich um Dokument-Vorlagen und
+keine Logos handelt. `PUT /api/formulare/:id` ändert bewusst nur Metadaten
+und Fachbereichszuordnung, **kein** Datei-Ersatz (nicht Teil der Anfrage –
+zum Austauschen der Datei müsste aktuell das Formular neu angelegt werden).
+`DELETE` ist Administrator-only, wie bei anderen kritischen
+Löschoperationen im Projekt (z. B. Unternehmens-Logo).
+
+Vorschau/Download nutzen bewusst **keine** zweite Implementierung: Die
+bestehende `dokument-vorschau.html`/`js/dokument-vorschau.js` (bisher nur
+für Teilnehmer-Dokumente) wurde um einen Query-Parameter `typ=formular|
+dokument` erweitert, der nur die API-Basis-URL umschaltet (`/api/formulare`
+vs. `/api/dokumente`) – die komplette PDF-/Bild-/DOCX-/XLSX-Rendering-Logik
+bleibt eine einzige gemeinsame Implementierung statt einer Kopie.
+
+Kompletter Workflow wurde sowohl per API (curl: Anlegen mit mehreren
+Fachbereichen, Liste, Download-/Vorschau-Header, ungültiger Dateityp → 400,
+Bearbeiten inkl. Fachbereichs-Reduzierung, Löschen) als auch end-to-end per
+Playwright im echten Browser getestet (Formular über das reale Formular
+inkl. Datei-Upload anlegen, Tabellenanzeige prüfen, Vorschau öffnet in
+neuem Tab und rendert das PDF tatsächlich sichtbar, Bearbeiten-Dialog mit
+vorausgefüllten Werten, Download-Link-Attribut, Löschen mit
+Bestätigungsdialog) – alle Testdaten wurden danach wieder entfernt.
+**Lehre (Testumgebung, kein Projekt-Code):** In dieser Windows/Git-Bash-
+Sandbox scheiterte ein `curl -F "Datei=@/tmp/datei.txt"`-Multipart-Upload
+beim Lesen der Datei aus `/tmp/`, obwohl dieselbe Datei per `cat` normal
+lesbar war – kein Server-Bug, sondern ein Pfad-Eigenheit dieser Umgebung.
+Fix: Testdateien für curl-Multipart-Uploads künftig im Scratchpad-Verzeichnis
+statt unter `/tmp/` ablegen.
+
+**Davor:** Dieselbe Layout-Korrektur wie beim
 PDF-Button auch für die "Zur Aktivität"-Buttons in der Aktivitäten-Liste des
 Teilnehmersteckbriefs: statt eines nackten `class="btn-secondary"` jetzt
 umschlossen von einem `<div class="detail-actions">`-Wrapper (das bestehende

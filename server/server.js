@@ -86,6 +86,13 @@ const BILDUNGSSTAETTE_SCHLUESSEL = [
 ];
 const UNTERNEHMEN_TEXT_SCHLUESSEL = ["unternehmen_name", "unternehmen_bezeichnung"];
 const LOGO_ERLAUBTE_MIMETYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const FORMULAR_ERLAUBTE_MIMETYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
 
 async function bootstrapDatabase() {
   await pool.query(`
@@ -182,6 +189,41 @@ async function bootstrapDatabase() {
       KEY fk_LKTeilnehmer_Teilnehmer_idx (TeilnehmerID),
       CONSTRAINT fk_LKTeilnehmer_LK FOREIGN KEY (LeistungskontrolleID) REFERENCES leistungskontrolle (ID) ON DELETE CASCADE,
       CONSTRAINT fk_LKTeilnehmer_Teilnehmer FOREIGN KEY (TeilnehmerID) REFERENCES teilnehmer (ID) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS formular (
+      ID INT NOT NULL AUTO_INCREMENT,
+      QMKennung VARCHAR(100) NOT NULL,
+      Titel VARCHAR(255) NOT NULL,
+      Beschreibung TEXT NOT NULL,
+      Dateiname VARCHAR(255) NOT NULL,
+      GespeicherterDateiname VARCHAR(255) NOT NULL,
+      Dateigroesse INT NOT NULL,
+      MimeType VARCHAR(150) DEFAULT NULL,
+      Version INT NOT NULL DEFAULT 1,
+      HochgeladenAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (ID)
+    ) ENGINE=InnoDB
+  `);
+
+  const [formularSpalten] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'formular' AND COLUMN_NAME = 'Version'`
+  );
+  if (formularSpalten.length === 0) {
+    await pool.query("ALTER TABLE formular ADD COLUMN Version INT NOT NULL DEFAULT 1");
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS formular_fachbereich (
+      FormularID INT NOT NULL,
+      FachbereichID INT NOT NULL,
+      PRIMARY KEY (FormularID, FachbereichID),
+      KEY fk_FormularFachbereich_Fachbereich_idx (FachbereichID),
+      CONSTRAINT fk_FormularFachbereich_Formular FOREIGN KEY (FormularID) REFERENCES formular (ID) ON DELETE CASCADE,
+      CONSTRAINT fk_FormularFachbereich_Fachbereich FOREIGN KEY (FachbereichID) REFERENCES fachbereich (ID) ON DELETE CASCADE
     ) ENGINE=InnoDB
   `);
 
@@ -338,6 +380,34 @@ const logoUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!LOGO_ERLAUBTE_MIMETYPES.includes(file.mimetype)) {
+      cb(new Error("UNGUELTIGER_DATEITYP"));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+// --- Formulare (Stammdaten: Formular-Vorlagen) ---
+
+const FORMULARE_VERZEICHNIS = path.join(__dirname, "formulare");
+
+const formularUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      try {
+        fs.mkdirSync(FORMULARE_VERZEICHNIS, { recursive: true });
+        cb(null, FORMULARE_VERZEICHNIS);
+      } catch (err) {
+        cb(err);
+      }
+    },
+    filename: (req, file, cb) => {
+      cb(null, `${crypto.randomUUID()}${path.extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!FORMULAR_ERLAUBTE_MIMETYPES.includes(file.mimetype)) {
       cb(new Error("UNGUELTIGER_DATEITYP"));
       return;
     }
@@ -963,6 +1033,373 @@ app.delete("/api/fachbereiche/:id", requireRole("Administrator"), async (req, re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Fachbereich konnte nicht gelöscht werden." });
+  }
+});
+
+// --- Formulare (Formular-Vorlagen) ---
+
+async function attachFachbereicheZuFormularen(formularRows) {
+  if (formularRows.length === 0) {
+    return [];
+  }
+  const ids = formularRows.map((f) => f.ID);
+  const [fbRows] = await pool.query(
+    `SELECT ff.FormularID, f.ID, f.BezeichnungLang, f.BezeichnungKurz
+       FROM formular_fachbereich ff
+       JOIN fachbereich f ON f.ID = ff.FachbereichID
+      WHERE ff.FormularID IN (?)`,
+    [ids]
+  );
+  return formularRows.map((formular) => ({
+    ...formular,
+    Fachbereiche: fbRows
+      .filter((f) => f.FormularID === formular.ID)
+      .map(({ FormularID, ...rest }) => rest),
+  }));
+}
+
+function formularInScope(req, fachbereiche) {
+  if (!isRestrictedUser(req)) {
+    return true;
+  }
+  return fachbereiche.some((f) => fachbereichInScope(req, f.ID));
+}
+
+async function resolveFormularFuerScope(id) {
+  const [rows] = await pool.query("SELECT * FROM formular WHERE ID = ?", [id]);
+  if (!rows[0]) {
+    return null;
+  }
+  const [mitFachbereichen] = await attachFachbereicheZuFormularen(rows);
+  return mitFachbereichen;
+}
+
+function formularDateinameTeilBereinigen(text) {
+  return text.replace(/[<>:"/\\|?*\x00-\x1f]/g, "-").trim();
+}
+
+function formatiereDatumDE(datum) {
+  const tag = String(datum.getDate()).padStart(2, "0");
+  const monat = String(datum.getMonth() + 1).padStart(2, "0");
+  const jahr = datum.getFullYear();
+  return `${tag}.${monat}.${jahr}`;
+}
+
+function buildFormularDateiname(titel, version, originalDateiname) {
+  const endung = path.extname(originalDateiname);
+  const basis = formularDateinameTeilBereinigen(titel);
+  return `${basis} v${version} ${formatiereDatumDE(new Date())}${endung}`;
+}
+
+app.get("/api/formulare", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT ID, QMKennung, Titel, Beschreibung, Dateiname, Dateigroesse, MimeType, HochgeladenAm
+         FROM formular ORDER BY Titel`
+    );
+    const mitFachbereichen = await attachFachbereicheZuFormularen(rows);
+    const ergebnis = isRestrictedUser(req)
+      ? mitFachbereichen.filter((f) => formularInScope(req, f.Fachbereiche))
+      : mitFachbereichen;
+    res.json(ergebnis);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Formulare konnten nicht geladen werden." });
+  }
+});
+
+app.post("/api/formulare", (req, res) => {
+  formularUpload.single("Datei")(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      if (uploadErr instanceof multer.MulterError && uploadErr.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "Datei ist zu groß (max. 20 MB)." });
+      }
+      return res.status(400).json({ error: "Nur PDF-, Word- oder Excel-Dateien sind als Formular-Vorlage erlaubt." });
+    }
+
+    const cleanupUploadedFile = () => {
+      if (req.file) fs.unlink(req.file.path, () => {});
+    };
+
+    const qmKennung = typeof req.body.QMKennung === "string" ? req.body.QMKennung.trim() : "";
+    const titel = typeof req.body.Titel === "string" ? req.body.Titel.trim() : "";
+    const beschreibung = typeof req.body.Beschreibung === "string" ? req.body.Beschreibung.trim() : "";
+    const fachbereichIds = [...new Set([].concat(req.body.FachbereichIDs || []).map(Number))];
+
+    if (
+      !req.file ||
+      !qmKennung ||
+      !titel ||
+      !beschreibung ||
+      fachbereichIds.length === 0 ||
+      fachbereichIds.some((fid) => !Number.isInteger(fid))
+    ) {
+      cleanupUploadedFile();
+      return res.status(400).json({
+        error: "QM-Kennung, Titel, Beschreibung, Datei und mindestens ein zugewiesener Fachbereich sind erforderlich.",
+      });
+    }
+
+    try {
+      if (isRestrictedUser(req)) {
+        for (const fachbereichId of fachbereichIds) {
+          if (!fachbereichInScope(req, fachbereichId)) {
+            cleanupUploadedFile();
+            return res.status(403).json({ error: "Keine Berechtigung für einen der zugewiesenen Fachbereiche." });
+          }
+        }
+      }
+    } catch (err) {
+      cleanupUploadedFile();
+      console.error(err);
+      return res.status(500).json({ error: "Berechtigung konnte nicht geprüft werden." });
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [result] = await conn.query(
+        `INSERT INTO formular (QMKennung, Titel, Beschreibung, Dateiname, GespeicherterDateiname, Dateigroesse, MimeType, Version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          qmKennung,
+          titel,
+          beschreibung,
+          buildFormularDateiname(titel, 1, req.file.originalname),
+          req.file.filename,
+          req.file.size,
+          req.file.mimetype,
+        ]
+      );
+      const id = result.insertId;
+      for (const fachbereichId of fachbereichIds) {
+        await conn.query("INSERT INTO formular_fachbereich (FormularID, FachbereichID) VALUES (?, ?)", [
+          id,
+          fachbereichId,
+        ]);
+      }
+      await conn.commit();
+
+      res.status(201).json(await resolveFormularFuerScope(id));
+    } catch (err) {
+      await conn.rollback();
+      cleanupUploadedFile();
+      console.error(err);
+      res.status(500).json({ error: "Formular konnte nicht gespeichert werden." });
+    } finally {
+      conn.release();
+    }
+  });
+});
+
+app.put("/api/formulare/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const qmKennung = typeof req.body.QMKennung === "string" ? req.body.QMKennung.trim() : "";
+  const titel = typeof req.body.Titel === "string" ? req.body.Titel.trim() : "";
+  const beschreibung = typeof req.body.Beschreibung === "string" ? req.body.Beschreibung.trim() : "";
+  const fachbereichIds = Array.isArray(req.body.FachbereichIDs)
+    ? [...new Set(req.body.FachbereichIDs.map(Number))]
+    : [];
+
+  if (
+    !qmKennung ||
+    !titel ||
+    !beschreibung ||
+    fachbereichIds.length === 0 ||
+    fachbereichIds.some((fid) => !Number.isInteger(fid))
+  ) {
+    return res.status(400).json({
+      error: "QM-Kennung, Titel, Beschreibung und mindestens ein zugewiesener Fachbereich sind erforderlich.",
+    });
+  }
+
+  try {
+    const bestehend = await resolveFormularFuerScope(id);
+    if (!bestehend) {
+      return res.status(404).json({ error: "Formular wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req)) {
+      if (!formularInScope(req, bestehend.Fachbereiche)) {
+        return res.status(403).json({ error: "Keine Berechtigung für dieses Formular." });
+      }
+      for (const fachbereichId of fachbereichIds) {
+        if (!fachbereichInScope(req, fachbereichId)) {
+          return res.status(403).json({ error: "Keine Berechtigung für einen der zugewiesenen Fachbereiche." });
+        }
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Berechtigung konnte nicht geprüft werden." });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [result] = await conn.query(
+      "UPDATE formular SET QMKennung = ?, Titel = ?, Beschreibung = ? WHERE ID = ?",
+      [qmKennung, titel, beschreibung, id]
+    );
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: "Formular wurde nicht gefunden." });
+    }
+    await conn.query("DELETE FROM formular_fachbereich WHERE FormularID = ?", [id]);
+    for (const fachbereichId of fachbereichIds) {
+      await conn.query("INSERT INTO formular_fachbereich (FormularID, FachbereichID) VALUES (?, ?)", [
+        id,
+        fachbereichId,
+      ]);
+    }
+    await conn.commit();
+
+    res.json(await resolveFormularFuerScope(id));
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: "Formular konnte nicht aktualisiert werden." });
+  } finally {
+    conn.release();
+  }
+});
+
+app.post("/api/formulare/:id/ersetzen", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  formularUpload.single("Datei")(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      if (uploadErr instanceof multer.MulterError && uploadErr.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "Datei ist zu groß (max. 20 MB)." });
+      }
+      return res.status(400).json({ error: "Nur PDF-, Word- oder Excel-Dateien sind als Formular-Vorlage erlaubt." });
+    }
+
+    const cleanupUploadedFile = () => {
+      if (req.file) fs.unlink(req.file.path, () => {});
+    };
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Es wurde keine Datei ausgewählt." });
+    }
+
+    try {
+      const bestehend = await resolveFormularFuerScope(id);
+      if (!bestehend) {
+        cleanupUploadedFile();
+        return res.status(404).json({ error: "Formular wurde nicht gefunden." });
+      }
+      if (isRestrictedUser(req) && !formularInScope(req, bestehend.Fachbereiche)) {
+        cleanupUploadedFile();
+        return res.status(403).json({ error: "Keine Berechtigung für dieses Formular." });
+      }
+
+      const neueVersion = bestehend.Version + 1;
+      const neuerDateiname = buildFormularDateiname(bestehend.Titel, neueVersion, req.file.originalname);
+
+      await pool.query(
+        `UPDATE formular
+            SET Dateiname = ?, GespeicherterDateiname = ?, Dateigroesse = ?, MimeType = ?,
+                Version = ?, HochgeladenAm = CURRENT_TIMESTAMP
+          WHERE ID = ?`,
+        [neuerDateiname, req.file.filename, req.file.size, req.file.mimetype, neueVersion, id]
+      );
+
+      fs.unlink(path.join(FORMULARE_VERZEICHNIS, bestehend.GespeicherterDateiname), (err) => {
+        if (err && err.code !== "ENOENT") {
+          console.error("Alte Formular-Datei konnte nicht gelöscht werden:", err);
+        }
+      });
+
+      res.json(await resolveFormularFuerScope(id));
+    } catch (err) {
+      cleanupUploadedFile();
+      console.error(err);
+      res.status(500).json({ error: "Formular konnte nicht ersetzt werden." });
+    }
+  });
+});
+
+app.delete("/api/formulare/:id", requireRole("Administrator"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [rows] = await pool.query("SELECT GespeicherterDateiname FROM formular WHERE ID = ?", [id]);
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Formular wurde nicht gefunden." });
+    }
+    await pool.query("DELETE FROM formular WHERE ID = ?", [id]);
+    fs.unlink(path.join(FORMULARE_VERZEICHNIS, rows[0].GespeicherterDateiname), (err) => {
+      if (err && err.code !== "ENOENT") {
+        console.error("Formular-Datei konnte nicht gelöscht werden:", err);
+      }
+    });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Formular konnte nicht gelöscht werden." });
+  }
+});
+
+app.get("/api/formulare/:id/datei", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const formular = await resolveFormularFuerScope(id);
+    if (!formular) {
+      return res.status(404).json({ error: "Formular wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req) && !formularInScope(req, formular.Fachbereiche)) {
+      return res.status(403).json({ error: "Keine Berechtigung für dieses Formular." });
+    }
+    res.download(path.join(FORMULARE_VERZEICHNIS, formular.GespeicherterDateiname), formular.Dateiname, (err) => {
+      if (err) {
+        console.error(err);
+        if (!res.headersSent) {
+          res.status(404).json({ error: "Datei nicht gefunden." });
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Datei konnte nicht heruntergeladen werden." });
+  }
+});
+
+app.get("/api/formulare/:id/vorschau", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const formular = await resolveFormularFuerScope(id);
+    if (!formular) {
+      return res.status(404).json({ error: "Formular wurde nicht gefunden." });
+    }
+    if (isRestrictedUser(req) && !formularInScope(req, formular.Fachbereiche)) {
+      return res.status(403).json({ error: "Keine Berechtigung für dieses Formular." });
+    }
+    res.sendFile(path.join(FORMULARE_VERZEICHNIS, formular.GespeicherterDateiname), (err) => {
+      if (err) {
+        console.error(err);
+        if (!res.headersSent) {
+          res.status(404).json({ error: "Datei nicht gefunden." });
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Datei konnte nicht angezeigt werden." });
   }
 });
 

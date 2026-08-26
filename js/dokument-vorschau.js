@@ -2,6 +2,8 @@
   const params = new URLSearchParams(window.location.search);
   const id = params.get("id");
   const name = params.get("name") || "Dokument";
+  const typ = params.get("typ") === "formular" ? "formular" : "dokument";
+  const apiBasis = typ === "formular" ? "/api/formulare" : "/api/dokumente";
 
   const dateinameEl = document.getElementById("vorschauDateiname");
   const downloadEl = document.getElementById("vorschauDownload");
@@ -15,10 +17,10 @@
     return;
   }
 
-  downloadEl.href = `/api/dokumente/${id}/datei`;
+  downloadEl.href = `${apiBasis}/${id}/datei`;
 
   const endung = (name.split(".").pop() || "").toLowerCase();
-  const vorschauUrl = `/api/dokumente/${id}/vorschau`;
+  const vorschauUrl = `${apiBasis}/${id}/vorschau`;
 
   const PDF_TYPEN = ["pdf"];
   const BILD_TYPEN = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];

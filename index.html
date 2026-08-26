@@ -149,6 +149,11 @@
                     <span class="label">Fachbereiche</span>
                   </a>
                 </li>
+                <li>
+                  <a href="#formulare" class="sidebar-link" data-page="formulare">
+                    <span class="label">Formulare</span>
+                  </a>
+                </li>
               </ul>
             </details>
           </li>
@@ -1187,6 +1192,10 @@
               <span class="stat-value" id="stammdatenFachbereicheCount">–</span>
               <span class="stat-label">Fachbereiche</span>
             </a>
+            <a href="#formulare" class="stat-card stammdaten-card" id="stammdatenFormulareCard">
+              <span class="stat-value" id="stammdatenFormulareCount">–</span>
+              <span class="stat-label">Formulare</span>
+            </a>
           </div>
         </section>
 
@@ -1493,6 +1502,104 @@
 
             <div class="dialog-actions">
               <button type="button" id="editFachbereichCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
+        <section id="page-formulare" class="page">
+          <h2>Formulare</h2>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nummer</th>
+                  <th>QM-Kennung</th>
+                  <th>Titel</th>
+                  <th>Fachbereiche</th>
+                  <th>Datei</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="formulareTableBody">
+                <tr>
+                  <td colspan="6">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <details class="collapsible-form">
+            <summary>Neues Formular</summary>
+
+            <form id="formularForm" class="data-form" enctype="multipart/form-data">
+              <div class="form-row">
+                <label for="formQMKennung">QM-Kennung</label>
+                <input type="text" id="formQMKennung" name="QMKennung" maxlength="100" required>
+              </div>
+
+              <div class="form-row">
+                <label for="formTitel">Titel</label>
+                <input type="text" id="formTitel" name="Titel" maxlength="255" required>
+              </div>
+
+              <div class="form-row">
+                <label for="formBeschreibung">Beschreibung</label>
+                <textarea id="formBeschreibung" name="Beschreibung" rows="4" required></textarea>
+              </div>
+
+              <div class="form-row">
+                <label for="formDatei">Datei</label>
+                <input type="file" id="formDatei" name="Datei" accept=".pdf,.doc,.docx,.xls,.xlsx" required>
+              </div>
+
+              <div class="form-row">
+                <label>Zugewiesene Fachbereiche</label>
+                <div class="checkbox-group" id="formFachbereicheCheckboxes"></div>
+              </div>
+
+              <button type="submit">Speichern</button>
+              <p class="form-message" id="formularFormMessage" role="status"></p>
+            </form>
+          </details>
+        </section>
+
+        <dialog id="editFormularDialog" class="confirm-dialog edit-dialog">
+          <form id="editFormularForm">
+            <h3>Formular bearbeiten</h3>
+
+            <div class="form-row">
+              <label for="editFormQMKennung">QM-Kennung</label>
+              <input type="text" id="editFormQMKennung" name="QMKennung" maxlength="100" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editFormTitel">Titel</label>
+              <input type="text" id="editFormTitel" name="Titel" maxlength="255" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editFormBeschreibung">Beschreibung</label>
+              <textarea id="editFormBeschreibung" name="Beschreibung" rows="4" required></textarea>
+            </div>
+
+            <div class="form-row">
+              <label>Zugewiesene Fachbereiche</label>
+              <div class="checkbox-group" id="editFormFachbereicheCheckboxes"></div>
+            </div>
+
+            <div class="form-row">
+              <label>Datei</label>
+              <p class="form-message" id="editFormAktuelleDatei"></p>
+              <input type="file" id="editFormErsetzenDatei" accept=".pdf,.doc,.docx,.xls,.xlsx" hidden>
+            </div>
+
+            <p class="form-message" id="editFormularFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="editFormErsetzenBtn" class="btn-secondary">Ersetzen</button>
+              <button type="button" id="editFormularCancelBtn" class="btn-secondary">Abbrechen</button>
               <button type="submit" class="btn-primary">Speichern</button>
             </div>
           </form>

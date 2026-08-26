@@ -50,6 +50,7 @@ const pageLabels = {
   massnahmen: "Stammdaten / Maßnahmen",
   gruppen: "Stammdaten / Gruppen",
   fachbereiche: "Stammdaten / Fachbereiche",
+  formulare: "Stammdaten / Formulare",
   benutzer: "Benutzer",
   einstellungen: "Einstellungen",
   "audit-massnahmen": "Audit / Maßnahmen",
@@ -74,6 +75,13 @@ function isAuditorOnly(user) {
   return roles.length === 1 && roles[0] === "Auditor";
 }
 
+const FORMULARE_ERLAUBTE_ROLLEN = ["Administrator", "Bildungsstättenleiter", "Fachbereichsleiter"];
+
+function canAccessFormulare(user) {
+  const roles = (user && user.roles) || [];
+  return roles.some((r) => FORMULARE_ERLAUBTE_ROLLEN.includes(r));
+}
+
 // Login / Header
 
 const loginForm = document.getElementById("loginForm");
@@ -90,6 +98,7 @@ const dashFachbereicheCount = document.getElementById("dashFachbereicheCount");
 const stammdatenMassnahmenCount = document.getElementById("stammdatenMassnahmenCount");
 const stammdatenGruppenCount = document.getElementById("stammdatenGruppenCount");
 const stammdatenFachbereicheCount = document.getElementById("stammdatenFachbereicheCount");
+const stammdatenFormulareCount = document.getElementById("stammdatenFormulareCount");
 const dashWiedervorlagenListe = document.getElementById("dashWiedervorlagenListe");
 const wiedervorlageTerminDialog = document.getElementById("wiedervorlageTerminDialog");
 const wiedervorlageTerminForm = document.getElementById("wiedervorlageTerminForm");
@@ -141,6 +150,10 @@ function showPage(pageId) {
     currentUser &&
     currentUser.roles.includes("Lehrgangsorganisation")
   ) {
+    targetId = defaultPage;
+  }
+
+  if (targetId === "formulare" && !canAccessFormulare(currentUser)) {
     targetId = defaultPage;
   }
 
@@ -265,11 +278,17 @@ async function loadDashboardStats() {
 }
 
 async function loadStammdatenStats() {
-  await ladeKennzahlen([
+  const endpoints = [
     ["/api/massnahmen", stammdatenMassnahmenCount],
     ["/api/gruppen", stammdatenGruppenCount],
     ["/api/fachbereiche", stammdatenFachbereicheCount],
-  ]);
+  ];
+  if (canAccessFormulare(currentUser)) {
+    endpoints.push(["/api/formulare", stammdatenFormulareCount]);
+  } else {
+    stammdatenFormulareCount.textContent = "–";
+  }
+  await ladeKennzahlen(endpoints);
 }
 
 function istWiedervorlageUeberfaellig(datum) {
@@ -676,6 +695,321 @@ deleteForm.addEventListener("submit", async (event) => {
   } catch (err) {
     deleteFormMessage.textContent = err.message;
     deleteFormMessage.className = "form-message error";
+  }
+});
+
+// Formulare
+
+const formulareTableBody = document.getElementById("formulareTableBody");
+const formularForm = document.getElementById("formularForm");
+const formularFormMessage = document.getElementById("formularFormMessage");
+const formFachbereicheCheckboxes = document.getElementById("formFachbereicheCheckboxes");
+
+let formularFachbereicheCache = [];
+
+async function loadFormularFachbereicheCache() {
+  try {
+    const response = await fetch("/api/fachbereiche");
+    if (!response.ok) {
+      throw new Error("Fachbereiche konnten nicht geladen werden.");
+    }
+    formularFachbereicheCache = await response.json();
+  } catch (err) {
+    console.error(err);
+    formularFachbereicheCache = [];
+  }
+}
+
+async function loadFormularFormOptions() {
+  await loadFormularFachbereicheCache();
+  buildCheckboxGroup(formFachbereicheCheckboxes, formularFachbereicheCache, {
+    labelKey: "BezeichnungLang",
+    checkedIds: [],
+    selectAllLabel: "Alle Fachbereiche",
+  });
+}
+
+function canDeleteFormular() {
+  return currentUser && currentUser.roles.includes("Administrator");
+}
+
+function openFormularVorschau(formular) {
+  const url = `/dokument-vorschau.html?id=${formular.ID}&name=${encodeURIComponent(formular.Dateiname)}&typ=formular`;
+  window.open(url, "_blank");
+}
+
+async function loadFormulare() {
+  formulareTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 6;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  formulareTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch("/api/formulare");
+    if (!response.ok) {
+      throw new Error("Formulare konnten nicht geladen werden.");
+    }
+    const formulare = await response.json();
+
+    formulareTableBody.innerHTML = "";
+
+    if (formulare.length === 0) {
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 6;
+      emptyCell.textContent = "Noch keine Formulare vorhanden.";
+      emptyRow.appendChild(emptyCell);
+      formulareTableBody.appendChild(emptyRow);
+      return;
+    }
+
+    formulare.forEach((formular) => {
+      const row = document.createElement("tr");
+
+      const nummerCell = document.createElement("td");
+      nummerCell.textContent = formular.ID;
+
+      const qmCell = document.createElement("td");
+      qmCell.textContent = formular.QMKennung;
+
+      const titelCell = document.createElement("td");
+      titelCell.textContent = formular.Titel;
+
+      const fachbereicheCell = document.createElement("td");
+      fachbereicheCell.textContent = formular.Fachbereiche.map((f) => f.BezeichnungKurz).join(", ");
+
+      const dateiCell = document.createElement("td");
+      dateiCell.textContent = formular.Dateiname;
+
+      const actionsCell = document.createElement("td");
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "row-actions";
+
+      const previewBtn = document.createElement("button");
+      previewBtn.type = "button";
+      previewBtn.className = "row-history-btn";
+      previewBtn.title = "Vorschau";
+      previewBtn.setAttribute("aria-label", `${formular.Titel} anzeigen`);
+      previewBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      `;
+      previewBtn.addEventListener("click", () => openFormularVorschau(formular));
+
+      const downloadLink = document.createElement("a");
+      downloadLink.className = "row-files-btn";
+      downloadLink.title = "Herunterladen";
+      downloadLink.setAttribute("aria-label", `${formular.Titel} herunterladen`);
+      downloadLink.href = `/api/formulare/${formular.ID}/datei`;
+      downloadLink.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      `;
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-edit-btn";
+      editBtn.title = "Bearbeiten";
+      editBtn.setAttribute("aria-label", `${formular.Titel} bearbeiten`);
+      editBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      editBtn.addEventListener("click", () => openEditFormularDialog(formular));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "row-delete-btn";
+      deleteBtn.title = "Löschen";
+      deleteBtn.setAttribute("aria-label", `${formular.Titel} löschen`);
+      deleteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+          <path d="M10 11v6"></path>
+          <path d="M14 11v6"></path>
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      deleteBtn.addEventListener("click", () =>
+        openDeleteDialog({
+          name: formular.Titel,
+          endpoint: `/api/formulare/${formular.ID}`,
+          reload: loadFormulare,
+        })
+      );
+
+      actionsWrap.append(previewBtn, downloadLink, editBtn);
+      if (canDeleteFormular()) {
+        actionsWrap.append(deleteBtn);
+      }
+      actionsCell.appendChild(actionsWrap);
+
+      row.append(nummerCell, qmCell, titelCell, fachbereicheCell, dateiCell, actionsCell);
+      formulareTableBody.appendChild(row);
+    });
+  } catch (err) {
+    console.error(err);
+    formulareTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 6;
+    errorCell.textContent = "Fehler beim Laden der Formulare.";
+    errorRow.appendChild(errorCell);
+    formulareTableBody.appendChild(errorRow);
+  }
+}
+
+formularForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  formularFormMessage.textContent = "";
+  formularFormMessage.className = "form-message";
+
+  const formData = new FormData(formularForm);
+  getCheckedValues(formFachbereicheCheckboxes).forEach((id) => formData.append("FachbereichIDs", id));
+
+  try {
+    const response = await fetch("/api/formulare", {
+      method: "POST",
+      body: formData,
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Formular konnte nicht gespeichert werden.");
+    }
+
+    formularForm.reset();
+    buildCheckboxGroup(formFachbereicheCheckboxes, formularFachbereicheCache, {
+      labelKey: "BezeichnungLang",
+      checkedIds: [],
+      selectAllLabel: "Alle Fachbereiche",
+    });
+    formularFormMessage.textContent = "Formular gespeichert.";
+    formularFormMessage.classList.add("success");
+    await loadFormulare();
+  } catch (err) {
+    formularFormMessage.textContent = err.message;
+    formularFormMessage.classList.add("error");
+  }
+});
+
+// Formular bearbeiten
+
+const editFormularDialog = document.getElementById("editFormularDialog");
+const editFormularForm = document.getElementById("editFormularForm");
+const editFormularFormMessage = document.getElementById("editFormularFormMessage");
+const editFormFachbereicheCheckboxes = document.getElementById("editFormFachbereicheCheckboxes");
+const editFormularCancelBtn = document.getElementById("editFormularCancelBtn");
+const editFormAktuelleDatei = document.getElementById("editFormAktuelleDatei");
+const editFormErsetzenDatei = document.getElementById("editFormErsetzenDatei");
+const editFormErsetzenBtn = document.getElementById("editFormErsetzenBtn");
+
+let editingFormularId = null;
+
+function openEditFormularDialog(formular) {
+  editingFormularId = formular.ID;
+  editFormularForm.elements.QMKennung.value = formular.QMKennung;
+  editFormularForm.elements.Titel.value = formular.Titel;
+  editFormularForm.elements.Beschreibung.value = formular.Beschreibung;
+  buildCheckboxGroup(editFormFachbereicheCheckboxes, formularFachbereicheCache, {
+    labelKey: "BezeichnungLang",
+    checkedIds: formular.Fachbereiche.map((f) => f.ID),
+    selectAllLabel: "Alle Fachbereiche",
+  });
+  editFormAktuelleDatei.textContent = formular.Dateiname;
+  editFormErsetzenDatei.value = "";
+  editFormularFormMessage.textContent = "";
+  editFormularFormMessage.className = "form-message";
+  editFormularDialog.showModal();
+}
+
+editFormErsetzenBtn.addEventListener("click", () => {
+  editFormErsetzenDatei.click();
+});
+
+editFormErsetzenDatei.addEventListener("change", async () => {
+  const datei = editFormErsetzenDatei.files[0];
+  if (!datei) {
+    return;
+  }
+
+  editFormularFormMessage.textContent = "";
+  editFormularFormMessage.className = "form-message";
+
+  const formData = new FormData();
+  formData.append("Datei", datei);
+
+  try {
+    const response = await fetch(`/api/formulare/${editingFormularId}/ersetzen`, {
+      method: "POST",
+      body: formData,
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Formular konnte nicht ersetzt werden.");
+    }
+
+    editFormAktuelleDatei.textContent = body.Dateiname;
+    editFormularFormMessage.textContent = "Datei ersetzt.";
+    editFormularFormMessage.classList.add("success");
+    await loadFormulare();
+  } catch (err) {
+    editFormularFormMessage.textContent = err.message;
+    editFormularFormMessage.classList.add("error");
+  } finally {
+    editFormErsetzenDatei.value = "";
+  }
+});
+
+editFormularCancelBtn.addEventListener("click", () => {
+  editFormularDialog.close();
+});
+
+editFormularForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(editFormularForm);
+  const payload = {
+    QMKennung: formData.get("QMKennung").trim(),
+    Titel: formData.get("Titel").trim(),
+    Beschreibung: formData.get("Beschreibung").trim(),
+    FachbereichIDs: getCheckedValues(editFormFachbereicheCheckboxes),
+  };
+
+  editFormularFormMessage.textContent = "";
+  editFormularFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/formulare/${editingFormularId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Formular konnte nicht aktualisiert werden.");
+    }
+
+    editFormularDialog.close();
+    editingFormularId = null;
+    await loadFormulare();
+  } catch (err) {
+    editFormularFormMessage.textContent = err.message;
+    editFormularFormMessage.className = "form-message error";
   }
 });
 
@@ -5346,22 +5680,57 @@ async function loadBenutzerFachbereicheCache() {
   }
 }
 
-function buildCheckboxGroup(container, items, { idKey = "ID", labelKey, checkedIds = [] }) {
+function buildCheckboxGroup(container, items, { idKey = "ID", labelKey, checkedIds = [], selectAllLabel = null }) {
   container.innerHTML = "";
+
+  const itemCheckboxes = [];
+  let selectAllCheckbox = null;
+
+  function updateSelectAllState() {
+    if (!selectAllCheckbox) return;
+    const alleAngehakt = itemCheckboxes.length > 0 && itemCheckboxes.every((cb) => cb.checked);
+    const keinsAngehakt = itemCheckboxes.every((cb) => !cb.checked);
+    selectAllCheckbox.checked = alleAngehakt;
+    selectAllCheckbox.indeterminate = !alleAngehakt && !keinsAngehakt;
+  }
+
+  if (selectAllLabel) {
+    const label = document.createElement("label");
+    label.className = "checkbox-group-select-all";
+    selectAllCheckbox = document.createElement("input");
+    selectAllCheckbox.type = "checkbox";
+    selectAllCheckbox.dataset.selectAll = "true";
+    selectAllCheckbox.addEventListener("change", () => {
+      itemCheckboxes.forEach((cb) => {
+        cb.checked = selectAllCheckbox.checked;
+      });
+      selectAllCheckbox.indeterminate = false;
+    });
+    label.appendChild(selectAllCheckbox);
+    label.append(` ${selectAllLabel}`);
+    container.appendChild(label);
+  }
+
   items.forEach((item) => {
     const label = document.createElement("label");
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = item[idKey];
     checkbox.checked = checkedIds.includes(item[idKey]);
+    checkbox.addEventListener("change", updateSelectAllState);
     label.appendChild(checkbox);
     label.append(` ${item[labelKey]}`);
     container.appendChild(label);
+    itemCheckboxes.push(checkbox);
   });
+
+  updateSelectAllState();
 }
 
 function getCheckedValues(container) {
-  return Array.from(container.querySelectorAll("input[type=checkbox]:checked")).map((cb) => Number(cb.value));
+  return Array.from(container.querySelectorAll("input[type=checkbox]:checked"))
+    .filter((cb) => !cb.dataset.selectAll)
+    .map((cb) => Number(cb.value));
 }
 
 async function loadBenutzerFormOptions() {
@@ -5823,6 +6192,10 @@ function initializeApp() {
   loadFachbereiche();
   loadFachbereichOptionsInto(grpFachbereichSelect);
   loadFachbereichOptionsInto(editGrpFachbereichSelect);
+  if (canAccessFormulare(currentUser)) {
+    loadFormularFormOptions();
+    loadFormulare();
+  }
   loadGruppen();
   loadGruppeOptionsInto(mnGruppeSelect);
   loadGruppeOptionsInto(editMnGruppeSelect);
@@ -5884,6 +6257,16 @@ function applyRolePermissions(user) {
   const stammdatenFachbereicheCard = document.getElementById("stammdatenFachbereicheCard");
   if (stammdatenFachbereicheCard) {
     stammdatenFachbereicheCard.style.display = isAdmin ? "" : "none";
+  }
+
+  const formulareErlaubt = canAccessFormulare(user);
+  const formulareLink = document.querySelector('.sidebar-link[data-page="formulare"]');
+  if (formulareLink) {
+    formulareLink.closest("li").style.display = formulareErlaubt ? "" : "none";
+  }
+  const stammdatenFormulareCard = document.getElementById("stammdatenFormulareCard");
+  if (stammdatenFormulareCard) {
+    stammdatenFormulareCard.style.display = formulareErlaubt ? "" : "none";
   }
 
   const benutzerLink = document.querySelector('.sidebar-link[data-page="benutzer"]');

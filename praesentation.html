@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feature-Übersicht – Standortmanager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Istok+Web:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/praesentation.css">
+</head>
+<body class="praes-body">
+  <header class="praes-header">
+    <span class="topbar-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 21s-7-6.1-7-11.5A7 7 0 0 1 19 9.5C19 14.9 12 21 12 21z"></path>
+        <circle cx="12" cy="9.5" r="2.5"></circle>
+      </svg>
+      <span class="topbar-logo-text">Standortmanager</span>
+    </span>
+    <a href="index.html" class="praes-zurueck">Zurück zur Anwendung</a>
+  </header>
+
+  <main>
+    <section class="praes-hero">
+      <h1>Das kann der Standortmanager</h1>
+      <p>Ein Überblick über die wichtigsten Funktionen der Anwendung. Auf eine Karte klicken, um mehr zu erfahren.</p>
+    </section>
+
+    <section class="feature-grid" id="featureGrid" aria-label="Übersicht der Funktionen"></section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Standortmanager</p>
+  </footer>
+
+  <dialog id="featureDialog" class="confirm-dialog wide-dialog feature-dialog">
+    <div class="feature-dialog-header">
+      <span class="feature-icon" id="featureDialogIcon" aria-hidden="true"></span>
+      <h3 id="featureDialogTitel"></h3>
+    </div>
+    <div id="featureDialogInhalt"></div>
+    <div class="dialog-actions">
+      <button type="button" id="featureDialogSchliessenBtn" class="btn-primary">Schließen</button>
+    </div>
+  </dialog>
+
+  <script src="js/praesentation.js"></script>
+</body>
+</html>

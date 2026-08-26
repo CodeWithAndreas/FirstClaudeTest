@@ -33,6 +33,7 @@ app.use(
 const publicRoot = path.join(__dirname, "..");
 app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(publicRoot, "index.html")));
 app.get("/dokument-vorschau.html", (req, res) => res.sendFile(path.join(publicRoot, "dokument-vorschau.html")));
+app.get("/praesentation.html", (req, res) => res.sendFile(path.join(publicRoot, "praesentation.html")));
 app.use("/css", express.static(path.join(publicRoot, "css")));
 app.use("/js", express.static(path.join(publicRoot, "js")));
 app.use("/assets", express.static(path.join(publicRoot, "assets")));

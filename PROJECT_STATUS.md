@@ -3,7 +3,48 @@
 Stand: 2026-08-26. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Der Menüpunkt **Formulare** ist jetzt nur
+**Wichtig für eine neue Session:** Neue eigenständige Seite
+**`praesentation.html`** (Feature-Übersicht) – erreichbar über einen Klick
+auf das Standortmanager-Logo oben links in der Topbar (`index.html`, war
+vorher ein funktionsloser `href="#"`-Link; jetzt `href="praesentation.html"
+target="_blank"`, öffnet in einem neuen Tab wie das bestehende
+Vorschau-Fenster). Gleiches Architekturmuster wie `dokument-vorschau.html`:
+eine eigenständige HTML-Datei außerhalb des SPA-Hash-Routings, lädt
+`css/style.css` (für Design-Tokens/Farben/Schrift) plus eine eigene
+`css/praesentation.css`, eigenes Script `js/praesentation.js`, eigene
+Express-Route `app.get("/praesentation.html", ...)` neben der bestehenden
+Route für die Dokumentvorschau. **Bewusst ohne Login-Pflicht** (keine
+`requireAuth`, da `/praesentation.html` außerhalb von `/api` liegt und die
+Seite ohnehin keine einzige API abfragt – rein statischer Inhalt, unbedenklich
+auch ohne Session erreichbar).
+
+Zeigt neun von mir ausgewählte Kernfunktionen als Karten
+(`.feature-card`, 3-spaltiges responsives Grid) mit je einem selbst
+gezeichneten, farbigen Icon in einem runden Farbkreis (`.feature-icon`,
+keine externen Bilddateien – konsistent mit der "kein Build-Tooling,
+keine Fremdbilder"-Philosophie des Projekts, gleiche
+Inline-SVG-Outline-Technik wie die bestehenden UI-Icons, nur größer
+und mit Farbfläche), Titel und Kurzbeschreibung. Ein Klick auf eine Karte
+öffnet ein `<dialog class="confirm-dialog wide-dialog feature-dialog">`
+(„Unterfenster") mit größerem Icon, Titel und einem längeren, teils mit
+Aufzählungen versehenen Erklärungstext – Inhalte kommen aus einem
+statischen `FEATURES`-Array in `js/praesentation.js`, keine Datenbank-
+Anbindung nötig. Dialog schließt sowohl über einen „Schließen"-Button als
+auch per Klick auf den Backdrop. Ausgewählte Features: Teilnehmenden-
+verwaltung, Anwesenheitserfassung, Leistungskontrollen & Notenverlauf,
+Teilnehmersteckbrief, Formulare, Dokumentenverwaltung, Rollen & Rechte,
+Audit-Bereich, Systemlogs. **Lehre direkt angewendet:** Der
+„Zurück zur Anwendung"-Link in der Kopfzeile wurde bewusst NICHT als
+nacktes `class="btn-secondary"` gesetzt (der mehrfach in dieser Datei
+dokumentierte Layout-Bug bei freistehenden `.btn-secondary`/`.btn-primary`
+außerhalb von `.dialog-actions`/`.detail-actions`), sondern bekam von
+Anfang an eine eigene, vollständige CSS-Klasse `.praes-zurueck` statt
+nachträglich einen Wrapper zu brauchen. Per Playwright getestet (Klick aufs
+Logo öffnet neuen Tab, alle 9 Karten haben Icon+Titel+Inhalt, Dialog öffnet/
+schließt korrekt über Button und Backdrop, „Zurück zur Anwendung" verlinkt
+auf `index.html`).
+
+**Davor:** Der Menüpunkt **Formulare** ist jetzt nur
 für die Rollen Administrator, Bildungsstättenleiter und Fachbereichsleiter
 sichtbar/nutzbar (`FORMULARE_ERLAUBTE_ROLLEN` + `canAccessFormulare(user)`
 in `js/main.js`) – für Ausbilder, Lehrgangsorganisation und Auditor ist
@@ -672,16 +713,30 @@ dokument-vorschau.html
                   window.open() aus der Dateiablage geöffnet. Eigenes Script
                   js/dokument-vorschau.js + eigenes Stylesheet
                   css/dokument-vorschau.css (zusätzlich zu style.css).
+praesentation.html
+                  Eigenständige dritte HTML-Seite (ebenfalls außerhalb des
+                  SPA-Hash-Routings), Feature-Übersicht der Anwendung, per
+                  Klick auf das Logo in der Topbar in neuem Tab geöffnet.
+                  Eigenes Script js/praesentation.js + eigenes Stylesheet
+                  css/praesentation.css. Keine Login-Pflicht, keine
+                  API-Aufrufe (rein statischer Inhalt).
 css/style.css     Design (an bfw.de angelehnt: Primärblau #00adee, Navy #003a4d,
                   Akzentorange #ff7800, Font "Istok Web", stark abgerundete Ecken)
 css/dokument-vorschau.css
                   Zusatzstyles für dokument-vorschau.html (Layout/Rahmen für
                   iframe/Bild/DOCX/Tabellen-Vorschau)
+css/praesentation.css
+                  Zusatzstyles für praesentation.html (Feature-Grid, Karten,
+                  Detail-Dialog)
 js/main.js        Gesamte Client-Logik: Routing, Sidebar, CRUD pro Entität
 js/dokument-vorschau.js
                   Logik der Dokumentvorschau-Seite: lädt die Datei über
                   GET /api/dokumente/:id/vorschau und rendert sie je nach
                   Dateiendung (iframe/img/docx-preview/SheetJS/Fallback)
+js/praesentation.js
+                  Rendert die Feature-Karten aus einem statischen
+                  FEATURES-Array und steuert den Detail-Dialog (öffnen,
+                  über Button oder Backdrop-Klick schließen)
 js/vendor/        Vendorte Drittanbieter-Libs als reine Static Files (kein npm/
                   Build-Schritt fürs Frontend): jspdf.umd.min.js (2.5.2) +
                   jspdf.plugin.autotable.min.js (3.8.4) für den PDF-Bericht

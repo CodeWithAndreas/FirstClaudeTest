@@ -25,7 +25,7 @@ const breadcrumb = document.getElementById("breadcrumb");
 const navLinks = document.querySelectorAll(".sidebar-link[data-page]");
 const pages = document.querySelectorAll(".page");
 const defaultPage = "dashboard";
-const adminOnlyPages = ["fachbereiche", "benutzer", "einstellungen", "systemlogs-dateioperationen", "workflows", "workflows-detail"];
+const adminOnlyPages = ["fachbereiche", "massnahmetypen", "benutzer", "einstellungen", "systemlogs-dateioperationen", "workflows", "workflows-detail"];
 const auditPages = [
   "audit-interessentenbetreuung",
   "audit-massnahmen",
@@ -48,6 +48,7 @@ const pageLabels = {
   anwesenheiten: "Anwesenheiten",
   stammdaten: "Stammdaten",
   massnahmen: "Stammdaten / Maßnahmen",
+  massnahmetypen: "Stammdaten / Maßnahmetypen",
   gruppen: "Stammdaten / Gruppen",
   fachbereiche: "Stammdaten / Fachbereiche",
   formulare: "Stammdaten / Formulare",
@@ -98,6 +99,7 @@ const dashMassnahmenCount = document.getElementById("dashMassnahmenCount");
 const dashGruppenCount = document.getElementById("dashGruppenCount");
 const dashFachbereicheCount = document.getElementById("dashFachbereicheCount");
 const stammdatenMassnahmenCount = document.getElementById("stammdatenMassnahmenCount");
+const stammdatenMassnahmetypenCount = document.getElementById("stammdatenMassnahmetypenCount");
 const stammdatenGruppenCount = document.getElementById("stammdatenGruppenCount");
 const stammdatenFachbereicheCount = document.getElementById("stammdatenFachbereicheCount");
 const stammdatenFormulareCount = document.getElementById("stammdatenFormulareCount");
@@ -291,6 +293,7 @@ async function loadDashboardStats() {
 async function loadStammdatenStats() {
   const endpoints = [
     ["/api/massnahmen", stammdatenMassnahmenCount],
+    ["/api/massnahmetypen", stammdatenMassnahmetypenCount],
     ["/api/gruppen", stammdatenGruppenCount],
     ["/api/fachbereiche", stammdatenFachbereicheCount],
   ];
@@ -1844,18 +1847,241 @@ editGruppeForm.addEventListener("submit", async (event) => {
   }
 });
 
+// Maßnahmetypen
+
+const massnahmetypenTableBody = document.getElementById("massnahmetypenTableBody");
+const massnahmetypForm = document.getElementById("massnahmetypForm");
+const massnahmetypFormMessage = document.getElementById("massnahmetypFormMessage");
+
+async function loadMassnahmetypOptionsInto(selectElement) {
+  try {
+    const response = await fetch("/api/massnahmetypen");
+    if (!response.ok) {
+      throw new Error("Maßnahmetypen konnten nicht geladen werden.");
+    }
+    const massnahmetypen = await response.json();
+
+    selectElement.querySelectorAll("option[data-massnahmetyp]").forEach((option) => option.remove());
+
+    massnahmetypen.forEach((massnahmetyp) => {
+      const option = document.createElement("option");
+      option.value = massnahmetyp.ID;
+      option.textContent = massnahmetyp.Bezeichnung;
+      option.dataset.massnahmetyp = "true";
+      selectElement.appendChild(option);
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadMassnahmetypen() {
+  massnahmetypenTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 4;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  massnahmetypenTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch("/api/massnahmetypen");
+    if (!response.ok) {
+      throw new Error("Maßnahmetypen konnten nicht geladen werden.");
+    }
+    const massnahmetypen = await response.json();
+
+    massnahmetypenTableBody.innerHTML = "";
+
+    if (massnahmetypen.length === 0) {
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 4;
+      emptyCell.textContent = "Noch keine Maßnahmetypen vorhanden.";
+      emptyRow.appendChild(emptyCell);
+      massnahmetypenTableBody.appendChild(emptyRow);
+      return;
+    }
+
+    massnahmetypen.forEach((massnahmetyp) => {
+      const row = document.createElement("tr");
+
+      const bezeichnungCell = document.createElement("td");
+      bezeichnungCell.textContent = massnahmetyp.Bezeichnung;
+
+      const kuerzelCell = document.createElement("td");
+      kuerzelCell.textContent = massnahmetyp.Kuerzel;
+
+      const kennungCell = document.createElement("td");
+      kennungCell.textContent = massnahmetyp.Kennung || "";
+
+      const actionsCell = document.createElement("td");
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-edit-btn";
+      editBtn.setAttribute("aria-label", `${massnahmetyp.Bezeichnung} bearbeiten`);
+      editBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      editBtn.addEventListener("click", () => openEditMassnahmetypDialog(massnahmetyp));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "row-delete-btn";
+      deleteBtn.setAttribute("aria-label", `${massnahmetyp.Bezeichnung} löschen`);
+      deleteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+          <path d="M10 11v6"></path>
+          <path d="M14 11v6"></path>
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      deleteBtn.addEventListener("click", () =>
+        openDeleteDialog({
+          name: massnahmetyp.Bezeichnung,
+          endpoint: `/api/massnahmetypen/${massnahmetyp.ID}`,
+          reload: loadMassnahmetypen,
+        })
+      );
+
+      actionsWrap.append(editBtn, deleteBtn);
+      actionsCell.appendChild(actionsWrap);
+
+      row.append(bezeichnungCell, kuerzelCell, kennungCell, actionsCell);
+      massnahmetypenTableBody.appendChild(row);
+    });
+  } catch (err) {
+    console.error(err);
+    massnahmetypenTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 4;
+    errorCell.textContent = "Fehler beim Laden der Maßnahmetypen.";
+    errorRow.appendChild(errorCell);
+    massnahmetypenTableBody.appendChild(errorRow);
+  }
+
+  loadMassnahmetypOptionsInto(mnMassnahmetypSelect);
+  loadMassnahmetypOptionsInto(editMnMassnahmetypSelect);
+}
+
+massnahmetypForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(massnahmetypForm);
+  const payload = {
+    Bezeichnung: formData.get("Bezeichnung").trim(),
+    Beschreibung: formData.get("Beschreibung").trim(),
+    Kuerzel: formData.get("Kuerzel").trim(),
+    Kennung: formData.get("Kennung").trim(),
+  };
+
+  massnahmetypFormMessage.textContent = "";
+  massnahmetypFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch("/api/massnahmetypen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Maßnahmetyp konnte nicht gespeichert werden.");
+    }
+
+    massnahmetypForm.reset();
+    massnahmetypFormMessage.textContent = "Maßnahmetyp gespeichert.";
+    massnahmetypFormMessage.classList.add("success");
+    await loadMassnahmetypen();
+  } catch (err) {
+    massnahmetypFormMessage.textContent = err.message;
+    massnahmetypFormMessage.classList.add("error");
+  }
+});
+
+// Maßnahmetyp bearbeiten
+
+const editMassnahmetypDialog = document.getElementById("editMassnahmetypDialog");
+const editMassnahmetypForm = document.getElementById("editMassnahmetypForm");
+const editMassnahmetypFormMessage = document.getElementById("editMassnahmetypFormMessage");
+const editMassnahmetypCancelBtn = document.getElementById("editMassnahmetypCancelBtn");
+
+let editingMassnahmetypId = null;
+
+function openEditMassnahmetypDialog(massnahmetyp) {
+  editingMassnahmetypId = massnahmetyp.ID;
+  editMassnahmetypForm.elements.Bezeichnung.value = massnahmetyp.Bezeichnung;
+  editMassnahmetypForm.elements.Beschreibung.value = massnahmetyp.Beschreibung || "";
+  editMassnahmetypForm.elements.Kuerzel.value = massnahmetyp.Kuerzel;
+  editMassnahmetypForm.elements.Kennung.value = massnahmetyp.Kennung || "";
+  editMassnahmetypFormMessage.textContent = "";
+  editMassnahmetypFormMessage.className = "form-message";
+  editMassnahmetypDialog.showModal();
+}
+
+editMassnahmetypCancelBtn.addEventListener("click", () => {
+  editMassnahmetypDialog.close();
+});
+
+editMassnahmetypForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(editMassnahmetypForm);
+  const payload = {
+    Bezeichnung: formData.get("Bezeichnung").trim(),
+    Beschreibung: formData.get("Beschreibung").trim(),
+    Kuerzel: formData.get("Kuerzel").trim(),
+    Kennung: formData.get("Kennung").trim(),
+  };
+
+  editMassnahmetypFormMessage.textContent = "";
+  editMassnahmetypFormMessage.className = "form-message";
+
+  try {
+    const response = await fetch(`/api/massnahmetypen/${editingMassnahmetypId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Maßnahmetyp konnte nicht aktualisiert werden.");
+    }
+
+    editMassnahmetypDialog.close();
+    editingMassnahmetypId = null;
+    await loadMassnahmetypen();
+  } catch (err) {
+    editMassnahmetypFormMessage.textContent = err.message;
+    editMassnahmetypFormMessage.className = "form-message error";
+  }
+});
+
 // Maßnahmen
 
 const massnahmenTableBody = document.getElementById("massnahmenTableBody");
 const massnahmeForm = document.getElementById("massnahmeForm");
 const massnahmeFormMessage = document.getElementById("massnahmeFormMessage");
 const mnGruppeSelect = document.getElementById("mnGruppeID");
+const mnMassnahmetypSelect = document.getElementById("mnMassnahmetypID");
 
 const editMassnahmeDialog = document.getElementById("editMassnahmeDialog");
 const editMassnahmeForm = document.getElementById("editMassnahmeForm");
 const editMassnahmeFormMessage = document.getElementById("editMassnahmeFormMessage");
 const editMassnahmeCancelBtn = document.getElementById("editMassnahmeCancelBtn");
 const editMnGruppeSelect = document.getElementById("editMnGruppeID");
+const editMnMassnahmetypSelect = document.getElementById("editMnMassnahmetypID");
 
 async function loadGruppeOptionsInto(selectElement) {
   try {
@@ -1883,7 +2109,7 @@ async function loadMassnahmen() {
   massnahmenTableBody.innerHTML = "";
   const loadingRow = document.createElement("tr");
   const loadingCell = document.createElement("td");
-  loadingCell.colSpan = 7;
+  loadingCell.colSpan = 8;
   loadingCell.textContent = "Lädt…";
   loadingRow.appendChild(loadingCell);
   massnahmenTableBody.appendChild(loadingRow);
@@ -1900,7 +2126,7 @@ async function loadMassnahmen() {
     if (massnahmen.length === 0) {
       const emptyRow = document.createElement("tr");
       const emptyCell = document.createElement("td");
-      emptyCell.colSpan = 7;
+      emptyCell.colSpan = 8;
       emptyCell.textContent = "Noch keine Maßnahmen vorhanden.";
       emptyRow.appendChild(emptyCell);
       massnahmenTableBody.appendChild(emptyRow);
@@ -1918,6 +2144,9 @@ async function loadMassnahmen() {
 
       const gruppeCell = document.createElement("td");
       gruppeCell.textContent = massnahme.GruppeBezeichnung || "";
+
+      const massnahmetypCell = document.createElement("td");
+      massnahmetypCell.textContent = massnahme.MassnahmetypBezeichnung || "";
 
       const zertCell = document.createElement("td");
       zertCell.textContent = formatDateDE(massnahme.ZertDatum);
@@ -1971,7 +2200,7 @@ async function loadMassnahmen() {
       }
       actionsCell.appendChild(actionsWrap);
 
-      row.append(bezeichnungCell, vtCell, gruppeCell, zertCell, startCell, endeCell, actionsCell);
+      row.append(bezeichnungCell, vtCell, gruppeCell, massnahmetypCell, zertCell, startCell, endeCell, actionsCell);
       massnahmenTableBody.appendChild(row);
     });
 
@@ -1982,7 +2211,7 @@ async function loadMassnahmen() {
     massnahmenTableBody.innerHTML = "";
     const errorRow = document.createElement("tr");
     const errorCell = document.createElement("td");
-    errorCell.colSpan = 7;
+    errorCell.colSpan = 8;
     errorCell.textContent = "Fehler beim Laden der Maßnahmen.";
     errorRow.appendChild(errorCell);
     massnahmenTableBody.appendChild(errorRow);
@@ -1997,6 +2226,7 @@ massnahmeForm.addEventListener("submit", async (event) => {
     Bezeichnung: formData.get("Bezeichnung").trim(),
     VT: formData.get("VT").trim(),
     GruppeID: formData.get("GruppeID"),
+    MassnahmetypID: formData.get("MassnahmetypID"),
     ZertDatum: formData.get("ZertDatum"),
     PlanStart: formData.get("PlanStart"),
     PlanEnde: formData.get("PlanEnde"),
@@ -2034,6 +2264,7 @@ function openEditMassnahmeDialog(massnahme) {
   editMassnahmeForm.elements.Bezeichnung.value = massnahme.Bezeichnung;
   editMassnahmeForm.elements.VT.value = massnahme.VT;
   editMnGruppeSelect.value = massnahme.GruppeID || "";
+  editMnMassnahmetypSelect.value = massnahme.MassnahmetypID || "";
   editMassnahmeForm.elements.ZertDatum.value = massnahme.ZertDatum;
   editMassnahmeForm.elements.PlanStart.value = massnahme.PlanStart;
   editMassnahmeForm.elements.PlanEnde.value = massnahme.PlanEnde;
@@ -2054,6 +2285,7 @@ editMassnahmeForm.addEventListener("submit", async (event) => {
     Bezeichnung: formData.get("Bezeichnung").trim(),
     VT: formData.get("VT").trim(),
     GruppeID: formData.get("GruppeID"),
+    MassnahmetypID: formData.get("MassnahmetypID"),
     ZertDatum: formData.get("ZertDatum"),
     PlanStart: formData.get("PlanStart"),
     PlanEnde: formData.get("PlanEnde"),
@@ -3664,6 +3896,7 @@ const skbFachbereich = document.getElementById("skbFachbereich");
 const skbGruppe = document.getElementById("skbGruppe");
 const skbMassnahme = document.getElementById("skbMassnahme");
 const skbVt = document.getElementById("skbVt");
+const skbMassnahmetyp = document.getElementById("skbMassnahmetyp");
 
 const skbFehltageGesamt = document.getElementById("skbFehltageGesamt");
 const skbFehltageEntschuldigt = document.getElementById("skbFehltageEntschuldigt");
@@ -4015,6 +4248,7 @@ async function loadTeilnehmerSteckbriefPage(teilnehmerId) {
   skbGruppe.textContent = person.GruppeBezeichnung || "–";
   skbMassnahme.textContent = person.MassnahmeBezeichnung || "–";
   skbVt.textContent = person.VT || "–";
+  skbMassnahmetyp.textContent = person.MassnahmetypBezeichnung || "–";
 
   skbAnwesenheitTableBody.innerHTML = "";
   const ladeRow = document.createElement("tr");
@@ -6826,6 +7060,7 @@ function initializeApp() {
   loadGruppen();
   loadGruppeOptionsInto(mnGruppeSelect);
   loadGruppeOptionsInto(editMnGruppeSelect);
+  loadMassnahmetypen();
   loadMassnahmen();
   loadMassnahmeOptionsInto(tnMassnahmeSelect, { includeVt: true });
   loadMassnahmeOptionsInto(editTnMassnahmeSelect, { includeVt: true });
@@ -6884,6 +7119,15 @@ function applyRolePermissions(user) {
   const stammdatenFachbereicheCard = document.getElementById("stammdatenFachbereicheCard");
   if (stammdatenFachbereicheCard) {
     stammdatenFachbereicheCard.style.display = isAdmin ? "" : "none";
+  }
+
+  const massnahmetypenLink = document.querySelector('.sidebar-link[data-page="massnahmetypen"]');
+  if (massnahmetypenLink) {
+    massnahmetypenLink.closest("li").style.display = isAdmin ? "" : "none";
+  }
+  const stammdatenMassnahmetypenCard = document.getElementById("stammdatenMassnahmetypenCard");
+  if (stammdatenMassnahmetypenCard) {
+    stammdatenMassnahmetypenCard.style.display = isAdmin ? "" : "none";
   }
 
   const formulareErlaubt = canAccessFormulare(user);

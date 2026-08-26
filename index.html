@@ -140,6 +140,11 @@
                   </a>
                 </li>
                 <li>
+                  <a href="#massnahmetypen" class="sidebar-link" data-page="massnahmetypen">
+                    <span class="label">Maßnahmetypen</span>
+                  </a>
+                </li>
+                <li>
                   <a href="#gruppen" class="sidebar-link" data-page="gruppen">
                     <span class="label">Gruppen</span>
                   </a>
@@ -667,6 +672,10 @@
               <span class="stat-value" id="skbVt">–</span>
               <span class="stat-label">VT</span>
             </div>
+            <div class="stat-card">
+              <span class="stat-value" id="skbMassnahmetyp">–</span>
+              <span class="stat-label">Maßnahmetyp</span>
+            </div>
           </div>
 
           <hr class="steckbrief-divider">
@@ -1192,6 +1201,10 @@
               <span class="stat-value" id="stammdatenMassnahmenCount">–</span>
               <span class="stat-label">Maßnahmen</span>
             </a>
+            <a href="#massnahmetypen" class="stat-card stammdaten-card" id="stammdatenMassnahmetypenCard">
+              <span class="stat-value" id="stammdatenMassnahmetypenCount">–</span>
+              <span class="stat-label">Maßnahmetypen</span>
+            </a>
             <a href="#gruppen" class="stat-card stammdaten-card">
               <span class="stat-value" id="stammdatenGruppenCount">–</span>
               <span class="stat-label">Gruppen</span>
@@ -1221,6 +1234,7 @@
                   <th>Bezeichnung</th>
                   <th>VT</th>
                   <th>Gruppe</th>
+                  <th>Maßnahmetyp</th>
                   <th>Zert.-Datum</th>
                   <th>Plan-Start</th>
                   <th>Plan-Ende</th>
@@ -1229,7 +1243,7 @@
               </thead>
               <tbody id="massnahmenTableBody">
                 <tr>
-                  <td colspan="7">Lädt…</td>
+                  <td colspan="8">Lädt…</td>
                 </tr>
               </tbody>
             </table>
@@ -1253,6 +1267,13 @@
                 <label for="mnGruppeID">Gruppe</label>
                 <select id="mnGruppeID" name="GruppeID">
                   <option value="">– keine Gruppe –</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="mnMassnahmetypID">Maßnahmetyp</label>
+                <select id="mnMassnahmetypID" name="MassnahmetypID">
+                  <option value="">– kein Maßnahmetyp –</option>
                 </select>
               </div>
 
@@ -1299,6 +1320,13 @@
             </div>
 
             <div class="form-row">
+              <label for="editMnMassnahmetypID">Maßnahmetyp</label>
+              <select id="editMnMassnahmetypID" name="MassnahmetypID">
+                <option value="">– kein Maßnahmetyp –</option>
+              </select>
+            </div>
+
+            <div class="form-row">
               <label for="editMnZertDatum">Zert.-Datum</label>
               <input type="date" id="editMnZertDatum" name="ZertDatum" required>
             </div>
@@ -1317,6 +1345,90 @@
 
             <div class="dialog-actions">
               <button type="button" id="editMassnahmeCancelBtn" class="btn-secondary">Abbrechen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </dialog>
+
+        <section id="page-massnahmetypen" class="page">
+          <h2>Maßnahmetypen</h2>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Bezeichnung</th>
+                  <th>Kürzel</th>
+                  <th>Kennung</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="massnahmetypenTableBody">
+                <tr>
+                  <td colspan="4">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <details class="collapsible-form">
+            <summary>Neuer Maßnahmetyp</summary>
+
+            <form id="massnahmetypForm" class="data-form">
+              <div class="form-row">
+                <label for="mtBezeichnung">Bezeichnung</label>
+                <input type="text" id="mtBezeichnung" name="Bezeichnung" maxlength="255" required>
+              </div>
+
+              <div class="form-row">
+                <label for="mtBeschreibung">Beschreibung</label>
+                <textarea id="mtBeschreibung" name="Beschreibung" rows="3"></textarea>
+              </div>
+
+              <div class="form-row">
+                <label for="mtKuerzel">Kürzel</label>
+                <input type="text" id="mtKuerzel" name="Kuerzel" maxlength="15" required>
+              </div>
+
+              <div class="form-row">
+                <label for="mtKennung">Kennung</label>
+                <input type="text" id="mtKennung" name="Kennung" maxlength="45">
+              </div>
+
+              <button type="submit">Speichern</button>
+              <p class="form-message" id="massnahmetypFormMessage" role="status"></p>
+            </form>
+          </details>
+        </section>
+
+        <dialog id="editMassnahmetypDialog" class="confirm-dialog edit-dialog">
+          <form id="editMassnahmetypForm">
+            <h3>Maßnahmetyp bearbeiten</h3>
+
+            <div class="form-row">
+              <label for="editMtBezeichnung">Bezeichnung</label>
+              <input type="text" id="editMtBezeichnung" name="Bezeichnung" maxlength="255" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editMtBeschreibung">Beschreibung</label>
+              <textarea id="editMtBeschreibung" name="Beschreibung" rows="3"></textarea>
+            </div>
+
+            <div class="form-row">
+              <label for="editMtKuerzel">Kürzel</label>
+              <input type="text" id="editMtKuerzel" name="Kuerzel" maxlength="15" required>
+            </div>
+
+            <div class="form-row">
+              <label for="editMtKennung">Kennung</label>
+              <input type="text" id="editMtKennung" name="Kennung" maxlength="45">
+            </div>
+
+            <p class="form-message" id="editMassnahmetypFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="editMassnahmetypCancelBtn" class="btn-secondary">Abbrechen</button>
               <button type="submit" class="btn-primary">Speichern</button>
             </div>
           </form>

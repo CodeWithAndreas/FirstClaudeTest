@@ -3,7 +3,86 @@
 Stand: 2026-08-26. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Die Maßnahmen-/VT-Zuordnung einer
+**Wichtig für eine neue Session:** Der Menüpunkt **Maßnahmetypen** ist jetzt
+doch Administrator-only – die vorherige Session-Notiz weiter unten
+("unbegründete Annahme, zurückgenommen") wurde durch eine explizite
+Nutzeranfrage überholt. Umsetzung 1:1 nach dem `adminOnlyPages`-Muster wie
+bei Fachbereiche/Workflows: `"massnahmetypen"` in `adminOnlyPages`
+(`js/main.js`), Sidebar-Link + Stammdaten-Stat-Karte über `isAdmin` in
+`applyRolePermissions()` ausgeblendet (Karte bekam dafür ihre
+`id="stammdatenMassnahmetypenCard"` zurück). Backend: `POST`/`PUT`/`DELETE
+/api/massnahmetypen(/:id)` jetzt mit `requireRole("Administrator")`
+(vorher bei DELETE nur `isRestrictedUser`-Check). **Bewusst NICHT
+angefasst:** `GET /api/massnahmetypen` bleibt für alle authentifizierten
+Nutzer offen – das Maßnahmetyp-Dropdown in der Maßnahmen-Anlage/-Bearbeitung
+wird von **allen** Rollen benötigt (nicht nur Administrator), ein
+Admin-Lock auf GET hätte dieses unabhängige Feature für Nicht-Admins
+kaputt gemacht. Per curl verifiziert: GET als Ausbilder weiterhin 200,
+POST als Ausbilder jetzt 403. Die Löschen-Schaltfläche in der
+Maßnahmetypen-Tabelle wird jetzt unconditional angezeigt (kein
+`canDeleteMassnahmenOderTeilnehmer()`-Check mehr nötig, da die gesamte
+Seite ohnehin nur für Administratoren sichtbar ist – exakt wie bei
+Fachbereiche). Per Playwright verifiziert: Administrator voller Zugriff,
+Bildungsstättenleiter/Ausbilder/Lehrgangsorganisation ausgeschlossen
+(Sidebar, Stat-Karte, Hash-Redirect).
+
+**Davor:** Neue Stammdaten-Entität
+**Maßnahmetyp** (Sidebar-Unterpunkt "Maßnahmetypen" direkt nach "Maßnahmen",
+eigene Stammdaten-Stat-Karte) mit den vier angefragten Feldern Bezeichnung,
+Beschreibung, Kennung, Kürzel – Seitenaufbau/Formulare 1:1 nach dem
+Fachbereich-Muster kopiert (Tabelle + einklappbares Neuanlage-Formular +
+Bearbeiten-Dialog), nur Beschreibung zusätzlich als Textarea. `Massnahme`
+hat jetzt eine optionale `MassnahmetypID`-Zuordnung (Dropdown „– kein
+Maßnahmetyp –“ als leere Standardoption, analog zum bestehenden
+Gruppe-Dropdown) in Neuanlage-Formular, Bearbeiten-Dialog und als neue
+Tabellenspalte auf der Maßnahmen-Seite. **Bewusste Scoping-Entscheidung zu
+Berechtigungen:** Ich hatte zunächst versucht, Maßnahmetyp wie Fachbereich
+komplett Administrator-only zu machen (gleiche Grundstruktur: Bezeichnung/
+Kürzel/Kennung) – das war aber eine unbegründete Annahme, da die Anfrage
+keinerlei Rolleneinschränkung erwähnte. Zurückgenommen zugunsten des
+Massnahme-Musters: `GET`/`POST`/`PUT` auf `/api/massnahmetypen` sind für
+alle authentifizierten Nutzer offen (keine Fachbereichs-Scoping nötig, da
+Maßnahmetyp global und nicht fachbereichsgebunden ist), `DELETE` verlangt
+wie beim bestehenden `DELETE /api/massnahmen/:id` eine **uneingeschränkte**
+Rolle (`isRestrictedUser(req)` → 403 für Ausbilder/Fachbereichsleiter,
+alle anderen Rollen dürfen löschen) – kein Administrator-only-Lock. Ein
+gelöschter Maßnahmetyp setzt `MassnahmetypID` bei betroffenen Maßnahmen
+per `ON DELETE SET NULL` automatisch auf leer, statt das Löschen zu
+blockieren. Da `massnahme` bereits Teil des `schema.sql`-Grundschemas ist
+(nicht erst diese Session hinzugekommen), wurde die neue Spalte an
+**beiden** Stellen ergänzt: `schema.sql` (Neuinstallation) und als
+ALTER-TABLE-Fallback in `bootstrapDatabase()` (bereits laufende
+Datenbanken) – exakt das bei `aktivitaet`/`dokument` dokumentierte Muster.
+
+**Steckbrief erweitert:** Neue fünfte Stat-Karte "Maßnahmetyp" im
+`steckbrief-meta-grid` neben Fachbereich/Gruppe/Maßnahme/VT
+(`GET /api/teilnehmer` liefert jetzt zusätzlich `MassnahmetypBezeichnung`
+über einen weiteren `LEFT JOIN massnahmetyp`). **Bewusst NICHT** angefasst:
+alle anderen Maßnahme-bezogenen Dropdowns/Filter im Projekt (Teilnehmer-
+Anlage/Bearbeiten, Anwesenheiten-Filter, Leistungskontrolle-Filter,
+Teilnehmende-Tabelle) – die Anfrage nannte explizit nur "alle Anzeigen und
+Fenster zu Maßnahmen" (verstanden als: die Maßnahmen-Verwaltung selbst) und
+den Steckbrief als einzige zusätzliche, ausdrücklich genannte Stelle.
+
+**Echter Datenfehler während des Testens verursacht und behoben:** Ein
+`curl -d '{"Bezeichnung":"...für..."}'`-Befehl über die Bash-Shell hat den
+Umlaut „ü" beim Speichern in der Datenbank irreversibel zum Unicode-
+Replacement-Character (U+FFFD) korrumpiert (Encoding-Problem der
+Shell-Weiterleitung, nicht des Servers) – sichtbar geworden erst im
+Steckbrief-Screenshot einer echten Teilnehmerin ("Elektroniker/in f�r
+Betriebstechnik"). Behoben durch erneutes PUT mit dem Payload aus einer
+zuvor per Node.js geschriebenen, nachweislich korrekt UTF-8-kodierten
+Datei (`--data-binary @datei.json` statt Inline-`-d`). **Lehre für
+künftige Tests dieser Session:** Bei curl-Testdaten mit Umlauten/
+Sonderzeichen niemals Inline-`-d '...'` über die Bash-Shell verwenden,
+sondern den JSON-Body zuerst in eine Datei schreiben und deren korrekte
+UTF-8-Bytes verifizieren, bevor sie per `--data-binary @datei` gesendet
+wird – sonst droht stille, irreversible Datenkorruption an echten
+(nicht nur Test-)Datensätzen. Alle Testdaten (Test-Maßnahmetyp,
+Test-Maßnahme, versehentliche Maßnahmetyp-Zuweisung an eine echte
+Maßnahme) wurden nach dem Test vollständig entfernt bzw. zurückgesetzt.
+
+**Davor:** Die Maßnahmen-/VT-Zuordnung einer
 Leistungskontrolle ist jetzt **nur noch beim Anlegen wählbar** und auf der
 Bearbeiten-Seite (`page-leistungskontrollen-detail`) **schreibgeschützt**:
 `lkDetailMassnahmenCheckboxes` (die frühere Checkbox-Gruppe mit allen

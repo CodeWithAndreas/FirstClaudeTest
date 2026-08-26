@@ -133,6 +133,29 @@ async function bootstrapDatabase() {
   }
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS massnahmetyp (
+      ID INT NOT NULL AUTO_INCREMENT,
+      Bezeichnung VARCHAR(255) NOT NULL,
+      Beschreibung TEXT DEFAULT NULL,
+      Kennung VARCHAR(45) DEFAULT NULL,
+      Kuerzel VARCHAR(15) NOT NULL,
+      PRIMARY KEY (ID)
+    ) ENGINE=InnoDB
+  `);
+
+  const [massnahmeSpalten] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'massnahme' AND COLUMN_NAME = 'MassnahmetypID'`
+  );
+  if (massnahmeSpalten.length === 0) {
+    await pool.query("ALTER TABLE massnahme ADD COLUMN MassnahmetypID INT DEFAULT NULL");
+    await pool.query("ALTER TABLE massnahme ADD KEY fk_Massnahme_Massnahmetyp_idx (MassnahmetypID)");
+    await pool.query(
+      "ALTER TABLE massnahme ADD CONSTRAINT fk_Massnahme_Massnahmetyp FOREIGN KEY (MassnahmetypID) REFERENCES massnahmetyp (ID) ON DELETE SET NULL"
+    );
+  }
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS dokument (
       ID INT NOT NULL AUTO_INCREMENT,
       TeilnehmerID INT NOT NULL,
@@ -1102,6 +1125,103 @@ app.delete("/api/fachbereiche/:id", requireRole("Administrator"), async (req, re
   }
 });
 
+// --- Maßnahmetypen ---
+
+app.get("/api/massnahmetypen", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT ID, Bezeichnung, Beschreibung, Kennung, Kuerzel FROM massnahmetyp ORDER BY Bezeichnung"
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Maßnahmetypen konnten nicht geladen werden." });
+  }
+});
+
+function readMassnahmetypBody(body) {
+  const { Bezeichnung, Beschreibung, Kennung, Kuerzel } = body;
+
+  if (!Bezeichnung || !Kuerzel) {
+    return { error: "Bezeichnung und Kürzel sind erforderlich." };
+  }
+
+  return {
+    values: {
+      Bezeichnung,
+      Beschreibung: Beschreibung || null,
+      Kennung: Kennung || null,
+      Kuerzel,
+    },
+  };
+}
+
+app.post("/api/massnahmetypen", requireRole("Administrator"), async (req, res) => {
+  const { error, values } = readMassnahmetypBody(req.body);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "INSERT INTO massnahmetyp (Bezeichnung, Beschreibung, Kennung, Kuerzel) VALUES (?, ?, ?, ?)",
+      [values.Bezeichnung, values.Beschreibung, values.Kennung, values.Kuerzel]
+    );
+    res.status(201).json({ ID: result.insertId, ...values });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Maßnahmetyp konnte nicht gespeichert werden." });
+  }
+});
+
+app.put("/api/massnahmetypen/:id", requireRole("Administrator"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const { error, values } = readMassnahmetypBody(req.body);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE massnahmetyp SET Bezeichnung = ?, Beschreibung = ?, Kennung = ?, Kuerzel = ? WHERE ID = ?",
+      [values.Bezeichnung, values.Beschreibung, values.Kennung, values.Kuerzel, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Maßnahmetyp wurde nicht gefunden." });
+    }
+
+    res.json({ ID: id, ...values });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Maßnahmetyp konnte nicht aktualisiert werden." });
+  }
+});
+
+app.delete("/api/massnahmetypen/:id", requireRole("Administrator"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  try {
+    const [result] = await pool.query("DELETE FROM massnahmetyp WHERE ID = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Maßnahmetyp wurde nicht gefunden." });
+    }
+
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Maßnahmetyp konnte nicht gelöscht werden." });
+  }
+});
+
 // --- Formulare (Formular-Vorlagen) ---
 
 async function attachFachbereicheZuFormularen(formularRows) {
@@ -1953,9 +2073,11 @@ app.delete("/api/gruppen/:id", async (req, res) => {
 app.get("/api/massnahmen", async (req, res) => {
   try {
     let query = `SELECT m.ID, m.Bezeichnung, m.VT, m.GruppeID, g.Bezeichnung AS GruppeBezeichnung,
+              m.MassnahmetypID, mt.Bezeichnung AS MassnahmetypBezeichnung, mt.Kuerzel AS MassnahmetypKuerzel,
               m.ZertDatum, m.PlanStart, m.PlanEnde
        FROM massnahme m
-       LEFT JOIN gruppe g ON g.ID = m.GruppeID`;
+       LEFT JOIN gruppe g ON g.ID = m.GruppeID
+       LEFT JOIN massnahmetyp mt ON mt.ID = m.MassnahmetypID`;
     const params = [];
 
     if (isRestrictedUser(req)) {
@@ -1978,7 +2100,7 @@ app.get("/api/massnahmen", async (req, res) => {
 });
 
 function readMassnahmeBody(body) {
-  const { Bezeichnung, VT, GruppeID, ZertDatum, PlanStart, PlanEnde } = body;
+  const { Bezeichnung, VT, GruppeID, MassnahmetypID, ZertDatum, PlanStart, PlanEnde } = body;
 
   if (!Bezeichnung || !VT || !ZertDatum || !PlanStart || !PlanEnde) {
     return { error: "Bezeichnung, VT, Zert.-Datum, Plan-Start und Plan-Ende sind erforderlich." };
@@ -1989,6 +2111,7 @@ function readMassnahmeBody(body) {
       Bezeichnung,
       VT,
       GruppeID: GruppeID ? Number(GruppeID) : null,
+      MassnahmetypID: MassnahmetypID ? Number(MassnahmetypID) : null,
       ZertDatum,
       PlanStart,
       PlanEnde,
@@ -2010,8 +2133,8 @@ app.post("/api/massnahmen", async (req, res) => {
     }
 
     const [result] = await pool.query(
-      "INSERT INTO massnahme (Bezeichnung, VT, GruppeID, ZertDatum, PlanStart, PlanEnde) VALUES (?, ?, ?, ?, ?, ?)",
-      [values.Bezeichnung, values.VT, values.GruppeID, values.ZertDatum, values.PlanStart, values.PlanEnde]
+      "INSERT INTO massnahme (Bezeichnung, VT, GruppeID, MassnahmetypID, ZertDatum, PlanStart, PlanEnde) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [values.Bezeichnung, values.VT, values.GruppeID, values.MassnahmetypID, values.ZertDatum, values.PlanStart, values.PlanEnde]
     );
     res.status(201).json({ ID: result.insertId, ...values });
   } catch (err) {
@@ -2048,8 +2171,8 @@ app.put("/api/massnahmen/:id", async (req, res) => {
     }
 
     const [result] = await pool.query(
-      "UPDATE massnahme SET Bezeichnung = ?, VT = ?, GruppeID = ?, ZertDatum = ?, PlanStart = ?, PlanEnde = ? WHERE ID = ?",
-      [values.Bezeichnung, values.VT, values.GruppeID, values.ZertDatum, values.PlanStart, values.PlanEnde, id]
+      "UPDATE massnahme SET Bezeichnung = ?, VT = ?, GruppeID = ?, MassnahmetypID = ?, ZertDatum = ?, PlanStart = ?, PlanEnde = ? WHERE ID = ?",
+      [values.Bezeichnung, values.VT, values.GruppeID, values.MassnahmetypID, values.ZertDatum, values.PlanStart, values.PlanEnde, id]
     );
 
     if (result.affectedRows === 0) {
@@ -2095,11 +2218,13 @@ app.get("/api/teilnehmer", async (req, res) => {
     let query = `SELECT t.ID, t.Vorname, t.Nachname, t.Geburtsdatum, t.MassnahmeID, m.Bezeichnung AS MassnahmeBezeichnung,
               m.VT, m.GruppeID, g.Bezeichnung AS GruppeBezeichnung, g.Kennung AS GruppeKennung, g.FachbereichID,
               f.BezeichnungLang AS FachbereichBezeichnung,
+              mt.Bezeichnung AS MassnahmetypBezeichnung, mt.Kuerzel AS MassnahmetypKuerzel,
               t.Startdatum, t.Endedatum, t.Email, t.Telefon
        FROM teilnehmer t
        LEFT JOIN massnahme m ON m.ID = t.MassnahmeID
        LEFT JOIN gruppe g ON g.ID = m.GruppeID
-       LEFT JOIN fachbereich f ON f.ID = g.FachbereichID`;
+       LEFT JOIN fachbereich f ON f.ID = g.FachbereichID
+       LEFT JOIN massnahmetyp mt ON mt.ID = m.MassnahmetypID`;
     const params = [];
 
     if (isRestrictedUser(req)) {

@@ -23,17 +23,29 @@ CREATE TABLE IF NOT EXISTS gruppe (
   CONSTRAINT fk_Gruppe_Fachbereich1 FOREIGN KEY (FachbereichID) REFERENCES fachbereich (ID)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
 
+CREATE TABLE IF NOT EXISTS massnahmetyp (
+  ID INT NOT NULL AUTO_INCREMENT,
+  Bezeichnung VARCHAR(255) NOT NULL,
+  Beschreibung TEXT DEFAULT NULL,
+  Kennung VARCHAR(45) DEFAULT NULL,
+  Kuerzel VARCHAR(15) NOT NULL,
+  PRIMARY KEY (ID)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+
 CREATE TABLE IF NOT EXISTS massnahme (
   ID INT NOT NULL AUTO_INCREMENT,
   Bezeichnung VARCHAR(255) NOT NULL,
   VT VARCHAR(45) NOT NULL,
   GruppeID INT DEFAULT NULL,
+  MassnahmetypID INT DEFAULT NULL,
   ZertDatum DATE NOT NULL,
   PlanStart DATE NOT NULL,
   PlanEnde DATE NOT NULL,
   PRIMARY KEY (ID),
   KEY fk_Massnahme_Gruppe1_idx (GruppeID),
-  CONSTRAINT fk_Massnahme_Gruppe1 FOREIGN KEY (GruppeID) REFERENCES gruppe (ID)
+  KEY fk_Massnahme_Massnahmetyp_idx (MassnahmetypID),
+  CONSTRAINT fk_Massnahme_Gruppe1 FOREIGN KEY (GruppeID) REFERENCES gruppe (ID),
+  CONSTRAINT fk_Massnahme_Massnahmetyp FOREIGN KEY (MassnahmetypID) REFERENCES massnahmetyp (ID) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
 
 CREATE TABLE IF NOT EXISTS teilnehmer (

@@ -154,6 +154,11 @@
                     <span class="label">Formulare</span>
                   </a>
                 </li>
+                <li>
+                  <a href="#workflows" class="sidebar-link" data-page="workflows">
+                    <span class="label">Workflows</span>
+                  </a>
+                </li>
               </ul>
             </details>
           </li>
@@ -1196,6 +1201,10 @@
               <span class="stat-value" id="stammdatenFormulareCount">–</span>
               <span class="stat-label">Formulare</span>
             </a>
+            <a href="#workflows" class="stat-card stammdaten-card" id="stammdatenWorkflowsCard">
+              <span class="stat-value" id="stammdatenWorkflowsCount">–</span>
+              <span class="stat-label">Workflows</span>
+            </a>
           </div>
         </section>
 
@@ -1604,6 +1613,83 @@
             </div>
           </form>
         </dialog>
+
+        <section id="page-workflows" class="page">
+          <div class="page-header-row">
+            <h2>Workflows</h2>
+            <div class="detail-actions">
+              <button type="button" id="workflowNeuBtn" class="btn-primary">+ Neuer Workflow</button>
+            </div>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Kennung</th>
+                  <th>QM-Kennung</th>
+                  <th>Bezeichnung</th>
+                  <th>Rollen</th>
+                  <th>Arbeitsschritte</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="workflowTableBody">
+                <tr>
+                  <td colspan="6">Lädt…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="page-workflows-detail" class="page">
+          <div class="subpage-header">
+            <button type="button" id="workflowZurueckBtn" class="btn-secondary">← Zurück zu Workflows</button>
+          </div>
+
+          <h2 id="workflowDetailTitel">Neuer Workflow</h2>
+
+          <form id="workflowDetailForm" class="data-form workflow-detail-form">
+            <div class="form-row">
+              <label for="workflowDetailKennung">Kennung</label>
+              <input type="text" id="workflowDetailKennung" name="Kennung" maxlength="50" required>
+            </div>
+
+            <div class="form-row">
+              <label for="workflowDetailQMKennung">QM-Kennung</label>
+              <input type="text" id="workflowDetailQMKennung" name="QMKennung" maxlength="100" required>
+            </div>
+
+            <div class="form-row">
+              <label for="workflowDetailBezeichnung">Bezeichnung</label>
+              <input type="text" id="workflowDetailBezeichnung" name="Bezeichnung" maxlength="255" required>
+            </div>
+
+            <div class="form-row">
+              <label for="workflowDetailBeschreibung">Beschreibung</label>
+              <textarea id="workflowDetailBeschreibung" name="Beschreibung" rows="4" required></textarea>
+            </div>
+
+            <div class="form-row">
+              <label>Zugewiesene Rollen</label>
+              <div class="checkbox-group" id="workflowDetailRollenCheckboxes"></div>
+            </div>
+
+            <h3>Arbeitsschritte</h3>
+            <div id="workflowArbeitsschritteContainer"></div>
+            <div class="detail-actions">
+              <button type="button" id="workflowArbeitsschrittHinzufuegenBtn" class="btn-secondary">+ Arbeitsschritt hinzufügen</button>
+            </div>
+
+            <p class="form-message" id="workflowDetailFormMessage" role="status"></p>
+
+            <div class="dialog-actions">
+              <button type="button" id="workflowDetailDeleteBtn" class="btn-danger" hidden>Löschen</button>
+              <button type="submit" class="btn-primary">Speichern</button>
+            </div>
+          </form>
+        </section>
 
         <section id="page-benutzer" class="page">
           <h2>Benutzer</h2>

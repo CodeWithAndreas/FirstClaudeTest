@@ -3,7 +3,193 @@
 Stand: 2026-08-26. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Neue eigenständige Seite
+**Wichtig für eine neue Session:** Der Menüpunkt **Workflows** ist jetzt
+**Administrator-only** statt für die zuvor drei Rollen (Administrator/
+Bildungsstättenleiter/Fachbereichsleiter) sichtbar. Umgesetzt durch
+**Konvergenz auf das bestehende `adminOnlyPages`-Muster** statt Beibehaltung
+der bisherigen eigenen `WORKFLOW_ERLAUBTE_ROLLEN`/`canAccessWorkflows()`-
+Konstrukte (die für eine Ein-Rollen-Liste nur unnötige Sonderlogik gewesen
+wären): `"workflows"`/`"workflows-detail"` sind jetzt Teil des bereits
+vorhandenen `adminOnlyPages`-Arrays (wie `"fachbereiche"`/`"benutzer"`/
+`"einstellungen"`/`"systemlogs-dateioperationen"`), der bisherige eigene
+Redirect-Guard in `showPage()` sowie `WORKFLOW_ERLAUBTE_ROLLEN`/
+`canAccessWorkflows()` wurden komplett entfernt (nicht nur ungenutzt liegen
+gelassen), Sidebar-Link/Stammdaten-Karte nutzen jetzt direkt die in
+`applyRolePermissions()` ohnehin schon berechnete `isAdmin`-Variable (exakt
+das Muster von `stammdatenFachbereicheCard`), und `loadStammdatenStats()`
+prüft jetzt `currentUser.roles.includes("Administrator")` direkt statt über
+die entfernte Hilfsfunktion. **Weiterhin bewusst nur UI-seitig** – keine
+`requireRole()`-Ergänzung auf `/api/workflows/*` (Backend blieb unverändert),
+da die Anfrage sich explizit auf den *Menüpunkt* bezog, exakt wie bei den
+beiden vorherigen Rollen-Sichtbarkeits-Entscheidungen dieser Session. Getestet
+per Playwright: Administrator weiterhin voller Zugriff, die zuvor
+zugelassene Bildungsstättenleiter-Rolle jetzt korrekt ausgeschlossen
+(Sidebar, Stammdaten-Karte, Hash-Redirect für `#workflows` **und**
+`#workflows-detail`), Ausbilder/Lehrgangsorganisation weiterhin
+ausgeschlossen.
+
+**Davor:** Die "Zugeordnete Formulare"-Auswahl je
+Arbeitsschritt (Workflows-Feature) ist jetzt standardmäßig **eingeklappt**
+(natives `<details class="collapsible-form formular-auswahl-details">`,
+gleiches "+"/"–"-Muster wie die bestehenden "Neues X"-Formulare) und hat ein
+**Suchfeld** (`buildFormularAuswahlBlock()` in `js/main.js`), da mit sehr
+vielen Formularen zu rechnen ist. Das Suchfeld filtert die Checkbox-Zeilen
+rein client-seitig per `element.style.display` gegen einen Titel-Lowercase-
+Vergleich (`row.dataset.titel`, in `buildFormularAuswahl()` gesetzt) – keine
+Server-Suche nötig, da `workflowFormulareCache` ohnehin komplett im Speicher
+liegt. Bereits angehakte Formulare bleiben beim Filtern **im DOM erhalten**
+(nur visuell versteckt, nicht entfernt) – eine Auswahl geht also nie verloren,
+nur weil sie gerade nicht zum Suchbegriff passt. Die Summary-Zeile zeigt
+zusätzlich eine Live-Anzahl **"(N ausgewählt)"** (`.formular-auswahl-anzahl`,
+aktualisiert bei jedem `change`-Event auf der Checkbox-Gruppe), damit die
+Auswahl auch im eingeklappten Zustand ohne Aufklappen erkennbar bleibt –
+per Playwright verifiziert, dass die Zahl nach dem Neuladen eines
+bestehenden Workflows korrekt angezeigt wird, **ohne** das Element
+aufzuklappen. Zusätzlich hat die Checkbox-Liste selbst jetzt eine feste
+Maximalhöhe mit Scroll (`.arbeitsschritt-formulare { max-height: 220px;
+overflow-y: auto; }`), als zweite Abhilfe gegen sehr lange Listen neben der
+Suche. **Layout-Detail:** Die `summary` bekam eine explizit weiße
+Hintergrundfarbe (`.formular-auswahl-details summary`), weil die
+projektweite `.collapsible-form summary`-Farbe (`--color-bg-light`) sonst mit
+dem grauen Hintergrund des umgebenden `.arbeitsschritt-block` verschmolzen
+und die Pille optisch verschwunden wäre – erster Fall in diesem Projekt, in
+dem ein `.collapsible-form` innerhalb eines bereits grau hinterlegten
+Containers verschachtelt ist.
+
+**Davor:** Neuer Menüpunkt **Workflows** als
+Unterpunkt von Stammdaten (Sidebar + Stammdaten-Stat-Karte, gleiches
+Rollen-Gating wie Formulare: nur Administrator, Bildungsstättenleiter und
+Fachbereichsleiter – `WORKFLOW_ERLAUBTE_ROLLEN`/`canAccessWorkflows(user)`
+in `js/main.js`, 1:1 nach dem `FORMULARE_ERLAUBTE_ROLLEN`-Vorbild, bewusst
+als eigene Konstante statt Wiederverwendung der Formulare-Variable – auch
+wenn die Rollenliste aktuell identisch ist, könnten beide Features künftig
+unabhängig voneinander angepasst werden). **Bewusst wieder rein UI-seitig**
+(Sidebar/Karte ausgeblendet + Hash-Redirect in `showPage()` für `workflows`
+UND `workflows-detail`), keine Backend-Sperre auf `/api/workflows/*` – exakt
+dieselbe Entscheidung wie bei Formulare und zuvor bei Leistungskontrolle/
+Lehrgangsorganisation, da die Anfrage wortgleich "soll nur ... zugänglich
+sein" lautete.
+
+Löst die ursprünglich zurückgestellte Anfrage ein ("Workflows werden später
+implementiert, ebenso Arbeitsschritte") und implementiert **sowohl** Workflows
+**als auch** Arbeitsschritte jetzt vollständig, exakt nach der in dieser
+Anfrage gegebenen konkreten Spezifikation. Ein Workflow hat eine eigene,
+eindeutige, **user-eingegebene** `Kennung` (VARCHAR, `UNIQUE`-Constraint in
+der DB, anders als das bestehende, nicht-eindeutige `Kennung`-Feld bei
+Fachbereich/Gruppe – bei Verstoß liefert der Server `400 "Kennung ist bereits
+vergeben (Workflow oder Arbeitsschritt)"`, `ER_DUP_ENTRY` abgefangen wie beim
+Benutzernamen), zusätzlich QM-Kennung/Bezeichnung/Beschreibung und eine
+Zuordnung zu einer oder mehreren **Rollen** (`workflow_rolle`, Checkbox-Gruppe
+aus `/api/rollen`). **Bewusste Scoping-Entscheidung bei Arbeitsschritten:**
+Die ursprüngliche, sehr frühe Anfrage hatte formuliert "Arbeitsschritte können
+mehreren Workflows zugewiesen werden" (echte Many-to-many-Wiederverwendung) –
+die jetzige, konkrete UI-Spezifikation beschreibt Arbeitsschritte aber
+ausschließlich als direkt in der Workflow-Bearbeitung per "+"-Button neu
+angelegte, workflow-eigene Listenelemente (keine "bestehenden Arbeitsschritt
+auswählen"-Funktion irgendwo angefragt). Da eine Many-to-many-Tabelle ohne
+jede Picker-UI zur Wiederverwendung eine nicht erreichbare/unfertige
+Fähigkeit gewesen wäre, wurde bewusst die einfachere Variante gebaut:
+`arbeitsschritt.WorkflowID` ist ein direkter FK (`ON DELETE CASCADE`), jeder
+Arbeitsschritt gehört genau einem Workflow. Falls eine spätere Session
+Arbeitsschritt-Wiederverwendung über mehrere Workflows hinweg **mit** einer
+entsprechenden Auswahl-UI ergänzen soll, wäre das eine bewusste
+Schema-Änderung (Join-Tabelle `workflow_arbeitsschritt` statt der direkten
+FK) – nicht einfach nachträglich draufsetzen.
+
+**Arbeitsschritt-Felder:** eigene eindeutige `Kennung` (ebenfalls `UNIQUE` in
+der DB, zusätzlich serverseitig auch **innerhalb eines einzelnen Speicher-
+Vorgangs** auf Duplikate geprüft, damit zwei gleichzeitig neu angelegte
+Arbeitsschritte mit derselben Kennung eine klare Fehlermeldung statt eines
+rohen DB-Fehlers liefern), QM-Kennung, Bezeichnung, Beschreibung,
+`Reihenfolge` (INT, ergibt sich aus der Position beim Speichern – siehe
+unten), `VerantwortungRolleID` (optionales Dropdown aus `/api/rollen`,
+FK `ON DELETE SET NULL`, damit ein späteres Löschen einer Rolle – aktuell
+ohnehin keine Lösch-Funktion im Projekt vorhanden – nicht an bestehenden
+Arbeitsschritten scheitert), Zuordnung zu einem/mehreren/**allen**
+Fachbereichen (`arbeitsschritt_fachbereich`, Pflichtfeld – mindestens einer –
+mit der bereits für Formulare gebauten "Alle Fachbereiche"-Select-all-
+Checkbox aus `buildCheckboxGroup({ selectAllLabel })` wiederverwendet) sowie
+Zuordnung zu einem oder mehreren **Formularen** (`arbeitsschritt_formular`,
+optional). Formulare werden dabei nicht als reine Checkbox-Liste, sondern als
+Checkbox **plus** kleinem Download-Icon-Link (`buildFormularAuswahl()`,
+`/api/formulare/:id/datei`) je Zeile dargestellt, wie explizit angefragt
+("als Link zum Download des Formulars dargestellt").
+
+**Reihenfolge/Reordering rein DOM-basiert, bewusst ohne Zwischenspeicher-
+Array:** Jeder Arbeitsschritt ist ein `.arbeitsschritt-block`-Element im
+DOM; die Pfeil-Buttons vertauschen beim Klick direkt den ganzen Block mit
+seinem Vorgänger/Nachfolger (`insertBefore`), der "+"-Button hängt einen
+neuen leeren Block ans Ende, der Papierkorb-Button entfernt einen Block –
+in allen drei Fällen läuft anschließend nur `renumberArbeitsschritte()`
+(aktualisiert die sichtbare "Arbeitsschritt N"-Beschriftung). Die tatsächliche
+Reihenfolge beim Speichern ergibt sich einfach aus der **DOM-Reihenfolge**
+(`container.querySelectorAll(".arbeitsschritt-block")`), nicht aus einem
+separat mitgeführten JS-Array – das vermeidet jede State-Sync-Problematik
+(insbesondere gehen beim Verschieben keine bereits eingetippten Feldwerte
+verloren, da ganze DOM-Knoten bewegt werden, keine Werte kopiert werden).
+
+**Speichern ersetzt Arbeitsschritte komplett (kein Delta-Update):** Sowohl
+beim Anlegen als auch beim Bearbeiten eines Workflows sendet das Frontend die
+**vollständige** aktuelle Arbeitsschritt-Liste; `PUT /api/workflows/:id`
+löscht serverseitig zunächst alle bestehenden Arbeitsschritte des Workflows
+(Cascade entfernt automatisch auch deren Fachbereichs-/Formular-Zuordnungen)
+und fügt danach die komplette neue Liste frisch ein – exakt das bereits
+etablierte Muster bei allen anderen Zuordnungstabellen in diesem Projekt
+(`formular_fachbereich`, `leistungskontrolle_massnahme`, …), hier nur einen
+Schritt tiefer auf eine echte Tabelle mit eigenen Kind-Datensätzen
+angewendet. Folge: Arbeitsschritt-IDs sind über Bearbeitungen hinweg **nicht**
+stabil (jeder Speichervorgang vergibt neue IDs) – unproblematisch, da nichts
+im Projekt dauerhaft auf eine einzelne Arbeitsschritt-ID von außen verweist.
+
+**Master-Detail-Architektur** (wie angefragt): `page-workflows` (Tabelle +
+Header-Button "+ Neuer Workflow") und `page-workflows-detail` (volle
+Unterseite, **kein** Dialog – bei der Komplexität der Arbeitsschritt-Liste
+mit mehreren verschachtelten Checkbox-Gruppen pro Zeile wäre ein Dialogfenster
+zu eng gewesen) sind eine gemeinsame Detailseite für **sowohl** Neuanlage
+als auch Bearbeiten, exakt nach dem `leistungskontrollen`/
+`leistungskontrollen-detail`-Vorbild (`currentWorkflowId`/`openWorkflowDetail()`/
+`loadWorkflowDetailPage()`). **Wichtiger Unterschied zum LK-Vorbild:** Bei
+Leistungskontrolle ist `currentLkId === null` kein gültiger Zustand für die
+Detailseite (Redirect zurück zur Liste), bei Workflows dagegen **ist**
+`currentWorkflowId === null` der reguläre "Neuer Workflow"-Zustand (der
+Button in der Kopfzeile navigiert genau dorthin) – dieser Guard wurde bewusst
+NICHT übernommen. Titel/Sichtbarkeit des Löschen-Buttons wechseln abhängig
+davon, ob ein Workflow geladen ist (`fillWorkflowDetailForm(null)` vs. mit
+Daten). Anders als bei Formulare/Leistungskontrolle lädt die Übersichtsseite
+ihre Liste **nicht** einmalig beim Login, sondern nach dem etablierten
+`ensureLkInitialized()`-Muster bei **jedem** Seitenaufruf neu
+(`ensureWorkflowsInitialized()`: Fachbereichs-/Formulare-/Rollen-Caches nur
+einmalig, aber `loadWorkflows()` bei jedem Besuch) – nötig, weil Anlegen/
+Bearbeiten auf einer **separaten** Unterseite passiert (anders als bei
+Formulare, wo Bearbeiten über einen Dialog auf derselben Seite läuft und die
+Tabelle danach ohnehin sofort neu lädt); ohne das würde die Liste nach einem
+Rücksprung von der Detailseite veraltete Daten zeigen.
+
+**Echter, beim Testen gefundener und behobener CSS-Bug:** Die neuen
+Pfeil-/Papierkorb-Icon-Buttons je Arbeitsschritt (`class="icon-btn"`) wurden
+zunächst als große blaue Pillen-Buttons dargestellt statt als kleine dezente
+Icon-Buttons. Ursache: `.data-form button` (Spezifität 0,1,1) hat Vorrang vor
+`.icon-btn` (Spezifität 0,1,0) – dieses Kollisionsproblem war bisher latent,
+weil noch nie zuvor ein `.icon-btn` innerhalb eines `.data-form` verschachtelt
+war. Fix: `.arbeitsschritt-block-actions button.icon-btn { … }` mit höherer
+Spezifität überschreibt `.data-form button` gezielt nur in diesem Kontext.
+**Lehre:** Bei Verschachtelung eines bestehenden, bisher nur in einem anderen
+Kontext genutzten Buttons/Klasse immer per Screenshot prüfen, ob eine
+allgemeinere übergeordnete Regel (hier `.data-form button`) durchschlägt –
+nicht nur auf die eigene neue Klasse vertrauen.
+
+Kompletter Workflow (Anlegen inkl. zwei Arbeitsschritten mit "Alle
+Fachbereiche" und Formular-Zuordnung, Verschieben per Pfeil in beide
+Richtungen, Speichern, Zurück zur Liste, erneutes Öffnen mit Prüfung der
+korrekt geladenen/sortierten Arbeitsschritte, Löschen) sowie die
+Rollen-Zugriffsbeschränkung (Administrator/Bildungsstättenleiter erlaubt,
+Ausbilder-only/Lehrgangsorganisation gesperrt, inkl. Hash-Redirect-Test für
+sowohl `#workflows` als auch `#workflows-detail`) wurden per Playwright
+getestet. Backend zusätzlich per curl geprüft: doppelte Workflow-Kennung
+→ 400, doppelte Arbeitsschritt-Kennung **innerhalb desselben Payloads** → 400,
+Update mit reduzierter Arbeitsschritt-Anzahl, Löschen.
+
+**Davor:** Neue eigenständige Seite
 **`praesentation.html`** (Feature-Übersicht) – erreichbar über einen Klick
 auf das Standortmanager-Logo oben links in der Topbar (`index.html`, war
 vorher ein funktionsloser `href="#"`-Link; jetzt `href="praesentation.html"

@@ -25,7 +25,7 @@ const breadcrumb = document.getElementById("breadcrumb");
 const navLinks = document.querySelectorAll(".sidebar-link[data-page]");
 const pages = document.querySelectorAll(".page");
 const defaultPage = "dashboard";
-const adminOnlyPages = ["fachbereiche", "benutzer", "einstellungen", "systemlogs-dateioperationen"];
+const adminOnlyPages = ["fachbereiche", "benutzer", "einstellungen", "systemlogs-dateioperationen", "workflows", "workflows-detail"];
 const auditPages = [
   "audit-interessentenbetreuung",
   "audit-massnahmen",
@@ -51,6 +51,8 @@ const pageLabels = {
   gruppen: "Stammdaten / Gruppen",
   fachbereiche: "Stammdaten / Fachbereiche",
   formulare: "Stammdaten / Formulare",
+  workflows: "Stammdaten / Workflows",
+  "workflows-detail": "Stammdaten / Workflows / Detail",
   benutzer: "Benutzer",
   einstellungen: "Einstellungen",
   "audit-massnahmen": "Audit / Maßnahmen",
@@ -99,6 +101,7 @@ const stammdatenMassnahmenCount = document.getElementById("stammdatenMassnahmenC
 const stammdatenGruppenCount = document.getElementById("stammdatenGruppenCount");
 const stammdatenFachbereicheCount = document.getElementById("stammdatenFachbereicheCount");
 const stammdatenFormulareCount = document.getElementById("stammdatenFormulareCount");
+const stammdatenWorkflowsCount = document.getElementById("stammdatenWorkflowsCount");
 const dashWiedervorlagenListe = document.getElementById("dashWiedervorlagenListe");
 const wiedervorlageTerminDialog = document.getElementById("wiedervorlageTerminDialog");
 const wiedervorlageTerminForm = document.getElementById("wiedervorlageTerminForm");
@@ -167,7 +170,7 @@ function showPage(pageId) {
 
   document.querySelectorAll(".sidebar-group").forEach((group) => {
     const pagesInGroup = [...group.querySelectorAll("[data-page]")].map((el) => el.dataset.page);
-    if (pagesInGroup.includes(targetId)) {
+    if (pagesInGroup.includes(targetId) || (targetId === "workflows-detail" && pagesInGroup.includes("workflows"))) {
       group.open = true;
     }
   });
@@ -184,6 +187,8 @@ function showPage(pageId) {
       ? "teilnehmende"
       : targetId === "leistungskontrollen-detail"
       ? "leistungskontrollen"
+      : targetId === "workflows-detail"
+      ? "workflows"
       : targetId;
   navLinks.forEach((link) => {
     link.classList.toggle("active", link.dataset.page === activeNavPage);
@@ -236,8 +241,14 @@ function showPage(pageId) {
   if (targetId === "leistungskontrollen") {
     ensureLkInitialized();
   }
+  if (targetId === "workflows") {
+    ensureWorkflowsInitialized();
+  }
   if (targetId === "leistungskontrollen-detail") {
     loadLeistungskontrolleDetailPage(currentLkId);
+  }
+  if (targetId === "workflows-detail") {
+    loadWorkflowDetailPage(currentWorkflowId);
   }
 }
 
@@ -287,6 +298,11 @@ async function loadStammdatenStats() {
     endpoints.push(["/api/formulare", stammdatenFormulareCount]);
   } else {
     stammdatenFormulareCount.textContent = "–";
+  }
+  if (currentUser && currentUser.roles.includes("Administrator")) {
+    endpoints.push(["/api/workflows", stammdatenWorkflowsCount]);
+  } else {
+    stammdatenWorkflowsCount.textContent = "–";
   }
   await ladeKennzahlen(endpoints);
 }
@@ -1011,6 +1027,601 @@ editFormularForm.addEventListener("submit", async (event) => {
     editFormularFormMessage.textContent = err.message;
     editFormularFormMessage.className = "form-message error";
   }
+});
+
+// Workflows
+
+const workflowTableBody = document.getElementById("workflowTableBody");
+const workflowNeuBtn = document.getElementById("workflowNeuBtn");
+
+const workflowZurueckBtn = document.getElementById("workflowZurueckBtn");
+const workflowDetailTitel = document.getElementById("workflowDetailTitel");
+const workflowDetailForm = document.getElementById("workflowDetailForm");
+const workflowDetailFormMessage = document.getElementById("workflowDetailFormMessage");
+const workflowDetailRollenCheckboxes = document.getElementById("workflowDetailRollenCheckboxes");
+const workflowArbeitsschritteContainer = document.getElementById("workflowArbeitsschritteContainer");
+const workflowArbeitsschrittHinzufuegenBtn = document.getElementById("workflowArbeitsschrittHinzufuegenBtn");
+const workflowDetailDeleteBtn = document.getElementById("workflowDetailDeleteBtn");
+
+let workflowFachbereicheCache = [];
+let workflowFormulareCache = [];
+let workflowRollenCache = [];
+let workflowsInitialized = false;
+let currentWorkflowId = null;
+let currentWorkflowDetail = null;
+
+async function loadWorkflowFachbereicheCache() {
+  try {
+    const response = await fetch("/api/fachbereiche");
+    if (!response.ok) {
+      throw new Error("Fachbereiche konnten nicht geladen werden.");
+    }
+    workflowFachbereicheCache = await response.json();
+  } catch (err) {
+    console.error(err);
+    workflowFachbereicheCache = [];
+  }
+}
+
+async function loadWorkflowFormulareCache() {
+  try {
+    const response = await fetch("/api/formulare");
+    if (!response.ok) {
+      throw new Error("Formulare konnten nicht geladen werden.");
+    }
+    workflowFormulareCache = await response.json();
+  } catch (err) {
+    console.error(err);
+    workflowFormulareCache = [];
+  }
+}
+
+async function loadWorkflowRollenCache() {
+  try {
+    const response = await fetch("/api/rollen");
+    if (!response.ok) {
+      throw new Error("Rollen konnten nicht geladen werden.");
+    }
+    workflowRollenCache = await response.json();
+  } catch (err) {
+    console.error(err);
+    workflowRollenCache = [];
+  }
+}
+
+function canDeleteWorkflow() {
+  return currentUser && currentUser.roles.includes("Administrator");
+}
+
+function buildFormularAuswahl(container, formulare, checkedIds = []) {
+  container.innerHTML = "";
+  formulare.forEach((formular) => {
+    const row = document.createElement("div");
+    row.className = "formular-auswahl-row";
+    row.dataset.titel = formular.Titel.toLowerCase();
+
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = formular.ID;
+    checkbox.checked = checkedIds.includes(formular.ID);
+    label.appendChild(checkbox);
+    label.append(` ${formular.Titel}`);
+    row.appendChild(label);
+
+    const downloadLink = document.createElement("a");
+    downloadLink.className = "formular-auswahl-download";
+    downloadLink.href = `/api/formulare/${formular.ID}/datei`;
+    downloadLink.title = "Herunterladen";
+    downloadLink.setAttribute("aria-label", `${formular.Titel} herunterladen`);
+    downloadLink.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+    `;
+    row.appendChild(downloadLink);
+
+    container.appendChild(row);
+  });
+}
+
+function buildFormularAuswahlBlock(formulare, checkedIds = []) {
+  const details = document.createElement("details");
+  details.className = "collapsible-form formular-auswahl-details";
+
+  const summary = document.createElement("summary");
+  const anzahlSpan = document.createElement("span");
+  anzahlSpan.className = "formular-auswahl-anzahl";
+  summary.append("Zugeordnete Formulare ", anzahlSpan);
+  details.appendChild(summary);
+
+  const sucheInput = document.createElement("input");
+  sucheInput.type = "text";
+  sucheInput.className = "formular-auswahl-suche";
+  sucheInput.placeholder = "Formular suchen…";
+  details.appendChild(sucheInput);
+
+  const container = document.createElement("div");
+  container.className = "checkbox-group arbeitsschritt-formulare";
+  buildFormularAuswahl(container, formulare, checkedIds);
+  details.appendChild(container);
+
+  function aktualisiereAnzahl() {
+    const anzahl = getCheckedValues(container).length;
+    anzahlSpan.textContent = anzahl > 0 ? `(${anzahl} ausgewählt)` : "";
+  }
+  aktualisiereAnzahl();
+  container.addEventListener("change", aktualisiereAnzahl);
+
+  sucheInput.addEventListener("input", () => {
+    const suchbegriff = sucheInput.value.trim().toLowerCase();
+    container.querySelectorAll(".formular-auswahl-row").forEach((row) => {
+      row.style.display = !suchbegriff || row.dataset.titel.includes(suchbegriff) ? "" : "none";
+    });
+  });
+
+  return details;
+}
+
+function renumberArbeitsschritte() {
+  workflowArbeitsschritteContainer.querySelectorAll(".arbeitsschritt-block").forEach((block, index) => {
+    block.querySelector(".arbeitsschritt-nummer").textContent = `Arbeitsschritt ${index + 1}`;
+  });
+}
+
+function buildArbeitsschrittBlock(arbeitsschritt = null) {
+  const block = document.createElement("div");
+  block.className = "arbeitsschritt-block";
+
+  const header = document.createElement("div");
+  header.className = "arbeitsschritt-block-header";
+
+  const nummer = document.createElement("span");
+  nummer.className = "arbeitsschritt-nummer";
+  header.appendChild(nummer);
+
+  const actions = document.createElement("div");
+  actions.className = "arbeitsschritt-block-actions";
+
+  const upBtn = document.createElement("button");
+  upBtn.type = "button";
+  upBtn.className = "icon-btn";
+  upBtn.title = "Nach oben verschieben";
+  upBtn.setAttribute("aria-label", "Arbeitsschritt nach oben verschieben");
+  upBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+  `;
+  upBtn.addEventListener("click", () => {
+    const prev = block.previousElementSibling;
+    if (prev) {
+      workflowArbeitsschritteContainer.insertBefore(block, prev);
+      renumberArbeitsschritte();
+    }
+  });
+
+  const downBtn = document.createElement("button");
+  downBtn.type = "button";
+  downBtn.className = "icon-btn";
+  downBtn.title = "Nach unten verschieben";
+  downBtn.setAttribute("aria-label", "Arbeitsschritt nach unten verschieben");
+  downBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  `;
+  downBtn.addEventListener("click", () => {
+    const next = block.nextElementSibling;
+    if (next) {
+      workflowArbeitsschritteContainer.insertBefore(next, block);
+      renumberArbeitsschritte();
+    }
+  });
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "icon-btn";
+  removeBtn.title = "Arbeitsschritt entfernen";
+  removeBtn.setAttribute("aria-label", "Arbeitsschritt entfernen");
+  removeBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3 6 5 6 21 6"></polyline>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+      <path d="M10 11v6"></path>
+      <path d="M14 11v6"></path>
+      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+    </svg>
+  `;
+  removeBtn.addEventListener("click", () => {
+    block.remove();
+    renumberArbeitsschritte();
+  });
+
+  actions.append(upBtn, downBtn, removeBtn);
+  header.appendChild(actions);
+  block.appendChild(header);
+
+  [
+    { feld: "Kennung", label: "Kennung", maxlength: 50 },
+    { feld: "QMKennung", label: "QM-Kennung", maxlength: 100 },
+    { feld: "Bezeichnung", label: "Bezeichnung", maxlength: 255 },
+  ].forEach(({ feld, label, maxlength }) => {
+    const row = document.createElement("div");
+    row.className = "form-row";
+    const labelEl = document.createElement("label");
+    labelEl.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = maxlength;
+    input.dataset.field = feld;
+    input.required = true;
+    if (arbeitsschritt) {
+      input.value = arbeitsschritt[feld] || "";
+    }
+    row.append(labelEl, input);
+    block.appendChild(row);
+  });
+
+  const beschreibungRow = document.createElement("div");
+  beschreibungRow.className = "form-row";
+  const beschreibungLabel = document.createElement("label");
+  beschreibungLabel.textContent = "Beschreibung";
+  const beschreibungInput = document.createElement("textarea");
+  beschreibungInput.rows = 3;
+  beschreibungInput.dataset.field = "Beschreibung";
+  beschreibungInput.required = true;
+  if (arbeitsschritt) {
+    beschreibungInput.value = arbeitsschritt.Beschreibung || "";
+  }
+  beschreibungRow.append(beschreibungLabel, beschreibungInput);
+  block.appendChild(beschreibungRow);
+
+  const verantwortungRow = document.createElement("div");
+  verantwortungRow.className = "form-row";
+  const verantwortungLabel = document.createElement("label");
+  verantwortungLabel.textContent = "Verantwortung";
+  const verantwortungSelect = document.createElement("select");
+  verantwortungSelect.dataset.field = "VerantwortungRolleID";
+  const leereOption = document.createElement("option");
+  leereOption.value = "";
+  leereOption.textContent = "– keine –";
+  verantwortungSelect.appendChild(leereOption);
+  workflowRollenCache.forEach((rolle) => {
+    const option = document.createElement("option");
+    option.value = rolle.ID;
+    option.textContent = rolle.Bezeichnung;
+    verantwortungSelect.appendChild(option);
+  });
+  if (arbeitsschritt && arbeitsschritt.VerantwortungRolleID) {
+    verantwortungSelect.value = arbeitsschritt.VerantwortungRolleID;
+  }
+  verantwortungRow.append(verantwortungLabel, verantwortungSelect);
+  block.appendChild(verantwortungRow);
+
+  const fachbereichRow = document.createElement("div");
+  fachbereichRow.className = "form-row";
+  const fachbereichLabel = document.createElement("label");
+  fachbereichLabel.textContent = "Zugewiesene Fachbereiche";
+  const fachbereichContainer = document.createElement("div");
+  fachbereichContainer.className = "checkbox-group arbeitsschritt-fachbereiche";
+  buildCheckboxGroup(fachbereichContainer, workflowFachbereicheCache, {
+    labelKey: "BezeichnungLang",
+    checkedIds: arbeitsschritt ? arbeitsschritt.Fachbereiche.map((f) => f.ID) : [],
+    selectAllLabel: "Alle Fachbereiche",
+  });
+  fachbereichRow.append(fachbereichLabel, fachbereichContainer);
+  block.appendChild(fachbereichRow);
+
+  const formularRow = document.createElement("div");
+  formularRow.className = "form-row";
+  formularRow.appendChild(
+    buildFormularAuswahlBlock(workflowFormulareCache, arbeitsschritt ? arbeitsschritt.Formulare.map((f) => f.ID) : [])
+  );
+  block.appendChild(formularRow);
+
+  return block;
+}
+
+workflowArbeitsschrittHinzufuegenBtn.addEventListener("click", () => {
+  workflowArbeitsschritteContainer.appendChild(buildArbeitsschrittBlock(null));
+  renumberArbeitsschritte();
+});
+
+async function ensureWorkflowsInitialized() {
+  if (!workflowsInitialized) {
+    workflowsInitialized = true;
+    await Promise.all([loadWorkflowFachbereicheCache(), loadWorkflowFormulareCache(), loadWorkflowRollenCache()]);
+  }
+  await loadWorkflows();
+}
+
+function openWorkflowDetail(workflow) {
+  currentWorkflowId = workflow ? workflow.ID : null;
+  if (window.location.hash === "#workflows-detail") {
+    showPage("workflows-detail");
+  } else {
+    window.location.hash = "workflows-detail";
+  }
+}
+
+workflowNeuBtn.addEventListener("click", () => openWorkflowDetail(null));
+
+async function loadWorkflows() {
+  workflowTableBody.innerHTML = "";
+  const loadingRow = document.createElement("tr");
+  const loadingCell = document.createElement("td");
+  loadingCell.colSpan = 6;
+  loadingCell.textContent = "Lädt…";
+  loadingRow.appendChild(loadingCell);
+  workflowTableBody.appendChild(loadingRow);
+
+  try {
+    const response = await fetch("/api/workflows");
+    if (!response.ok) {
+      throw new Error("Workflows konnten nicht geladen werden.");
+    }
+    const workflows = await response.json();
+
+    workflowTableBody.innerHTML = "";
+
+    if (workflows.length === 0) {
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 6;
+      emptyCell.textContent = "Noch keine Workflows vorhanden.";
+      emptyRow.appendChild(emptyCell);
+      workflowTableBody.appendChild(emptyRow);
+      return;
+    }
+
+    workflows.forEach((workflow) => {
+      const row = document.createElement("tr");
+
+      const kennungCell = document.createElement("td");
+      kennungCell.textContent = workflow.Kennung;
+
+      const qmCell = document.createElement("td");
+      qmCell.textContent = workflow.QMKennung;
+
+      const bezeichnungCell = document.createElement("td");
+      bezeichnungCell.textContent = workflow.Bezeichnung;
+
+      const rollenCell = document.createElement("td");
+      rollenCell.textContent = workflow.Rollen.map((r) => r.Bezeichnung).join(", ");
+
+      const anzahlCell = document.createElement("td");
+      anzahlCell.textContent = workflow.ArbeitsschritteAnzahl;
+
+      const actionsCell = document.createElement("td");
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "row-actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "row-edit-btn";
+      editBtn.title = "Bearbeiten";
+      editBtn.setAttribute("aria-label", `Workflow ${workflow.Bezeichnung} bearbeiten`);
+      editBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+      `;
+      editBtn.addEventListener("click", () => openWorkflowDetail(workflow));
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "row-delete-btn";
+      deleteBtn.title = "Löschen";
+      deleteBtn.setAttribute("aria-label", `Workflow ${workflow.Bezeichnung} löschen`);
+      deleteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+          <path d="M10 11v6"></path>
+          <path d="M14 11v6"></path>
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      `;
+      deleteBtn.addEventListener("click", () =>
+        openDeleteDialog({
+          name: workflow.Bezeichnung,
+          endpoint: `/api/workflows/${workflow.ID}`,
+          reload: loadWorkflows,
+        })
+      );
+
+      actionsWrap.append(editBtn);
+      if (canDeleteWorkflow()) {
+        actionsWrap.append(deleteBtn);
+      }
+      actionsCell.appendChild(actionsWrap);
+
+      row.append(kennungCell, qmCell, bezeichnungCell, rollenCell, anzahlCell, actionsCell);
+      workflowTableBody.appendChild(row);
+    });
+  } catch (err) {
+    console.error(err);
+    workflowTableBody.innerHTML = "";
+    const errorRow = document.createElement("tr");
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 6;
+    errorCell.textContent = "Fehler beim Laden der Workflows.";
+    errorRow.appendChild(errorCell);
+    workflowTableBody.appendChild(errorRow);
+  }
+}
+
+function fillWorkflowDetailForm(detail) {
+  workflowDetailTitel.textContent = detail ? "Workflow bearbeiten" : "Neuer Workflow";
+  workflowDetailForm.elements.Kennung.value = detail ? detail.Kennung : "";
+  workflowDetailForm.elements.QMKennung.value = detail ? detail.QMKennung : "";
+  workflowDetailForm.elements.Bezeichnung.value = detail ? detail.Bezeichnung : "";
+  workflowDetailForm.elements.Beschreibung.value = detail ? detail.Beschreibung : "";
+
+  buildCheckboxGroup(workflowDetailRollenCheckboxes, workflowRollenCache, {
+    labelKey: "Bezeichnung",
+    checkedIds: detail ? detail.Rollen.map((r) => r.ID) : [],
+  });
+
+  workflowArbeitsschritteContainer.innerHTML = "";
+  if (detail) {
+    detail.Arbeitsschritte.forEach((arbeitsschritt) => {
+      workflowArbeitsschritteContainer.appendChild(buildArbeitsschrittBlock(arbeitsschritt));
+    });
+  }
+  renumberArbeitsschritte();
+
+  workflowDetailDeleteBtn.hidden = !detail || !canDeleteWorkflow();
+}
+
+async function loadWorkflowDetailPage(id) {
+  workflowDetailFormMessage.textContent = "";
+  workflowDetailFormMessage.className = "form-message";
+  currentWorkflowDetail = null;
+
+  if (workflowFachbereicheCache.length === 0) {
+    await loadWorkflowFachbereicheCache();
+  }
+  if (workflowFormulareCache.length === 0) {
+    await loadWorkflowFormulareCache();
+  }
+  if (workflowRollenCache.length === 0) {
+    await loadWorkflowRollenCache();
+  }
+
+  if (!id) {
+    fillWorkflowDetailForm(null);
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/workflows/${id}`);
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || "Workflow konnte nicht geladen werden.");
+    }
+    currentWorkflowDetail = await response.json();
+    fillWorkflowDetailForm(currentWorkflowDetail);
+  } catch (err) {
+    console.error(err);
+    workflowDetailFormMessage.textContent = err.message;
+    workflowDetailFormMessage.className = "form-message error";
+  }
+}
+
+function collectWorkflowPayload() {
+  const kennung = workflowDetailForm.elements.Kennung.value.trim();
+  const qmKennung = workflowDetailForm.elements.QMKennung.value.trim();
+  const bezeichnung = workflowDetailForm.elements.Bezeichnung.value.trim();
+  const beschreibung = workflowDetailForm.elements.Beschreibung.value.trim();
+  const rolleIds = getCheckedValues(workflowDetailRollenCheckboxes);
+
+  if (!kennung || !qmKennung || !bezeichnung || !beschreibung || rolleIds.length === 0) {
+    workflowDetailFormMessage.textContent =
+      "Kennung, QM-Kennung, Bezeichnung, Beschreibung und mindestens eine zugewiesene Rolle sind erforderlich.";
+    workflowDetailFormMessage.className = "form-message error";
+    return null;
+  }
+
+  const arbeitsschritte = [];
+  const bloecke = workflowArbeitsschritteContainer.querySelectorAll(".arbeitsschritt-block");
+
+  for (const block of bloecke) {
+    const asKennung = block.querySelector('[data-field="Kennung"]').value.trim();
+    const asQmKennung = block.querySelector('[data-field="QMKennung"]').value.trim();
+    const asBezeichnung = block.querySelector('[data-field="Bezeichnung"]').value.trim();
+    const asBeschreibung = block.querySelector('[data-field="Beschreibung"]').value.trim();
+    const verantwortungRolleId = block.querySelector('[data-field="VerantwortungRolleID"]').value;
+    const fachbereichIds = getCheckedValues(block.querySelector(".arbeitsschritt-fachbereiche"));
+    const formularIds = getCheckedValues(block.querySelector(".arbeitsschritt-formulare"));
+
+    if (!asKennung || !asQmKennung || !asBezeichnung || !asBeschreibung || fachbereichIds.length === 0) {
+      workflowDetailFormMessage.textContent =
+        "Jeder Arbeitsschritt benötigt Kennung, QM-Kennung, Bezeichnung, Beschreibung und mindestens einen zugewiesenen Fachbereich.";
+      workflowDetailFormMessage.className = "form-message error";
+      return null;
+    }
+
+    arbeitsschritte.push({
+      Kennung: asKennung,
+      QMKennung: asQmKennung,
+      Bezeichnung: asBezeichnung,
+      Beschreibung: asBeschreibung,
+      VerantwortungRolleID: verantwortungRolleId ? Number(verantwortungRolleId) : null,
+      FachbereichIDs: fachbereichIds,
+      FormularIDs: formularIds,
+    });
+  }
+
+  if (new Set(arbeitsschritte.map((a) => a.Kennung)).size !== arbeitsschritte.length) {
+    workflowDetailFormMessage.textContent = "Jeder Arbeitsschritt benötigt eine eindeutige Kennung.";
+    workflowDetailFormMessage.className = "form-message error";
+    return null;
+  }
+
+  return {
+    Kennung: kennung,
+    QMKennung: qmKennung,
+    Bezeichnung: bezeichnung,
+    Beschreibung: beschreibung,
+    RolleIDs: rolleIds,
+    Arbeitsschritte: arbeitsschritte,
+  };
+}
+
+workflowZurueckBtn.addEventListener("click", () => {
+  window.location.hash = "workflows";
+});
+
+workflowDetailForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  workflowDetailFormMessage.textContent = "";
+  workflowDetailFormMessage.className = "form-message";
+
+  const payload = collectWorkflowPayload();
+  if (!payload) {
+    return;
+  }
+
+  try {
+    const response = await fetch(currentWorkflowId ? `/api/workflows/${currentWorkflowId}` : "/api/workflows", {
+      method: currentWorkflowId ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || "Workflow konnte nicht gespeichert werden.");
+    }
+
+    currentWorkflowId = body.ID;
+    currentWorkflowDetail = body;
+    fillWorkflowDetailForm(body);
+    workflowDetailFormMessage.textContent = "Gespeichert.";
+    workflowDetailFormMessage.classList.add("success");
+  } catch (err) {
+    workflowDetailFormMessage.textContent = err.message;
+    workflowDetailFormMessage.classList.add("error");
+  }
+});
+
+workflowDetailDeleteBtn.addEventListener("click", () => {
+  if (!currentWorkflowDetail) {
+    return;
+  }
+  openDeleteDialog({
+    name: currentWorkflowDetail.Bezeichnung,
+    endpoint: `/api/workflows/${currentWorkflowDetail.ID}`,
+    reload: () => {
+      window.location.hash = "workflows";
+    },
+  });
 });
 
 // Gruppen
@@ -6267,6 +6878,15 @@ function applyRolePermissions(user) {
   const stammdatenFormulareCard = document.getElementById("stammdatenFormulareCard");
   if (stammdatenFormulareCard) {
     stammdatenFormulareCard.style.display = formulareErlaubt ? "" : "none";
+  }
+
+  const workflowsLink = document.querySelector('.sidebar-link[data-page="workflows"]');
+  if (workflowsLink) {
+    workflowsLink.closest("li").style.display = isAdmin ? "" : "none";
+  }
+  const stammdatenWorkflowsCard = document.getElementById("stammdatenWorkflowsCard");
+  if (stammdatenWorkflowsCard) {
+    stammdatenWorkflowsCard.style.display = isAdmin ? "" : "none";
   }
 
   const benutzerLink = document.querySelector('.sidebar-link[data-page="benutzer"]');

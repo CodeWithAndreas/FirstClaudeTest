@@ -918,6 +918,125 @@ body.logged-out .app-layout {
   border-bottom: 1px solid var(--color-border);
 }
 
+.page-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.page-header-row h2 {
+  margin: 0;
+}
+
+.workflow-detail-form {
+  max-width: 800px;
+}
+
+.arbeitsschritt-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  background: var(--color-bg-light);
+  border-radius: var(--radius-md);
+}
+
+.arbeitsschritt-block .form-row {
+  margin-bottom: 0;
+}
+
+.arbeitsschritt-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.arbeitsschritt-nummer {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+.arbeitsschritt-block-actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.arbeitsschritt-block-actions button.icon-btn {
+  padding: 0.4rem;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-size: 1rem;
+}
+
+.arbeitsschritt-block-actions button.icon-btn:hover {
+  background: #ffffff;
+  color: var(--color-primary);
+}
+
+.formular-auswahl-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.formular-auswahl-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+}
+
+.formular-auswahl-download svg {
+  width: 18px;
+  height: 18px;
+}
+
+.formular-auswahl-details summary {
+  background: #ffffff;
+}
+
+.formular-auswahl-details summary:hover {
+  background: var(--color-border);
+}
+
+.formular-auswahl-anzahl {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.formular-auswahl-suche {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0.75rem 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.formular-auswahl-suche:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.arbeitsschritt-formulare {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+}
+
 .data-form button {
   padding: 0.6rem 1.5rem;
   border: none;

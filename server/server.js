@@ -229,6 +229,71 @@ async function bootstrapDatabase() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS workflow (
+      ID INT NOT NULL AUTO_INCREMENT,
+      Kennung VARCHAR(50) NOT NULL,
+      QMKennung VARCHAR(100) NOT NULL,
+      Bezeichnung VARCHAR(255) NOT NULL,
+      Beschreibung TEXT NOT NULL,
+      ErstelltAm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (ID),
+      UNIQUE KEY uq_Workflow_Kennung (Kennung)
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workflow_rolle (
+      WorkflowID INT NOT NULL,
+      RolleID INT NOT NULL,
+      PRIMARY KEY (WorkflowID, RolleID),
+      KEY fk_WorkflowRolle_Rolle_idx (RolleID),
+      CONSTRAINT fk_WorkflowRolle_Workflow FOREIGN KEY (WorkflowID) REFERENCES workflow (ID) ON DELETE CASCADE,
+      CONSTRAINT fk_WorkflowRolle_Rolle FOREIGN KEY (RolleID) REFERENCES rolle (ID) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS arbeitsschritt (
+      ID INT NOT NULL AUTO_INCREMENT,
+      WorkflowID INT NOT NULL,
+      Kennung VARCHAR(50) NOT NULL,
+      QMKennung VARCHAR(100) NOT NULL,
+      Bezeichnung VARCHAR(255) NOT NULL,
+      Beschreibung TEXT NOT NULL,
+      VerantwortungRolleID INT DEFAULT NULL,
+      Reihenfolge INT NOT NULL,
+      PRIMARY KEY (ID),
+      UNIQUE KEY uq_Arbeitsschritt_Kennung (Kennung),
+      KEY fk_Arbeitsschritt_Workflow_idx (WorkflowID),
+      KEY fk_Arbeitsschritt_Rolle_idx (VerantwortungRolleID),
+      CONSTRAINT fk_Arbeitsschritt_Workflow FOREIGN KEY (WorkflowID) REFERENCES workflow (ID) ON DELETE CASCADE,
+      CONSTRAINT fk_Arbeitsschritt_Rolle FOREIGN KEY (VerantwortungRolleID) REFERENCES rolle (ID) ON DELETE SET NULL
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS arbeitsschritt_fachbereich (
+      ArbeitsschrittID INT NOT NULL,
+      FachbereichID INT NOT NULL,
+      PRIMARY KEY (ArbeitsschrittID, FachbereichID),
+      KEY fk_ArbeitsschrittFachbereich_Fachbereich_idx (FachbereichID),
+      CONSTRAINT fk_ArbeitsschrittFachbereich_Arbeitsschritt FOREIGN KEY (ArbeitsschrittID) REFERENCES arbeitsschritt (ID) ON DELETE CASCADE,
+      CONSTRAINT fk_ArbeitsschrittFachbereich_Fachbereich FOREIGN KEY (FachbereichID) REFERENCES fachbereich (ID) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS arbeitsschritt_formular (
+      ArbeitsschrittID INT NOT NULL,
+      FormularID INT NOT NULL,
+      PRIMARY KEY (ArbeitsschrittID, FormularID),
+      KEY fk_ArbeitsschrittFormular_Formular_idx (FormularID),
+      CONSTRAINT fk_ArbeitsschrittFormular_Arbeitsschritt FOREIGN KEY (ArbeitsschrittID) REFERENCES arbeitsschritt (ID) ON DELETE CASCADE,
+      CONSTRAINT fk_ArbeitsschrittFormular_Formular FOREIGN KEY (FormularID) REFERENCES formular (ID) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS einstellung (
       Schluessel VARCHAR(100) NOT NULL,
       Wert VARCHAR(500) DEFAULT NULL,
@@ -1401,6 +1466,342 @@ app.get("/api/formulare/:id/vorschau", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Datei konnte nicht angezeigt werden." });
+  }
+});
+
+// --- Workflows ---
+
+async function attachRollenZuWorkflows(workflowRows) {
+  if (workflowRows.length === 0) {
+    return [];
+  }
+  const ids = workflowRows.map((w) => w.ID);
+  const [rolleRows] = await pool.query(
+    `SELECT wr.WorkflowID, r.ID, r.Bezeichnung
+       FROM workflow_rolle wr
+       JOIN rolle r ON r.ID = wr.RolleID
+      WHERE wr.WorkflowID IN (?)`,
+    [ids]
+  );
+  return workflowRows.map((workflow) => ({
+    ...workflow,
+    Rollen: rolleRows
+      .filter((r) => r.WorkflowID === workflow.ID)
+      .map(({ WorkflowID, ...rest }) => rest),
+  }));
+}
+
+async function resolveWorkflowDetail(id) {
+  const [workflowRows] = await pool.query("SELECT * FROM workflow WHERE ID = ?", [id]);
+  if (!workflowRows[0]) {
+    return null;
+  }
+  const workflow = workflowRows[0];
+
+  const [rolleRows] = await pool.query(
+    `SELECT r.ID, r.Bezeichnung FROM workflow_rolle wr JOIN rolle r ON r.ID = wr.RolleID WHERE wr.WorkflowID = ? ORDER BY r.ID`,
+    [id]
+  );
+  workflow.Rollen = rolleRows;
+
+  const [arbeitsschrittRows] = await pool.query(
+    "SELECT * FROM arbeitsschritt WHERE WorkflowID = ? ORDER BY Reihenfolge",
+    [id]
+  );
+
+  if (arbeitsschrittRows.length === 0) {
+    workflow.Arbeitsschritte = [];
+    return workflow;
+  }
+
+  const arbeitsschrittIds = arbeitsschrittRows.map((a) => a.ID);
+  const [fbRows] = await pool.query(
+    `SELECT af.ArbeitsschrittID, f.ID, f.BezeichnungLang, f.BezeichnungKurz
+       FROM arbeitsschritt_fachbereich af
+       JOIN fachbereich f ON f.ID = af.FachbereichID
+      WHERE af.ArbeitsschrittID IN (?)`,
+    [arbeitsschrittIds]
+  );
+  const [formularRows] = await pool.query(
+    `SELECT aformular.ArbeitsschrittID, fo.ID, fo.Titel
+       FROM arbeitsschritt_formular aformular
+       JOIN formular fo ON fo.ID = aformular.FormularID
+      WHERE aformular.ArbeitsschrittID IN (?)`,
+    [arbeitsschrittIds]
+  );
+
+  workflow.Arbeitsschritte = arbeitsschrittRows.map((a) => ({
+    ...a,
+    Fachbereiche: fbRows.filter((f) => f.ArbeitsschrittID === a.ID).map(({ ArbeitsschrittID, ...rest }) => rest),
+    Formulare: formularRows.filter((f) => f.ArbeitsschrittID === a.ID).map(({ ArbeitsschrittID, ...rest }) => rest),
+  }));
+
+  return workflow;
+}
+
+function validateWorkflowPayload(body) {
+  const kennung = typeof body.Kennung === "string" ? body.Kennung.trim() : "";
+  const qmKennung = typeof body.QMKennung === "string" ? body.QMKennung.trim() : "";
+  const bezeichnung = typeof body.Bezeichnung === "string" ? body.Bezeichnung.trim() : "";
+  const beschreibung = typeof body.Beschreibung === "string" ? body.Beschreibung.trim() : "";
+  const rolleIds = Array.isArray(body.RolleIDs) ? [...new Set(body.RolleIDs.map(Number))] : [];
+
+  if (
+    !kennung ||
+    !qmKennung ||
+    !bezeichnung ||
+    !beschreibung ||
+    rolleIds.length === 0 ||
+    rolleIds.some((r) => !Number.isInteger(r))
+  ) {
+    return {
+      error: "Kennung, QM-Kennung, Bezeichnung, Beschreibung und mindestens eine zugewiesene Rolle sind erforderlich.",
+    };
+  }
+
+  const arbeitsschritteEingabe = Array.isArray(body.Arbeitsschritte) ? body.Arbeitsschritte : [];
+  const arbeitsschritte = [];
+
+  for (const eintrag of arbeitsschritteEingabe) {
+    const asKennung = typeof eintrag.Kennung === "string" ? eintrag.Kennung.trim() : "";
+    const asQmKennung = typeof eintrag.QMKennung === "string" ? eintrag.QMKennung.trim() : "";
+    const asBezeichnung = typeof eintrag.Bezeichnung === "string" ? eintrag.Bezeichnung.trim() : "";
+    const asBeschreibung = typeof eintrag.Beschreibung === "string" ? eintrag.Beschreibung.trim() : "";
+    const verantwortungRolleId =
+      eintrag.VerantwortungRolleID === null || eintrag.VerantwortungRolleID === undefined || eintrag.VerantwortungRolleID === ""
+        ? null
+        : Number(eintrag.VerantwortungRolleID);
+    const fachbereichIds = Array.isArray(eintrag.FachbereichIDs)
+      ? [...new Set(eintrag.FachbereichIDs.map(Number))]
+      : [];
+    const formularIds = Array.isArray(eintrag.FormularIDs) ? [...new Set(eintrag.FormularIDs.map(Number))] : [];
+
+    if (
+      !asKennung ||
+      !asQmKennung ||
+      !asBezeichnung ||
+      !asBeschreibung ||
+      fachbereichIds.length === 0 ||
+      fachbereichIds.some((f) => !Number.isInteger(f)) ||
+      formularIds.some((f) => !Number.isInteger(f)) ||
+      (verantwortungRolleId !== null && !Number.isInteger(verantwortungRolleId))
+    ) {
+      return {
+        error:
+          "Jeder Arbeitsschritt benötigt Kennung, QM-Kennung, Bezeichnung, Beschreibung und mindestens einen zugewiesenen Fachbereich.",
+      };
+    }
+
+    arbeitsschritte.push({
+      Kennung: asKennung,
+      QMKennung: asQmKennung,
+      Bezeichnung: asBezeichnung,
+      Beschreibung: asBeschreibung,
+      VerantwortungRolleID: verantwortungRolleId,
+      FachbereichIDs: fachbereichIds,
+      FormularIDs: formularIds,
+    });
+  }
+
+  const kennungenSet = new Set(arbeitsschritte.map((a) => a.Kennung));
+  if (kennungenSet.size !== arbeitsschritte.length) {
+    return { error: "Jeder Arbeitsschritt benötigt eine eindeutige Kennung." };
+  }
+
+  return { data: { kennung, qmKennung, bezeichnung, beschreibung, rolleIds, arbeitsschritte } };
+}
+
+app.get("/api/workflows", async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT w.ID, w.Kennung, w.QMKennung, w.Bezeichnung, w.Beschreibung, w.ErstelltAm,
+              COUNT(a.ID) AS ArbeitsschritteAnzahl
+         FROM workflow w
+         LEFT JOIN arbeitsschritt a ON a.WorkflowID = w.ID
+        GROUP BY w.ID
+        ORDER BY w.Bezeichnung`
+    );
+    res.json(await attachRollenZuWorkflows(rows));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Workflows konnten nicht geladen werden." });
+  }
+});
+
+app.get("/api/workflows/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const workflow = await resolveWorkflowDetail(id);
+    if (!workflow) {
+      return res.status(404).json({ error: "Workflow wurde nicht gefunden." });
+    }
+    res.json(workflow);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Workflow konnte nicht geladen werden." });
+  }
+});
+
+app.post("/api/workflows", async (req, res) => {
+  const validation = validateWorkflowPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
+  }
+  const { kennung, qmKennung, bezeichnung, beschreibung, rolleIds, arbeitsschritte } = validation.data;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [result] = await conn.query(
+      "INSERT INTO workflow (Kennung, QMKennung, Bezeichnung, Beschreibung) VALUES (?, ?, ?, ?)",
+      [kennung, qmKennung, bezeichnung, beschreibung]
+    );
+    const workflowId = result.insertId;
+
+    for (const rolleId of rolleIds) {
+      await conn.query("INSERT INTO workflow_rolle (WorkflowID, RolleID) VALUES (?, ?)", [workflowId, rolleId]);
+    }
+
+    let reihenfolge = 1;
+    for (const arbeitsschritt of arbeitsschritte) {
+      const [asResult] = await conn.query(
+        `INSERT INTO arbeitsschritt (WorkflowID, Kennung, QMKennung, Bezeichnung, Beschreibung, VerantwortungRolleID, Reihenfolge)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          workflowId,
+          arbeitsschritt.Kennung,
+          arbeitsschritt.QMKennung,
+          arbeitsschritt.Bezeichnung,
+          arbeitsschritt.Beschreibung,
+          arbeitsschritt.VerantwortungRolleID,
+          reihenfolge,
+        ]
+      );
+      const arbeitsschrittId = asResult.insertId;
+      for (const fachbereichId of arbeitsschritt.FachbereichIDs) {
+        await conn.query(
+          "INSERT INTO arbeitsschritt_fachbereich (ArbeitsschrittID, FachbereichID) VALUES (?, ?)",
+          [arbeitsschrittId, fachbereichId]
+        );
+      }
+      for (const formularId of arbeitsschritt.FormularIDs) {
+        await conn.query("INSERT INTO arbeitsschritt_formular (ArbeitsschrittID, FormularID) VALUES (?, ?)", [
+          arbeitsschrittId,
+          formularId,
+        ]);
+      }
+      reihenfolge += 1;
+    }
+
+    await conn.commit();
+    res.status(201).json(await resolveWorkflowDetail(workflowId));
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({ error: "Kennung ist bereits vergeben (Workflow oder Arbeitsschritt)." });
+    }
+    res.status(500).json({ error: "Workflow konnte nicht gespeichert werden." });
+  } finally {
+    conn.release();
+  }
+});
+
+app.put("/api/workflows/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+
+  const validation = validateWorkflowPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
+  }
+  const { kennung, qmKennung, bezeichnung, beschreibung, rolleIds, arbeitsschritte } = validation.data;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [result] = await conn.query(
+      "UPDATE workflow SET Kennung = ?, QMKennung = ?, Bezeichnung = ?, Beschreibung = ? WHERE ID = ?",
+      [kennung, qmKennung, bezeichnung, beschreibung, id]
+    );
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: "Workflow wurde nicht gefunden." });
+    }
+
+    await conn.query("DELETE FROM workflow_rolle WHERE WorkflowID = ?", [id]);
+    for (const rolleId of rolleIds) {
+      await conn.query("INSERT INTO workflow_rolle (WorkflowID, RolleID) VALUES (?, ?)", [id, rolleId]);
+    }
+
+    // Bestehende Arbeitsschritte komplett ersetzen statt Delta-Update, wie bei
+    // allen anderen Zuordnungstabellen in diesem Projekt (loeschen + neu einfuegen).
+    await conn.query("DELETE FROM arbeitsschritt WHERE WorkflowID = ?", [id]);
+
+    let reihenfolge = 1;
+    for (const arbeitsschritt of arbeitsschritte) {
+      const [asResult] = await conn.query(
+        `INSERT INTO arbeitsschritt (WorkflowID, Kennung, QMKennung, Bezeichnung, Beschreibung, VerantwortungRolleID, Reihenfolge)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          arbeitsschritt.Kennung,
+          arbeitsschritt.QMKennung,
+          arbeitsschritt.Bezeichnung,
+          arbeitsschritt.Beschreibung,
+          arbeitsschritt.VerantwortungRolleID,
+          reihenfolge,
+        ]
+      );
+      const arbeitsschrittId = asResult.insertId;
+      for (const fachbereichId of arbeitsschritt.FachbereichIDs) {
+        await conn.query(
+          "INSERT INTO arbeitsschritt_fachbereich (ArbeitsschrittID, FachbereichID) VALUES (?, ?)",
+          [arbeitsschrittId, fachbereichId]
+        );
+      }
+      for (const formularId of arbeitsschritt.FormularIDs) {
+        await conn.query("INSERT INTO arbeitsschritt_formular (ArbeitsschrittID, FormularID) VALUES (?, ?)", [
+          arbeitsschrittId,
+          formularId,
+        ]);
+      }
+      reihenfolge += 1;
+    }
+
+    await conn.commit();
+    res.json(await resolveWorkflowDetail(id));
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(400).json({ error: "Kennung ist bereits vergeben (Workflow oder Arbeitsschritt)." });
+    }
+    res.status(500).json({ error: "Workflow konnte nicht aktualisiert werden." });
+  } finally {
+    conn.release();
+  }
+});
+
+app.delete("/api/workflows/:id", requireRole("Administrator"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: "Ungültige ID." });
+  }
+  try {
+    const [result] = await pool.query("DELETE FROM workflow WHERE ID = ?", [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Workflow wurde nicht gefunden." });
+    }
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Workflow konnte nicht gelöscht werden." });
   }
 });
 

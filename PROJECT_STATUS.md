@@ -3,7 +3,73 @@
 Stand: 2026-08-26. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Der Menüpunkt **Workflows** ist jetzt
+**Wichtig für eine neue Session:** Die Maßnahmen-/VT-Zuordnung einer
+Leistungskontrolle ist jetzt **nur noch beim Anlegen wählbar** und auf der
+Bearbeiten-Seite (`page-leistungskontrollen-detail`) **schreibgeschützt**:
+`lkDetailMassnahmenCheckboxes` (die frühere Checkbox-Gruppe mit allen
+Maßnahmen zum An-/Abwählen) wurde durch ein einfaches `<p class="form-message"
+id="lkDetailMassnahmenListe">` ersetzt, das nur die bei Anlage gewählten
+Maßnahmen als Text auflistet (`Bezeichnung (VT)`, kommasepariert – exakt das
+gleiche Format wie die "Zugewiesene VTs"-Spalte der Übersichtstabelle). Die
+Zuordnung lässt sich dort nicht mehr an-/abwählen; das Label wurde um den
+Hinweis "– bei Anlage festgelegt, nicht änderbar" ergänzt, damit klar ist,
+warum keine Checkboxen mehr da sind. Der Speichern-Handler auf der
+Detailseite sendet weiterhin `MassnahmeIDs` im PUT-Request (das Backend
+verlangt laut `readLeistungskontrolleBody()` weiterhin mindestens eine
+zugewiesene Maßnahme und würde sonst 400 zurückgeben) – **liest die IDs aber
+jetzt aus `currentLkDetail.Massnahmen` statt aus Checkbox-Zustand**, sendet
+also unverändert exakt das zurück, was beim Laden der Seite bereits
+zugewiesen war. **Bewusst rein UI-seitig**, kein zusätzliches
+Backend-`requireRole`/Validierungs-Lock auf `/api/leistungskontrollen/:id`
+gegen eine Änderung der `MassnahmeIDs` – die Anfrage bezog sich auf "die
+Bearbeiten-Seite", passend zum wiederholten Muster dieser Session
+(Menü-/Seiten-Ebene, nicht Backend-Ebene). Per Playwright verifiziert:
+0 Checkboxen auf der Detailseite, angezeigter Text stimmt exakt mit der
+Anlage-Auswahl überein, bleibt nach dem Ändern eines anderen Felds (Speichern)
+unverändert – sowohl auf der Detailseite als auch in der Übersichtstabelle.
+
+**Davor:** Die "Zugewiesene Maßnahmen (VT)"-Auswahl
+im **Neuanlage-Formular** von Leistungskontrollen (`page-leistungskontrollen`,
+`lkMassnahmenCheckboxes`) ist jetzt ebenfalls einklappbar und durchsuchbar
+(gleiches Muster wie zuvor bei der Formular-Auswahl je Arbeitsschritt in
+Workflows), da mit vielen VTs zu rechnen ist. Zusätzlich werden bereits
+**beendete Maßnahmen dort nicht mehr aufgeführt**: `buildLkMassnahmenCheckboxes()`
+hat einen neuen Options-Parameter `{ nurAktive }`, der bei `true` alle
+Maßnahmen mit `PlanEnde < heute` herausfiltert (`heutigesDatumIso()`-
+Stringvergleich, da die DB-Verbindung `dateStrings: true` nutzt und
+`PlanEnde` dadurch als reines `YYYY-MM-DD` vorliegt – lexikographischer
+Stringvergleich funktioniert dafür korrekt). **Bewusst nur beim Anlegen,
+nicht beim Bearbeiten:** Die Anfrage bezog sich explizit auf "beim Anlegen
+einer neuen Leistungskontrolle" – die Maßnahmen-Auswahl auf der
+Detail-/Bearbeiten-Seite (`lkDetailMassnahmenCheckboxes`) bleibt bewusst
+unverändert (weder einklappbar/durchsuchbar noch nach beendeten Maßnahmen
+gefiltert), damit eine bereits vor Jahren zugewiesene, inzwischen beendete
+Maßnahme beim Öffnen einer alten Leistungskontrolle nicht plötzlich aus der
+Liste verschwindet und stillschweigend mit-abgewählt werden könnte, sobald
+gespeichert wird.
+
+**Refactoring zu generischen CSS-/Verhaltens-Klassen:** Die beim
+Workflows-Feature eingeführten, dort noch Formular-spezifisch benannten
+Klassen `.formular-auswahl-anzahl`/`.formular-auswahl-suche` sowie die
+Scroll-Begrenzung (`max-height` + `overflow-y: auto`) wurden zu generischen,
+projektweit wiederverwendbaren Klassen `.checkbox-group-anzahl`/
+`.checkbox-group-suche`/`.checkbox-group-collapsible .checkbox-group`
+verallgemeinert (zweite Verwendung derselben UI-Kombination aus Details-
+Element + Live-Anzahl-Badge + Suchfeld + scrollbarer Checkbox-Liste
+innerhalb derselben Session – deshalb bewusst nicht noch ein drittes Mal
+dupliziert, sondern jetzt gemeinsam genutzt). `.formular-auswahl-details`
+bleibt als zusätzliche, rein Formular-spezifische Modifier-Klasse bestehen
+(nur für die weiße Summary-Hintergrundfarbe nötig, weil diese eine Instanz
+innerhalb des grau hinterlegten `.arbeitsschritt-block` verschachtelt ist –
+die neue Maßnahmen-Auswahl bei Leistungskontrolle liegt dagegen direkt auf
+weißem Seitenhintergrund und braucht diesen Override nicht). Per Playwright
+getestet: Collapsible standardmäßig zu, beendete Testmaßnahme fehlt in der
+Liste, Suche filtert korrekt (inkl. Null-Treffer-Fall), Auswahl übersteht
+Such-Reset, Anzahl-Badge korrekt, nach Speichern werden Formular/Suchfeld/
+Badge zurückgesetzt, Bearbeiten-Seite unverändert (zeigt weiterhin auch
+beendete Maßnahmen, bleibt nicht-einklappbar).
+
+**Davor:** Der Menüpunkt **Workflows** ist jetzt
 **Administrator-only** statt für die zuvor drei Rollen (Administrator/
 Bildungsstättenleiter/Fachbereichsleiter) sichtbar. Umgesetzt durch
 **Konvergenz auf das bestehende `adminOnlyPages`-Muster** statt Beibehaltung

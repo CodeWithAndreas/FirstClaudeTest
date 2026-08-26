@@ -956,8 +956,11 @@
               </div>
 
               <div class="form-row">
-                <label>Zugewiesene Maßnahmen (VT)</label>
-                <div class="checkbox-group" id="lkMassnahmenCheckboxes"></div>
+                <details class="collapsible-form checkbox-group-collapsible">
+                  <summary>Zugewiesene Maßnahmen (VT) <span class="checkbox-group-anzahl" id="lkMassnahmenAnzahl"></span></summary>
+                  <input type="text" class="checkbox-group-suche" id="lkMassnahmenSuche" placeholder="Maßnahme oder VT suchen…">
+                  <div class="checkbox-group" id="lkMassnahmenCheckboxes"></div>
+                </details>
               </div>
 
               <button type="submit">Speichern</button>
@@ -1038,8 +1041,8 @@
             </div>
 
             <div class="form-row">
-              <label>Zugewiesene Maßnahmen (VT)</label>
-              <div class="checkbox-group" id="lkDetailMassnahmenCheckboxes"></div>
+              <label>Zugewiesene Maßnahmen (VT) – bei Anlage festgelegt, nicht änderbar</label>
+              <p class="form-message" id="lkDetailMassnahmenListe"></p>
             </div>
 
             <p class="form-message" id="lkDetailFormMessage" role="status"></p>

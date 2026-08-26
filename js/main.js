@@ -1129,17 +1129,17 @@ function buildFormularAuswahl(container, formulare, checkedIds = []) {
 
 function buildFormularAuswahlBlock(formulare, checkedIds = []) {
   const details = document.createElement("details");
-  details.className = "collapsible-form formular-auswahl-details";
+  details.className = "collapsible-form checkbox-group-collapsible formular-auswahl-details";
 
   const summary = document.createElement("summary");
   const anzahlSpan = document.createElement("span");
-  anzahlSpan.className = "formular-auswahl-anzahl";
+  anzahlSpan.className = "checkbox-group-anzahl";
   summary.append("Zugeordnete Formulare ", anzahlSpan);
   details.appendChild(summary);
 
   const sucheInput = document.createElement("input");
   sucheInput.type = "text";
-  sucheInput.className = "formular-auswahl-suche";
+  sucheInput.className = "checkbox-group-suche";
   sucheInput.placeholder = "Formular suchen…";
   details.appendChild(sucheInput);
 
@@ -4866,13 +4866,15 @@ const lkResetFilterBtn = document.getElementById("lkResetFilterBtn");
 const lkForm = document.getElementById("lkForm");
 const lkFormMessage = document.getElementById("lkFormMessage");
 const lkMassnahmenCheckboxes = document.getElementById("lkMassnahmenCheckboxes");
+const lkMassnahmenSuche = document.getElementById("lkMassnahmenSuche");
+const lkMassnahmenAnzahl = document.getElementById("lkMassnahmenAnzahl");
 const leistungskontrolleTableBody = document.getElementById("leistungskontrolleTableBody");
 
 const lkZurueckBtn = document.getElementById("lkZurueckBtn");
 const lkDetailNummer = document.getElementById("lkDetailNummer");
 const lkDetailForm = document.getElementById("lkDetailForm");
 const lkDetailFormMessage = document.getElementById("lkDetailFormMessage");
-const lkDetailMassnahmenCheckboxes = document.getElementById("lkDetailMassnahmenCheckboxes");
+const lkDetailMassnahmenListe = document.getElementById("lkDetailMassnahmenListe");
 const lkDetailDeleteBtn = document.getElementById("lkDetailDeleteBtn");
 const lkDetailErgebnisseBtn = document.getElementById("lkDetailErgebnisseBtn");
 
@@ -5001,13 +5003,28 @@ async function initLkFilterOptions() {
   refreshLkVtOptions();
 }
 
-function buildLkMassnahmenCheckboxes(container, checkedIds = []) {
+function buildLkMassnahmenCheckboxes(container, checkedIds = [], { nurAktive = false } = {}) {
+  const heute = heutigesDatumIso();
   const items = lkMassnahmen
-    .slice()
+    .filter((m) => !nurAktive || !m.PlanEnde || m.PlanEnde >= heute)
     .sort((a, b) => a.Bezeichnung.localeCompare(b.Bezeichnung, "de"))
     .map((m) => ({ ID: m.ID, Label: `${m.Bezeichnung} (${m.VT || "–"})` }));
   buildCheckboxGroup(container, items, { labelKey: "Label", checkedIds });
 }
+
+function aktualisiereLkMassnahmenAnzahl() {
+  const anzahl = getCheckedValues(lkMassnahmenCheckboxes).length;
+  lkMassnahmenAnzahl.textContent = anzahl > 0 ? `(${anzahl} ausgewählt)` : "";
+}
+
+lkMassnahmenCheckboxes.addEventListener("change", aktualisiereLkMassnahmenAnzahl);
+
+lkMassnahmenSuche.addEventListener("input", () => {
+  const suchbegriff = lkMassnahmenSuche.value.trim().toLowerCase();
+  lkMassnahmenCheckboxes.querySelectorAll("label").forEach((label) => {
+    label.style.display = !suchbegriff || label.textContent.toLowerCase().includes(suchbegriff) ? "" : "none";
+  });
+});
 
 function lkMatchesFilter(lk) {
   const fachbereichId = lkFachbereichFilter.value;
@@ -5203,7 +5220,8 @@ async function ensureLkInitialized() {
     lkInitialized = true;
     await loadFachbereichOptionsInto(lkFachbereichFilter);
     await initLkFilterOptions();
-    buildLkMassnahmenCheckboxes(lkMassnahmenCheckboxes, []);
+    buildLkMassnahmenCheckboxes(lkMassnahmenCheckboxes, [], { nurAktive: true });
+    aktualisiereLkMassnahmenAnzahl();
   }
   await loadLeistungskontrollen();
 }
@@ -5237,7 +5255,9 @@ lkForm.addEventListener("submit", async (event) => {
     }
 
     lkForm.reset();
-    buildLkMassnahmenCheckboxes(lkMassnahmenCheckboxes, []);
+    lkMassnahmenSuche.value = "";
+    buildLkMassnahmenCheckboxes(lkMassnahmenCheckboxes, [], { nurAktive: true });
+    aktualisiereLkMassnahmenAnzahl();
     lkFormMessage.textContent = "Leistungskontrolle gespeichert.";
     lkFormMessage.classList.add("success");
     await loadLeistungskontrollen();
@@ -5274,13 +5294,9 @@ async function loadLeistungskontrolleDetailPage(id) {
       currentLkDetail.Loeschdatum || berechneLoeschdatumVorschlag(heutigesDatumIso(), loeschfristOffsetJahre);
     lkDetailForm.elements.Lagerort.value = currentLkDetail.Lagerort;
 
-    if (lkMassnahmen.length === 0) {
-      await loadLkMassnahmen();
-    }
-    buildLkMassnahmenCheckboxes(
-      lkDetailMassnahmenCheckboxes,
-      currentLkDetail.Massnahmen.map((m) => m.ID)
-    );
+    lkDetailMassnahmenListe.textContent = currentLkDetail.Massnahmen.length
+      ? currentLkDetail.Massnahmen.map((m) => `${m.Bezeichnung} (${m.VT || "–"})`).join(", ")
+      : "–";
 
     lkDetailDeleteBtn.hidden = !canDeleteLeistungskontrolle(currentLkDetail);
   } catch (err) {
@@ -5306,7 +5322,7 @@ lkDetailForm.addEventListener("submit", async (event) => {
     Gesamtpunkte: formData.get("Gesamtpunkte"),
     Loeschdatum: formData.get("Loeschdatum"),
     Lagerort: formData.get("Lagerort").trim(),
-    MassnahmeIDs: getCheckedValues(lkDetailMassnahmenCheckboxes),
+    MassnahmeIDs: currentLkDetail.Massnahmen.map((m) => m.ID),
   };
 
   lkDetailFormMessage.textContent = "";

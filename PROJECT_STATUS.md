@@ -1,9 +1,55 @@
 # Standortmanager – Projektstatus
 
-Stand: 2026-08-26. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
+Stand: 2026-08-29. Diese Datei fasst den bisherigen Fortschritt zusammen, damit
 eine neue Session nahtlos anschließen kann.
 
-**Wichtig für eine neue Session:** Der Menüpunkt **Maßnahmetypen** ist jetzt
+**Zuletzt (2026-08-29): Anwesenheiten in Untermenüs „Monatlich"/„Wöchentlich"
+aufgeteilt.** Der bisherige einzelne Sidebar-Link **Anwesenheiten** ist jetzt
+eine `<details class="sidebar-group" data-group="anwesenheiten">`-Gruppe (exakt
+das Muster von Stammdaten/Audit) mit zwei Unterpunkten: **Monatlich**
+(`#anwesenheiten-monatlich`) = die bisherige Monatsansicht, unverändert im
+Verhalten, und **Wöchentlich** (`#anwesenheiten-woechentlich`) = neue
+Wochenansicht (Montag–Sonntag, Navigations-Pfeile springen um je 7 Tage,
+Label „KW N · TT.MM.–TT.MM.JJJJ"). **Bewusste Architekturentscheidung:** Beide
+Unterpunkte teilen sich **eine** Seite (`page-anwesenheiten`) und **eine**
+JS-Implementierung – kein zweites `<section>`, keine Kopie der ~750 Zeilen
+Anwesenheiten-Logik. Ein Modul-State `awMode` (`"month"`/`"week"`) schaltet um;
+alle Tages-Schleifen laufen jetzt über den generischen Helfer `awPeriodDates()`
+(liefert im Monatsmodus alle Monatstage, im Wochenmodus Mo–So als `Date[]`),
+`awPeriodRange()` (ISO von/bis) und `awPeriodLabel()`. Neue Helfer
+`awStartOfWeek()`, `awDateToIso()`, `awIsoWeekNumber()` (ISO-8601-KW). `showPage()`
+mappt beide Routen auf `sectionId = "anwesenheiten"` und ruft `setAwMode()` vor
+`ensureAwInitialized()`. `updateAwMonthLabel()` → `updateAwPeriodLabel()` (setzt
+zusätzlich den `<h2 id="awPageTitle">`), `changeAwMonth()` → `changeAwPeriod()`.
+PDF-Bericht (`buildAwReportHeaderLines`/`buildAwReportFilename`/`drawAwReportPage`)
+ist ebenfalls modusabhängig (Kopfzeile „Woche:"/„Monat:", Dateiname `…_KW35_2026`).
+**Backend:** `GET /api/anwesenheiten` akzeptiert jetzt zusätzlich zu
+`?monat=YYYY-MM` einen freien Bereich `?von=YYYY-MM-DD&bis=YYYY-MM-DD` (nötig,
+weil eine KW über eine Monatsgrenze reichen kann); die Abfrage nutzt intern
+`Datum BETWEEN ? AND ?`. Das Frontend ruft jetzt immer die von/bis-Form auf;
+`?monat=` bleibt aus Kompatibilität erhalten. Rollen-Gating unverändert:
+Auditor-only sieht die Gruppe nicht (`applyRolePermissions()`), Auditoren werden
+weiterhin auf die Audit-Seiten umgeleitet. Die beiden PDF-Bestätigungsdialoge
+(`#pdfConfirmText`/`#pdfVtConfirmText`) sind ebenfalls modusabhängig: neue
+Funktion `updateAwPdfConfirmTexts()` (nutzt `awPeriodLabel()`) wird beim Öffnen
+jedes Dialogs aufgerufen und formuliert „die angezeigte Woche (KW …)" bzw. „den
+angezeigten Monat (…)"; der statische HTML-Text bleibt nur als Vor-JS-Fallback.
+Die `<summary>` der Gruppe trägt bewusst `data-page="anwesenheiten"` (nicht
+`"anwesenheiten-monatlich"`): sonst bekämen Haupt- **und** Unterpunkt „Monatlich"
+gleichzeitig `.active` (blau). Der Alt-Hash `#anwesenheiten` wird in `showPage()`
+ohnehin sofort auf `anwesenheiten-monatlich` umgeschrieben, d. h. `activeNavPage`
+ist nie `"anwesenheiten"` → der Hauptpunkt bleibt in beiden Untermenü-Zuständen
+weiß, die Ein-Klick-Navigation auf die Monatsansicht über den Hauptpunkt bleibt
+aber erhalten (Klick setzt Hash `#anwesenheiten`).
+
+Getestet: Backend per curl (von/bis, Monatskompat, Monatsgrenze, 400-Fälle,
+Schreib-Roundtrip ohne Datenrest) und Frontend per Playwright (Menügruppe,
+beide Modi, KW-Navigation, Alt-Hash-Redirect, PDF-Dialogtexte, Rollen-Sicht
+Ausbilder/Bildungsstättenleiter, Haupt-/Unterpunkt-Highlighting inkl.
+Stammdaten-Regression) – alles grün gegen den neu gestarteten Server auf
+Port 3000.
+
+**Davor:** Der Menüpunkt **Maßnahmetypen** ist jetzt
 doch Administrator-only – die vorherige Session-Notiz weiter unten
 ("unbegründete Annahme, zurückgenommen") wurde durch eine explizite
 Nutzeranfrage überholt. Umsetzung 1:1 nach dem `adminOnlyPages`-Muster wie

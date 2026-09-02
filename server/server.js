@@ -2275,6 +2275,10 @@ app.post("/api/teilnehmer", async (req, res) => {
   }
 
   try {
+    if (isRestrictedUser(req)) {
+      return res.status(403).json({ error: "Keine Berechtigung zum Anlegen von Teilnehmenden." });
+    }
+
     const fachbereichId = await resolveFachbereichForMassnahme(values.MassnahmeID);
     if (!fachbereichInScope(req, fachbereichId)) {
       return res.status(403).json({ error: "Keine Berechtigung für diesen Fachbereich." });
@@ -3683,9 +3687,24 @@ app.get("/api/anwesenheitsstatus", async (req, res) => {
 
 app.get("/api/anwesenheiten", async (req, res) => {
   const monat = req.query.monat;
+  const von = req.query.von;
+  const bis = req.query.bis;
 
-  if (!/^\d{4}-\d{2}$/.test(monat || "")) {
-    return res.status(400).json({ error: "Ungültiger Monat (Format YYYY-MM erwartet)." });
+  // Zwei Abfrageformen: ganzer Monat (?monat=YYYY-MM, monatliche Darstellung)
+  // oder freier Datumsbereich (?von=YYYY-MM-DD&bis=YYYY-MM-DD, wöchentliche
+  // Darstellung – eine Kalenderwoche kann über eine Monatsgrenze reichen).
+  let vonDatum;
+  let bisDatum;
+  if (/^\d{4}-\d{2}$/.test(monat || "")) {
+    const [jahr, mon] = monat.split("-").map(Number);
+    const letzterTag = new Date(jahr, mon, 0).getDate();
+    vonDatum = `${monat}-01`;
+    bisDatum = `${monat}-${String(letzterTag).padStart(2, "0")}`;
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(von || "") && /^\d{4}-\d{2}-\d{2}$/.test(bis || "")) {
+    vonDatum = von;
+    bisDatum = bis;
+  } else {
+    return res.status(400).json({ error: "Ungültiger Zeitraum (monat=YYYY-MM oder von/bis=YYYY-MM-DD erwartet)." });
   }
 
   try {
@@ -3702,13 +3721,13 @@ app.get("/api/anwesenheiten", async (req, res) => {
          JOIN teilnehmer t ON t.ID = a.TeilnehmerID
          JOIN massnahme m ON m.ID = t.MassnahmeID
          JOIN gruppe g ON g.ID = m.GruppeID
-         WHERE DATE_FORMAT(a.Datum, '%Y-%m') = ? AND g.FachbereichID IN (?)`,
-        [monat, ids]
+         WHERE a.Datum BETWEEN ? AND ? AND g.FachbereichID IN (?)`,
+        [vonDatum, bisDatum, ids]
       );
     } else {
       [rows] = await pool.query(
-        "SELECT ID, TeilnehmerID, Datum, StatusID FROM anwesenheit WHERE DATE_FORMAT(Datum, '%Y-%m') = ?",
-        [monat]
+        "SELECT ID, TeilnehmerID, Datum, StatusID FROM anwesenheit WHERE Datum BETWEEN ? AND ?",
+        [vonDatum, bisDatum]
       );
     }
 

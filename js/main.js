@@ -46,6 +46,8 @@ const pageLabels = {
   leistungskontrollen: "Leistungskontrollen",
   "leistungskontrollen-detail": "Leistungskontrollen / Detail",
   anwesenheiten: "Anwesenheiten",
+  "anwesenheiten-monatlich": "Anwesenheiten / Monatlich",
+  "anwesenheiten-woechentlich": "Anwesenheiten / Wöchentlich",
   stammdaten: "Stammdaten",
   massnahmen: "Stammdaten / Maßnahmen",
   massnahmetypen: "Stammdaten / Maßnahmetypen",
@@ -83,6 +85,13 @@ const FORMULARE_ERLAUBTE_ROLLEN = ["Administrator", "Bildungsstättenleiter", "F
 function canAccessFormulare(user) {
   const roles = (user && user.roles) || [];
   return roles.some((r) => FORMULARE_ERLAUBTE_ROLLEN.includes(r));
+}
+
+const TEILNEHMER_ANLEGEN_ERLAUBTE_ROLLEN = ["Administrator", "Lehrgangsorganisation", "Bildungsstättenleiter"];
+
+function canCreateTeilnehmer(user) {
+  const roles = (user && user.roles) || [];
+  return roles.some((r) => TEILNEHMER_ANLEGEN_ERLAUBTE_ROLLEN.includes(r));
 }
 
 // Login / Header
@@ -124,7 +133,15 @@ document.querySelectorAll(".sidebar-group summary[data-page]").forEach((summary)
 });
 
 function showPage(pageId) {
-  let targetId = document.getElementById(`page-${pageId}`) ? pageId : defaultPage;
+  // Anwesenheiten: "Monatlich" und "Wöchentlich" sind zwei Untermenüs, die sich
+  // eine gemeinsame Seite (page-anwesenheiten) teilen und nur den Modus umschalten.
+  if (pageId === "anwesenheiten") {
+    pageId = "anwesenheiten-monatlich"; // Alt-Hash weiterleiten
+  }
+  const awRouteMode =
+    pageId === "anwesenheiten-monatlich" ? "month" : pageId === "anwesenheiten-woechentlich" ? "week" : null;
+
+  let targetId = document.getElementById(`page-${pageId}`) || awRouteMode ? pageId : defaultPage;
 
   if (adminOnlyPages.includes(targetId) && !(currentUser && currentUser.roles.includes("Administrator"))) {
     targetId = defaultPage;
@@ -177,8 +194,12 @@ function showPage(pageId) {
     }
   });
 
+  // targetId kann durch die Rollen-Weiterleitungen oben verändert worden sein;
+  // nur wenn es weiterhin eine Anwesenheiten-Route ist, greift die gemeinsame Seite.
+  const onAwPage = targetId === "anwesenheiten-monatlich" || targetId === "anwesenheiten-woechentlich";
+  const sectionId = onAwPage ? "anwesenheiten" : targetId;
   pages.forEach((page) => {
-    page.classList.toggle("active", page.id === `page-${targetId}`);
+    page.classList.toggle("active", page.id === `page-${sectionId}`);
   });
 
   const activeNavPage =
@@ -210,7 +231,8 @@ function showPage(pageId) {
   if (targetId === "stammdaten") {
     loadStammdatenStats();
   }
-  if (targetId === "anwesenheiten") {
+  if (onAwPage) {
+    setAwMode(awRouteMode);
     ensureAwInitialized();
   }
   if (targetId === "teilnehmende" && tnRowEntries.length > 0) {
@@ -5747,6 +5769,7 @@ const awResetFilterBtn = document.getElementById("awResetFilterBtn");
 const awPrevMonthBtn = document.getElementById("awPrevMonthBtn");
 const awNextMonthBtn = document.getElementById("awNextMonthBtn");
 const awMonthLabel = document.getElementById("awMonthLabel");
+const awPageTitle = document.getElementById("awPageTitle");
 const awTableHeadRow = document.getElementById("awTableHeadRow");
 const awTableBody = document.getElementById("awTableBody");
 
@@ -5759,6 +5782,11 @@ const WEEKDAY_SHORT_DE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const awToday = new Date();
 let awYear = awToday.getFullYear();
 let awMonth = awToday.getMonth() + 1;
+
+// Darstellungsmodus: "month" (Untermenü Monatlich) oder "week" (Untermenü Wöchentlich).
+// Im Wochenmodus bestimmt awWeekStart (immer ein Montag) den angezeigten Zeitraum.
+let awMode = "month";
+let awWeekStart = awStartOfWeek(awToday);
 
 let awTeilnehmer = [];
 let awStatusList = [];
@@ -5791,6 +5819,78 @@ function awDaysInMonth(year, month) {
 
 function awAttendanceKey(teilnehmerId, datum) {
   return `${teilnehmerId}|${datum}`;
+}
+
+// Montag der Woche, in der `date` liegt (lokale Zeit, ohne Uhrzeitanteil).
+function awStartOfWeek(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const weekday = d.getDay(); // 0 = Sonntag … 6 = Samstag
+  d.setDate(d.getDate() + (weekday === 0 ? -6 : 1 - weekday));
+  return d;
+}
+
+function awDateToIso(d) {
+  return awIsoDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+// ISO-8601-Kalenderwoche (Woche mit dem ersten Donnerstag des Jahres = KW 1).
+function awIsoWeekNumber(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+}
+
+// Die Tage (als Date-Objekte) des aktuell dargestellten Zeitraums:
+// im Monatsmodus alle Tage des Monats, im Wochenmodus Montag–Sonntag.
+function awPeriodDates() {
+  if (awMode === "week") {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(awWeekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  }
+  const days = awDaysInMonth(awYear, awMonth);
+  return Array.from({ length: days }, (_, i) => new Date(awYear, awMonth - 1, i + 1));
+}
+
+// Erster und letzter Tag des Zeitraums als ISO-String (für Filter und API-Abruf).
+function awPeriodRange() {
+  const dates = awPeriodDates();
+  return { von: awDateToIso(dates[0]), bis: awDateToIso(dates[dates.length - 1]) };
+}
+
+function awPeriodLabel() {
+  if (awMode === "week") {
+    const dates = awPeriodDates();
+    const first = dates[0];
+    const last = dates[6];
+    return (
+      `KW ${awIsoWeekNumber(first)} · ` +
+      `${awPad(first.getDate())}.${awPad(first.getMonth() + 1)}.–` +
+      `${awPad(last.getDate())}.${awPad(last.getMonth() + 1)}.${last.getFullYear()}`
+    );
+  }
+  return `${MONTH_NAMES_DE[awMonth - 1]} ${awYear}`;
+}
+
+// Modusumschaltung aus dem Routing (setAwMode wird vor ensureAwInitialized aufgerufen).
+function setAwMode(mode) {
+  if (mode !== "week" && mode !== "month") {
+    return;
+  }
+  if (awMode === mode) {
+    return;
+  }
+  awMode = mode;
+  if (!awInitialized) {
+    return; // initAnwesenheiten() rendert gleich ohnehin im neuen Modus
+  }
+  updateAwPeriodLabel();
+  buildAwTableHead();
+  loadAwAttendance().then(buildAwTableRows);
 }
 
 async function loadAwStatusList() {
@@ -5929,7 +6029,8 @@ function refreshAwVtOptions() {
 async function loadAwAttendance() {
   awAttendance = new Map();
   try {
-    const response = await fetch(`/api/anwesenheiten?monat=${awYear}-${awPad(awMonth)}`);
+    const { von, bis } = awPeriodRange();
+    const response = await fetch(`/api/anwesenheiten?von=${von}&bis=${bis}`);
     if (!response.ok) {
       throw new Error("Anwesenheiten konnten nicht geladen werden.");
     }
@@ -5942,24 +6043,26 @@ async function loadAwAttendance() {
   }
 }
 
-function updateAwMonthLabel() {
-  awMonthLabel.textContent = `${MONTH_NAMES_DE[awMonth - 1]} ${awYear}`;
+function updateAwPeriodLabel() {
+  awMonthLabel.textContent = awPeriodLabel();
+  if (awPageTitle) {
+    awPageTitle.textContent = awMode === "week" ? "Anwesenheiten · Wöchentlich" : "Anwesenheiten · Monatlich";
+  }
 }
 
 function buildAwTableHead() {
   awTableHeadRow.querySelectorAll("th.day-col").forEach((th) => th.remove());
 
-  const days = awDaysInMonth(awYear, awMonth);
-  for (let day = 1; day <= days; day++) {
-    const weekday = new Date(awYear, awMonth - 1, day).getDay();
+  awPeriodDates().forEach((d) => {
+    const weekday = d.getDay();
     const th = document.createElement("th");
     th.className = "day-col";
     if (weekday === 0 || weekday === 6) {
       th.classList.add("weekend");
     }
-    th.innerHTML = `<span class="day-num">${day}</span><span class="day-weekday">${WEEKDAY_SHORT_DE[weekday]}</span>`;
+    th.innerHTML = `<span class="day-num">${d.getDate()}</span><span class="day-weekday">${WEEKDAY_SHORT_DE[weekday]}</span>`;
     awTableHeadRow.appendChild(th);
-  }
+  });
 }
 
 function awMatchesFilter(person) {
@@ -5969,9 +6072,8 @@ function awMatchesFilter(person) {
   const vt = awVtFilter.value;
   const nameQuery = awNameFilter.value.trim().toLowerCase();
 
-  const monthStart = awIsoDate(awYear, awMonth, 1);
-  const monthEnd = awIsoDate(awYear, awMonth, awDaysInMonth(awYear, awMonth));
-  if ((person.Endedatum || "") < monthStart || (person.Startdatum || "") > monthEnd) {
+  const { von: periodStart, bis: periodEnd } = awPeriodRange();
+  if ((person.Endedatum || "") < periodStart || (person.Startdatum || "") > periodEnd) {
     return false;
   }
   if (fachbereichId && String(person.FachbereichID || "") !== fachbereichId) {
@@ -6072,11 +6174,11 @@ function buildAwTableRows() {
   awTableBody.innerHTML = "";
   awRowEntries = [];
 
-  const days = awDaysInMonth(awYear, awMonth);
+  const periodDates = awPeriodDates();
 
   awEmptyRow = document.createElement("tr");
   const emptyCell = document.createElement("td");
-  emptyCell.colSpan = 4 + days;
+  emptyCell.colSpan = 4 + periodDates.length;
   emptyCell.textContent = "Keine Teilnehmenden gefunden.";
   awEmptyRow.appendChild(emptyCell);
   awTableBody.appendChild(awEmptyRow);
@@ -6102,9 +6204,9 @@ function buildAwTableRows() {
 
     row.append(vornameCell, nachnameCell, vtCell, gruppeCell);
 
-    for (let day = 1; day <= days; day++) {
-      const datum = awIsoDate(awYear, awMonth, day);
-      const weekday = new Date(awYear, awMonth - 1, day).getDay();
+    periodDates.forEach((dateObj) => {
+      const datum = awDateToIso(dateObj);
+      const weekday = dateObj.getDay();
 
       const dayCell = document.createElement("td");
       dayCell.className = "day-col";
@@ -6114,11 +6216,14 @@ function buildAwTableRows() {
 
       const select = document.createElement("select");
       select.className = "day-select";
-      select.setAttribute("aria-label", `${person.Vorname} ${person.Nachname}, ${awPad(day)}.${awPad(awMonth)}.${awYear}`);
+      select.setAttribute(
+        "aria-label",
+        `${person.Vorname} ${person.Nachname}, ${awPad(dateObj.getDate())}.${awPad(dateObj.getMonth() + 1)}.${dateObj.getFullYear()}`
+      );
 
       const emptyOption = document.createElement("option");
       emptyOption.value = "";
-      emptyOption.textContent = skbFeiertageFuerJahr(awYear, awBundesland).has(datum) ? "F" : "–";
+      emptyOption.textContent = skbFeiertageFuerJahr(dateObj.getFullYear(), awBundesland).has(datum) ? "F" : "–";
       select.appendChild(emptyOption);
 
       const currentStatusId = awAttendance.get(awAttendanceKey(person.ID, datum));
@@ -6168,7 +6273,7 @@ function buildAwTableRows() {
 
       dayCell.appendChild(select);
       row.appendChild(dayCell);
-    }
+    });
 
     awTableBody.appendChild(row);
     awRowEntries.push({ person, row });
@@ -6194,23 +6299,27 @@ function applyAwFilters() {
   }
 }
 
-async function changeAwMonth(delta) {
-  awMonth += delta;
-  if (awMonth < 1) {
-    awMonth = 12;
-    awYear -= 1;
-  } else if (awMonth > 12) {
-    awMonth = 1;
-    awYear += 1;
+async function changeAwPeriod(delta) {
+  if (awMode === "week") {
+    awWeekStart.setDate(awWeekStart.getDate() + delta * 7);
+  } else {
+    awMonth += delta;
+    if (awMonth < 1) {
+      awMonth = 12;
+      awYear -= 1;
+    } else if (awMonth > 12) {
+      awMonth = 1;
+      awYear += 1;
+    }
   }
-  updateAwMonthLabel();
+  updateAwPeriodLabel();
   buildAwTableHead();
   await loadAwAttendance();
   buildAwTableRows();
 }
 
-awPrevMonthBtn.addEventListener("click", () => changeAwMonth(-1));
-awNextMonthBtn.addEventListener("click", () => changeAwMonth(1));
+awPrevMonthBtn.addEventListener("click", () => changeAwPeriod(-1));
+awNextMonthBtn.addEventListener("click", () => changeAwPeriod(1));
 
 awFachbereichFilter.addEventListener("change", () => {
   refreshAwGruppeOptions();
@@ -6249,13 +6358,32 @@ awResetFilterBtn.addEventListener("click", () => {
 
 const awPdfReportBtn = document.getElementById("awPdfReportBtn");
 const pdfConfirmDialog = document.getElementById("pdfConfirmDialog");
+const pdfConfirmText = document.getElementById("pdfConfirmText");
 const pdfConfirmCancelBtn = document.getElementById("pdfConfirmCancelBtn");
 const pdfConfirmOkBtn = document.getElementById("pdfConfirmOkBtn");
 
 const awPdfVtReportBtn = document.getElementById("awPdfVtReportBtn");
 const pdfVtConfirmDialog = document.getElementById("pdfVtConfirmDialog");
+const pdfVtConfirmText = document.getElementById("pdfVtConfirmText");
 const pdfVtConfirmCancelBtn = document.getElementById("pdfVtConfirmCancelBtn");
 const pdfVtConfirmOkBtn = document.getElementById("pdfVtConfirmOkBtn");
+
+// Beschreibt im Bestätigungsdialog den tatsächlich dargestellten Zeitraum
+// (Monat bzw. Kalenderwoche), passend zum aktiven Anwesenheiten-Untermenü.
+function awZeitraumSatzteil() {
+  return awMode === "week"
+    ? `die angezeigte Woche (${awPeriodLabel()})`
+    : `den angezeigten Monat (${awPeriodLabel()})`;
+}
+
+function updateAwPdfConfirmTexts() {
+  pdfConfirmText.textContent =
+    `Soll der Anwesenheitsbericht für die aktuelle Filterauswahl und ${awZeitraumSatzteil()} ` +
+    `als PDF erstellt und heruntergeladen werden?`;
+  pdfVtConfirmText.textContent =
+    `Soll der Anwesenheitsbericht für die aktuelle Filterauswahl und ${awZeitraumSatzteil()} ` +
+    `als PDF erstellt und heruntergeladen werden, mit einer eigenen Seite je VT?`;
+}
 
 function awSanitizeFilenamePart(text) {
   return text
@@ -6278,7 +6406,7 @@ function buildAwReportHeaderLines() {
     `Maßnahmebezeichnung: ${awFilterLabel(awMassnahmeFilter)}`,
     `VT: ${awFilterLabel(awVtFilter)}`,
     `Name: ${awNameFilter.value.trim() || "alle"}`,
-    `Monat: ${MONTH_NAMES_DE[awMonth - 1]} ${awYear}`,
+    `${awMode === "week" ? "Woche" : "Monat"}: ${awPeriodLabel()}`,
   ];
 }
 
@@ -6301,8 +6429,14 @@ function buildAwReportFilename() {
     parts.push(awSanitizeFilenamePart(awNameFilter.value.trim()));
   }
 
-  parts.push(awSanitizeFilenamePart(MONTH_NAMES_DE[awMonth - 1]));
-  parts.push(String(awYear));
+  if (awMode === "week") {
+    const first = awPeriodDates()[0];
+    parts.push(`KW${awIsoWeekNumber(first)}`);
+    parts.push(String(first.getFullYear()));
+  } else {
+    parts.push(awSanitizeFilenamePart(MONTH_NAMES_DE[awMonth - 1]));
+    parts.push(String(awYear));
+  }
 
   return `${parts.join("_")}.pdf`;
 }
@@ -6312,7 +6446,8 @@ function buildAwReportHeaderLinesForVt(vt) {
 }
 
 function drawAwReportPage(doc, marginX, headerLines, people) {
-  const days = awDaysInMonth(awYear, awMonth);
+  const periodDates = awPeriodDates();
+  const days = periodDates.length;
   const pageWidth = doc.internal.pageSize.getWidth();
 
   doc.setFont("helvetica", "bold");
@@ -6332,19 +6467,17 @@ function drawAwReportPage(doc, marginX, headerLines, people) {
   const dayColWidth = Math.max(14, (pageWidth - marginX * 2 - fixedColsWidth) / days);
 
   const tableHead = ["Vorname", "Nachname", "VT", "Gruppe"];
-  for (let day = 1; day <= days; day++) {
-    const weekday = new Date(awYear, awMonth - 1, day).getDay();
-    tableHead.push(`${day}\n${WEEKDAY_SHORT_DE[weekday]}`);
-  }
+  periodDates.forEach((d) => {
+    tableHead.push(`${d.getDate()}\n${WEEKDAY_SHORT_DE[d.getDay()]}`);
+  });
 
   const tableBody = people.map((person) => {
     const row = [person.Vorname, person.Nachname, person.VT || "", person.GruppeKennung || ""];
-    for (let day = 1; day <= days; day++) {
-      const datum = awIsoDate(awYear, awMonth, day);
-      const statusId = awAttendance.get(awAttendanceKey(person.ID, datum));
+    periodDates.forEach((d) => {
+      const statusId = awAttendance.get(awAttendanceKey(person.ID, awDateToIso(d)));
       const status = awStatusList.find((s) => s.ID === statusId);
       row.push(status ? status.Kurzzeichen : "");
-    }
+    });
     return row;
   });
 
@@ -6422,6 +6555,7 @@ function generateAwPdfReportByVt() {
 }
 
 awPdfReportBtn.addEventListener("click", () => {
+  updateAwPdfConfirmTexts();
   pdfConfirmDialog.showModal();
 });
 
@@ -6448,6 +6582,7 @@ pdfConfirmOkBtn.addEventListener("click", () => {
 });
 
 awPdfVtReportBtn.addEventListener("click", () => {
+  updateAwPdfConfirmTexts();
   pdfVtConfirmDialog.showModal();
 });
 
@@ -6474,7 +6609,7 @@ pdfVtConfirmOkBtn.addEventListener("click", () => {
 });
 
 async function initAnwesenheiten() {
-  updateAwMonthLabel();
+  updateAwPeriodLabel();
   buildAwTableHead();
 
   await Promise.all([
@@ -7174,7 +7309,17 @@ function applyRolePermissions(user) {
     stammdatenGroup.closest("li").style.display = auditOnly ? "none" : "";
   }
 
-  const operativePages = ["dashboard", "anwesenheiten", "teilnehmende"];
+  const anwesenheitenGroup = document.querySelector('.sidebar-group[data-group="anwesenheiten"]');
+  if (anwesenheitenGroup) {
+    anwesenheitenGroup.closest("li").style.display = auditOnly ? "none" : "";
+  }
+
+  const teilnehmerAnlegenContainer = document.getElementById("teilnehmerAnlegenContainer");
+  if (teilnehmerAnlegenContainer) {
+    teilnehmerAnlegenContainer.style.display = canCreateTeilnehmer(user) ? "" : "none";
+  }
+
+  const operativePages = ["dashboard", "teilnehmende"];
   operativePages.forEach((page) => {
     const link = document.querySelector(`.sidebar-link[data-page="${page}"]`);
     if (link) {
